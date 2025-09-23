@@ -1,0 +1,20 @@
+[
+  {
+    "src": "/images/new-courses-banner.png",
+    "alt": "Nuevos Cursos de Formación Disponibles",
+    "title": "Nuevos Cursos de Formación",
+    "subtitle": "Descubre las últimas oportunidades educativas"
+  },
+  {
+    "src": "/images/expo-hall.png",
+    "alt": "Expo Educativa 2024",
+    "title": "Expo Educativa 2024",
+    "subtitle": "Conectando el futuro de la educación"
+  },
+  {
+    "src": "/images/university-campus.png",
+    "alt": "Campus Universitario",
+    "title": "Vida Universitaria",
+    "subtitle": "Experiencias que transforman tu futuro"
+  }
+]

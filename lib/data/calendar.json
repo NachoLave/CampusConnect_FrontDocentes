@@ -1,0 +1,22 @@
+{
+  "18": [
+    { "time": "09:00", "title": "Matemáticas Avanzadas", "type": "class" },
+    { "time": "15:00", "title": "Tutoría Grupal", "type": "meeting" }
+  ],
+  "19": [
+    { "time": "08:00", "title": "Arquitectura de Aplicaciones", "type": "class" },
+    { "time": "14:00", "title": "Desarrollo de Aplicaciones I", "type": "class" },
+    { "time": "16:30", "title": "Reunión departamento", "type": "meeting" }
+  ],
+  "20": [
+    { "time": "10:00", "title": "Base de Datos", "type": "class" },
+    { "time": "13:00", "title": "Seminario de Investigación", "type": "meeting" }
+  ],
+  "21": [
+    { "time": "08:30", "title": "Programación Web", "type": "class" },
+    { "time": "16:00", "title": "Evaluación Final", "type": "exam" }
+  ],
+  "22": [{ "time": "09:00", "title": "Proyecto Final", "type": "class" }],
+  "23": [],
+  "24": []
+}
