@@ -973,35 +973,59 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const calculateFinalCondition = (studentGrades: Record<string, string>) => {
-    const p1 = Number.parseFloat(studentGrades["1P"]) || 0
-    const p2 = Number.parseFloat(studentGrades["2P"]) || 0
-    const rec = Number.parseFloat(studentGrades["REC"]) || 0
-    const final = Number.parseFloat(studentGrades["FINAL"]) || 0
+    const getVal = (k: string) => {
+      const v = studentGrades[k]
+      if (v === undefined || v === null || String(v).trim() === "") return null
+      const n = Number.parseFloat(String(v))
+      return Number.isFinite(n) ? n : null
+    }
 
-    // Promoción directa
-    if (p1 >= 8 && p2 >= 8) return "PROMOCIONA"
+    const p1 = getVal("1P")
+    const p2 = getVal("2P")
+    const rec = getVal("REC")
+    const final = getVal("FINAL")
 
-    const p1Approved = p1 >= 4
-    const p2Approved = p2 >= 4
+    const hasP1 = p1 !== null
+    const hasP2 = p2 !== null
+    const hasRec = rec !== null
+    const hasFinal = final !== null
 
-    // Ambos desaprobados -> recursa (LIBRE), REC y FINAL no habilitan
-    if (!p1Approved && !p2Approved) return "LIBRE"
+    // Sin datos aún
+    if (!hasP1 && !hasP2 && !hasRec && !hasFinal) return ""
 
-    // Un parcial desaprobado: REC cubre el desaprobado
-    if ((p1Approved && !p2Approved) || (!p1Approved && p2Approved)) {
-      if (rec >= 4) {
-        // Queda REGULAR; si rindió final y >=4, APROBADO
-        return final >= 4 ? "APROBADO" : "REGULAR"
+    // Necesitamos ambos parciales para decidir estados definitivos/promoción
+    if (hasP1 && hasP2) {
+      // Promoción directa
+      if ((p1 as number) >= 8 && (p2 as number) >= 8) return "PROMOCIONA"
+
+      const p1Approved = (p1 as number) >= 4
+      const p2Approved = (p2 as number) >= 4
+
+      // Ambos desaprobados -> Recursa
+      if (!p1Approved && !p2Approved) return "RECURSA"
+
+      // Uno desaprobado
+      if ((p1Approved && !p2Approved) || (!p1Approved && p2Approved)) {
+        // Esperar recuperatorio si aún no lo cargaron
+        if (!hasRec) return ""
+        if ((rec as number) >= 4) {
+          // Habilita final: si no hay final o final <4, queda pendiente
+          if (!hasFinal || (final as number) < 4) return "FINAL PENDIENTE"
+          return "APROBADO"
+        }
+        // Recuperatorio desaprobado -> Recursa
+        return "RECURSA"
       }
-      return "LIBRE"
+
+      // Ambas aprobadas pero no promociona: requiere final
+      if (p1Approved && p2Approved) {
+        if (!hasFinal || (final as number) < 4) return "FINAL PENDIENTE"
+        return "APROBADO"
+      }
     }
 
-    // Regular sin recuperatorio (ambas >=4 pero alguna <8)
-    if (p1Approved && p2Approved) {
-      return final >= 4 ? "APROBADO" : "REGULAR"
-    }
-
-    return "LIBRE"
+    // Con solo un parcial cargado aún no mostramos condición
+    return ""
   }
 
   type GradePermissions = { recEnabled: boolean; finalEnabled: boolean }
@@ -1766,7 +1790,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           </button>
                         </div>
                         <div className="space-y-2">
-                          {["PROMOCIONA", "APRUEBA", "REGULAR", "LIBRE"].map((condition) => (
+                          {["PROMOCIONA", "APROBADO", "FINAL PENDIENTE", "RECURSA"].map((condition) => (
                             <label key={condition} className="flex items-center space-x-2 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -1929,14 +1953,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                               ? "bg-green-100 text-green-800"
                               : gradesData[student.id]?.["CONDICIÓN FINAL"] === "APROBADO"
                                 ? "bg-blue-100 text-blue-800"
-                                : gradesData[student.id]?.["CONDICIÓN FINAL"] === "REGULAR"
+                                : gradesData[student.id]?.["CONDICIÓN FINAL"] === "FINAL PENDIENTE"
                                   ? "bg-yellow-100 text-yellow-800"
-                                  : gradesData[student.id]?.["CONDICIÓN FINAL"] === "DESAPROBADO"
+                                  : gradesData[student.id]?.["CONDICIÓN FINAL"] === "RECURSA"
                                     ? "bg-red-100 text-red-800"
                                     : "bg-gray-100 text-gray-800"
                           }`}
                         >
-                          {gradesData[student.id]?.["CONDICIÓN FINAL"] || "LIBRE"}
+                          {gradesData[student.id]?.["CONDICIÓN FINAL"] || ""}
                         </span>
                       </td>
                     </tr>
