@@ -15,7 +15,7 @@ import {
   RotateCcw,
   ChevronDown,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 
@@ -34,7 +34,7 @@ const getCourseData = (id: string) => {
       day: "MIÉRCOLES",
       shift: "TT",
       schedule: "14:00 - 18:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "VIRTUAL",
       isVirtual: true,
       status: "Finalizado",
@@ -114,7 +114,7 @@ const getCourseData = (id: string) => {
       day: "JUEVES",
       shift: "TM",
       schedule: "8:00 - 12:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "LIMA 1 - 234 (Sede Monserrat)",
       isVirtual: false,
       status: "En curso",
@@ -159,7 +159,7 @@ const getCourseData = (id: string) => {
       day: "JUEVES",
       shift: "TT",
       schedule: "14:00 - 18:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "VIRTUAL",
       isVirtual: true,
       status: "En curso",
@@ -204,7 +204,7 @@ const getCourseData = (id: string) => {
       day: "LUNES",
       shift: "TN",
       schedule: "18:00 - 22:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "AULA 305 (Sede Belgrano)",
       isVirtual: false,
       status: "En curso",
@@ -252,7 +252,7 @@ const getCourseData = (id: string) => {
       day: "MARTES",
       shift: "TM",
       schedule: "8:00 - 12:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "LAB 201 (Sede Recoleta)",
       isVirtual: false,
       status: "En curso",
@@ -297,7 +297,7 @@ const getCourseData = (id: string) => {
       day: "VIERNES",
       shift: "TT",
       schedule: "14:00 - 18:00",
-      dates: "01/08/2025 - 30/11/2025",
+      dates: "01/08/2025 - 23/12/2025",
       location: "AULA 102 (Sede Campus Costa Pinamar)",
       isVirtual: false,
       status: "En curso",
@@ -473,18 +473,415 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
   const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
+
+  // Persistencia local por curso
+  const attendanceStorageKey = `attendance_${courseId}`
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(attendanceStorageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') setAttendanceData(parsed)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId])
+  useEffect(() => {
+    try {
+      localStorage.setItem(attendanceStorageKey, JSON.stringify(attendanceData))
+    } catch {}
+  }, [attendanceData])
   const [isEditingGrades, setIsEditingGrades] = useState(false)
   const [gradesData, setGradesData] = useState<Record<string, Record<string, string>>>({})
 
   const course = getCourseData(courseId)
   const students = course.studentsData || []
 
+  // Calcular estadísticas basadas en datos reales
+  const computeTimeProgress = (dates: string): number => {
+    const [startStr, endStr] = dates.split("-").map((s) => s.trim())
+    const parse = (d: string) => {
+      const [day, month, year] = d.split("/")
+      return new Date(Number(year), Number(month) - 1, Number(day))
+    }
+    try {
+      const start = parse(startStr)
+      const end = parse(endStr)
+      const now = new Date()
+      const total = Math.max(1, end.getTime() - start.getTime())
+      const elapsed = Math.min(Math.max(0, now.getTime() - start.getTime()), total)
+      return Math.round((elapsed / total) * 100)
+    } catch {
+      return 0
+    }
+  }
+
+  const computeAverageAttendance = (): number => {
+    // 1) Preferir asistencias reales cargadas (attendanceData)
+    const dateEntries = Object.values(attendanceData || {}) as Array<Record<number, "P" | "1/2" | "A">>
+    let counted = 0
+    let score = 0
+    for (const perDate of dateEntries) {
+      for (const status of Object.values(perDate)) {
+        counted += 1
+        if (status === "P") score += 1
+        else if (status === "1/2") score += 0.5
+      }
+    }
+    if (counted > 0) {
+      return Math.round((score / counted) * 100)
+    }
+
+    // 2) Fallback: usar estado simple de studentsData
+    if (!students.length) return 0
+    const present = students.filter((s: any) => (s.attendance === "Presente")).length
+    const half = students.filter((s: any) => (s.attendance === "1/2" || s.attendance === "1/2 Falta")).length
+    return Math.round(((present + half * 0.5) / students.length) * 100)
+  }
+
+  const computeAverageGrade = (): number => {
+    const ids = Object.keys(gradesData)
+    if (ids.length === 0) return course.stats?.averageGrade ?? 0
+    let sum = 0
+    let count = 0
+    for (const id of ids) {
+      const g = gradesData[id] || {}
+      const keys = ["FINAL", "2P", "1P", "REC"]
+      const nums = keys
+        .map((k) => (g[k] ? Number(String(g[k]).replace(",", ".")) : NaN))
+        .filter((n) => Number.isFinite(n)) as number[]
+      if (nums.length > 0) {
+        sum += nums.reduce((a, b) => a + b, 0) / nums.length
+        count += 1
+      }
+    }
+    if (count === 0) return course.stats?.averageGrade ?? 0
+    return Math.round((sum / count) * 100) / 100
+  }
+
+  const timeProgress = computeTimeProgress(course.dates)
+  const averageAttendance = computeAverageAttendance()
+  const averageGrade = computeAverageGrade()
+
+  // Rango real del curso para bloquear fechas de asistencia fuera del período
+  // monthToIndex redefinido más arriba con todos los meses
+
+  const [courseStartStr, courseEndStr] = course.dates.split("-").map((s) => s.trim())
+  const parseDmy = (d: string) => {
+    const [dd, mm, yyyy] = d.split("/").map((n) => parseInt(n, 10))
+    return new Date(yyyy, mm - 1, dd)
+  }
+  const courseStartDate = parseDmy(courseStartStr)
+  const courseEndDate = parseDmy(courseEndStr)
+
+  const isDateInCourseRange = (monthName: string, day: number) => {
+    const monthIdx = monthToIndex[monthName]
+    if (monthIdx === undefined) return false
+    const date = new Date(courseStartDate.getFullYear(), monthIdx, day)
+    return date >= courseStartDate && date <= courseEndDate
+  }
+
+  // --- CSV Preview (export) helpers ---
+  const computeAttendancePercentByStudent = (): Record<number, number> => {
+    const totals: Record<number, { score: number; count: number }> = {}
+    const dateEntries = Object.values(attendanceData || {}) as Array<Record<number, "P" | "1/2" | "A">>
+    for (const perDate of dateEntries) {
+      for (const [idStr, status] of Object.entries(perDate)) {
+        const id = Number(idStr)
+        const current = totals[id] ?? { score: 0, count: 0 }
+        current.count += 1
+        if (status === "P") current.score += 1
+        else if (status === "1/2") current.score += 0.5
+        totals[id] = current
+      }
+    }
+    const result: Record<number, number> = {}
+    for (const [idStr, { score, count }] of Object.entries(totals)) {
+      const id = Number(idStr)
+      result[id] = count > 0 ? Math.round((score / count) * 100) : 0
+    }
+    return result
+  }
+
+  const escapeCsv = (value: string | number) => {
+    const s = String(value ?? "")
+    if (s.includes(",") || s.includes("\n") || s.includes("\"")) {
+      return '"' + s.replace(/\"/g, '""') + '"'
+    }
+    return s
+  }
+
+  const getSemesterLabel = (): string => {
+    const start = courseStartDate
+    const month = start.getMonth() + 1
+    return month >= 8 ? "Segundo Cuatrimestre" : "Primer Cuatrimestre"
+  }
+
+  const getShiftLabel = (): string => {
+    // TM: mañana, TT: tarde, TN: noche
+    if (course.shift === "TM") return "Turno - Mañana"
+    if (course.shift === "TT") return "Turno - Tarde"
+    if (course.shift === "TN") return "Turno - Noche"
+    return "Turno"
+  }
+
+  const getTeachersSummary = (): { titulares: string; auxiliares: string } => {
+    const titulares = (course.teachers || [])
+      .filter((t: any) => (t.role || "").toLowerCase().includes("titular"))
+      .map((t: any) => t.name)
+      .join("; ")
+    const auxiliares = (course.teachers || [])
+      .filter((t: any) => (t.role || "").toLowerCase().includes("aux"))
+      .map((t: any) => t.name)
+      .join("; ")
+    return { titulares, auxiliares }
+  }
+
+  const downloadCSVPreview = () => {
+    const attendancePercent = computeAttendancePercentByStudent()
+    const headers = [
+      "Nombre",
+      "Legajo",
+      "Mail",
+      "Nota 1",
+      "Nota 2",
+      "Recuperatorio",
+      "Final",
+      "Condición",
+      "Asistencia",
+    ]
+
+    const rows = (students || []).map((st) => {
+      const g = gradesData[st.id] || {}
+      const condition = calculateFinalCondition(g)
+      const asistencia = attendancePercent[st.id] ?? 0
+      return [
+        st.name,
+        st.legajo,
+        st.email,
+        g["1P"] ?? "",
+        g["2P"] ?? "",
+        g["REC"] ?? "",
+        g["FINAL"] ?? "",
+        condition,
+        `${asistencia}%`,
+      ]
+    })
+
+    const { titulares, auxiliares } = getTeachersSummary()
+    const headerBlock: string[][] = [
+      [getSemesterLabel()],
+      [getShiftLabel(), "", "", "", "", "", "", "cantidad de alumnos:", String(students.length)],
+      [
+        `Profesor: ${titulares || "-"}`,
+        `Ayudantes: ${auxiliares || "-"}`,
+      ],
+      [],
+      [course.title],
+      [],
+    ]
+
+    const csvContent = [...headerBlock, headers, ...rows]
+      .map((r) => r.map(escapeCsv).join(","))
+      .join("\n")
+
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${course.title.replace(/\s+/g, "_")}_${course.code}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const ensureXLSX = (): Promise<any | null> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') return resolve(null)
+      const g: any = window as any
+      if (g.XLSX) return resolve(g.XLSX)
+      const script = document.createElement('script')
+      script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+      script.async = true
+      script.onload = () => resolve((window as any).XLSX)
+      script.onerror = () => resolve(null)
+      document.body.appendChild(script)
+    })
+  }
+
+  const downloadXlsxPreview = async () => {
+    try {
+      const XLSX: any = await ensureXLSX()
+      if (!XLSX) throw new Error('XLSX not available')
+      const attendancePercent = computeAttendancePercentByStudent()
+      const { titulares, auxiliares } = getTeachersSummary()
+
+      const headers = [
+        "Nombre y Apellido",
+        "Legajo",
+        "Mail",
+        "Nota 1",
+        "Nota 2",
+        "Recuperatorio",
+        "Final",
+        "Condición",
+        "Asistencia",
+      ]
+
+      const rows = (students || []).map((st) => {
+        const g = gradesData[st.id] || {}
+        const condition = calculateFinalCondition(g)
+        const asistencia = attendancePercent[st.id] ?? 0
+        return [
+          st.name,
+          st.legajo,
+          st.email,
+          g["1P"] ?? "",
+          g["2P"] ?? "",
+          g["REC"] ?? "",
+          g["FINAL"] ?? "",
+          condition,
+          `${asistencia}%`,
+        ]
+      })
+
+      const aoa: any[][] = []
+      // Fila 1: Nombre de la materia (merge A1:I1)
+      aoa.push([course.title])
+      // Fila 2: Turno (merge A2:B2)
+      aoa.push([getShiftLabel()])
+      // Fila 3: Cuatrimestre (merge A3:B3)
+      aoa.push([getSemesterLabel()])
+      // Fila 4: Docentes (Profesor y Ayudantes)
+      aoa.push([`Profesor: ${titulares || "-"}`, `Ayudantes: ${auxiliares || "-"}`])
+      // Fila 5: Cantidad de alumnos (merge A5:B5)
+      aoa.push([`Cantidad de alumnos: ${String(students.length)}`])
+      // Fila 6: vacía
+      aoa.push([])
+      aoa.push(headers)
+      rows.forEach((r) => aoa.push(r))
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      // Merges y estilos básicos del header
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, // A1:I1 Materia
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }, // A2:B2 Turno
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, // A3:B3 Cuatrimestre
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } }, // A5:B5 Cantidad alumnos
+      ]
+      ;["A1","A2","A3","A5"].forEach((addr) => {
+        if (ws[addr]) ws[addr].s = { font: { bold: true, sz: 12 }, alignment: { horizontal: "center" } }
+      })
+      ws["!cols"] = [
+        { wch: 28 }, // Nombre
+        { wch: 12 }, // Legajo
+        { wch: 34 }, // Mail
+        { wch: 8 },
+        { wch: 8 },
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 14 },
+        { wch: 12 },
+      ]
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Acta")
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array", cellStyles: true })
+      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${course.title.replace(/\s+/g, "_")}_${course.code}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      // Si no está la dependencia, caemos a CSV
+      console.warn("xlsx no disponible, exportando CSV", err)
+      downloadCSVPreview()
+    }
+  }
+
   const dayShiftColor = getDayShiftColors(course.day, course.shift)
 
   const tabs = ["Información", "Alumnos", "Asistencia", "Calificaciones"]
 
-  const months = ["Agosto", "Septiembre", "Octubre", "Noviembre"]
-  const dates = [7, 14, 21, 28]
+  // Meses y fechas dinámicas según rango del curso y día de cursada
+  const monthNamesEs = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+  ]
+  const monthToIndex: Record<string, number> = monthNamesEs.reduce((acc, name, idx) => {
+    acc[name] = idx
+    return acc
+  }, {} as Record<string, number>)
+
+  const weekdayMap: Record<string, number> = {
+    'DOMINGO': 0,
+    'LUNES': 1,
+    'MARTES': 2,
+    'MIÉRCOLES': 3,
+    'MIERCOLES': 3,
+    'JUEVES': 4,
+    'VIERNES': 5,
+    'SÁBADO': 6,
+    'SABADO': 6,
+  }
+  const courseWeekday = weekdayMap[(course.day || '').toUpperCase()] ?? 0
+
+  const availableMonthsIdx = useMemo(() => {
+    const monthsIdx: number[] = []
+    const start = new Date(courseStartDate.getFullYear(), courseStartDate.getMonth(), 1)
+    const end = new Date(courseEndDate.getFullYear(), courseEndDate.getMonth(), 1)
+    for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
+      monthsIdx.push(d.getMonth())
+    }
+    return monthsIdx
+  }, [courseStartDate, courseEndDate])
+
+  const months = useMemo(() => availableMonthsIdx.map((m) => monthNamesEs[m]), [availableMonthsIdx])
+
+  const getDatesForMonthIdx = (monthIdx: number): number[] => {
+    const year = courseStartDate.getFullYear()
+    const first = new Date(year, monthIdx, 1)
+    const last = new Date(year, monthIdx + 1, 0)
+    const days: number[] = []
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === courseWeekday && d >= courseStartDate && d <= courseEndDate) {
+        days.push(d.getDate())
+      }
+    }
+    return days
+  }
+
+  const dates = useMemo(() => {
+    const idx = monthToIndex[selectedMonth] ?? courseStartDate.getMonth()
+    return getDatesForMonthIdx(idx)
+  }, [selectedMonth, courseStartDate, courseEndDate])
+
+  // Seleccionabilidad: clases pasadas y la de esta semana
+  const getThisWeekClassDate = (): Date => {
+    const today = new Date()
+    // Inicio de semana (lunes)
+    const day = today.getDay() // 0 dom .. 6 sab
+    const diffToMonday = (day + 6) % 7
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diffToMonday)
+    const target = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + courseWeekday)
+    // Limitar al rango del curso
+    if (target < courseStartDate) return courseStartDate
+    if (target > courseEndDate) return courseEndDate
+    return target
+  }
+
+  const isDateSelectable = (monthName: string, day: number): boolean => {
+    if (!isDateInCourseRange(monthName, day)) return false
+    const year = courseStartDate.getFullYear()
+    const d = new Date(year, monthToIndex[monthName] ?? 0, day)
+    const limit = getThisWeekClassDate()
+    return d.getTime() <= limit.getTime()
+  }
 
   const navigateMonth = (direction: "prev" | "next") => {
     const currentIndex = months.indexOf(selectedMonth)
@@ -495,7 +892,44 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     }
   }
 
+  // Ajustar mes/día iniciales dinámicamente
+  const [attendanceInit, setAttendanceInit] = useState(false)
+  const [dateInit, setDateInit] = useState(false)
+
+  // Elegir por defecto el mes de la clase de esta semana (o el más cercano dentro del rango)
+  useEffect(() => {
+    if (attendanceInit) return
+    if (!months || months.length === 0) return
+    const limit = getThisWeekClassDate()
+    let target = limit
+    if (limit < courseStartDate) target = courseStartDate
+    if (limit > courseEndDate) target = courseEndDate
+    const monthLabel = monthNamesEs[target.getMonth()]
+    setSelectedMonth(monthLabel)
+    setAttendanceInit(true)
+  }, [months, attendanceInit])
+
+  // Elegir por defecto el día: última clase seleccionable de ese mes
+  useEffect(() => {
+    if (!attendanceInit || dateInit) return
+    if (dates.length === 0) return
+    const limit = getThisWeekClassDate()
+    const currentMonthIdx = monthToIndex[selectedMonth] ?? limit.getMonth()
+    let chosen = dates[0]
+    if (currentMonthIdx === limit.getMonth()) {
+      const valid = dates.filter((d) => d <= limit.getDate())
+      chosen = valid.length ? valid[valid.length - 1] : dates[0]
+    } else if (currentMonthIdx < limit.getMonth()) {
+      chosen = dates[dates.length - 1]
+    } else {
+      chosen = dates[0]
+    }
+    setSelectedDate(chosen)
+    setDateInit(true)
+  }, [attendanceInit, dateInit, selectedMonth, dates])
+
   const setAttendance = (studentId: number, status: "P" | "1/2" | "A") => {
+    if (!isDateSelectable(selectedMonth, selectedDate)) return
     const key = `${selectedMonth}-${selectedDate}`
     setAttendanceData((prev) => ({
       ...prev,
@@ -514,40 +948,58 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const calculateFinalCondition = (studentGrades: Record<string, string>) => {
     const p1 = Number.parseFloat(studentGrades["1P"]) || 0
     const p2 = Number.parseFloat(studentGrades["2P"]) || 0
-    const rec1p = Number.parseFloat(studentGrades["REC 1P"]) || 0
-    const rec2p = Number.parseFloat(studentGrades["REC 2P"]) || 0
+    const rec = Number.parseFloat(studentGrades["REC"]) || 0
     const final = Number.parseFloat(studentGrades["FINAL"]) || 0
 
-    // Use recuperatorio if it's higher than the original grade
-    const finalP1 = Math.max(p1, rec1p)
-    const finalP2 = Math.max(p2, rec2p)
+    // Promoción directa
+    if (p1 >= 8 && p2 >= 8) return "PROMOCIONA"
 
-    // Count failed instances (less than 4 or empty)
-    const failedInstances = [studentGrades["1P"] === "" || p1 < 4, studentGrades["2P"] === "" || p2 < 4].filter(
-      Boolean,
-    ).length
+    const p1Approved = p1 >= 4
+    const p2Approved = p2 >= 4
 
-    // If failed in 2 or more instances, DESAPROBADO
-    if (failedInstances >= 2) {
-      return "DESAPROBADO"
+    // Ambos desaprobados -> recursa (LIBRE), REC y FINAL no habilitan
+    if (!p1Approved && !p2Approved) return "LIBRE"
+
+    // Un parcial desaprobado: REC cubre el desaprobado
+    if ((p1Approved && !p2Approved) || (!p1Approved && p2Approved)) {
+      if (rec >= 4) {
+        // Queda REGULAR; si rindió final y >=4, APROBADO
+        return final >= 4 ? "APROBADO" : "REGULAR"
+      }
+      return "LIBRE"
     }
 
-    // If 8 or more in all evaluation instances (not FINAL), PROMOCIONA
-    if (finalP1 >= 8 && finalP2 >= 8) {
-      return "PROMOCIONA"
-    }
-
-    // If all instances approved but no final grade, REGULAR
-    if (finalP1 >= 4 && finalP2 >= 4 && (!studentGrades["FINAL"] || final === 0)) {
-      return "REGULAR"
-    }
-
-    // If all instances approved with less than 8 and final 4 or more, APROBADO
-    if (finalP1 >= 4 && finalP2 >= 4 && final >= 4) {
-      return "APROBADO"
+    // Regular sin recuperatorio (ambas >=4 pero alguna <8)
+    if (p1Approved && p2Approved) {
+      return final >= 4 ? "APROBADO" : "REGULAR"
     }
 
     return "LIBRE"
+  }
+
+  type GradePermissions = { recEnabled: boolean; finalEnabled: boolean }
+
+  const getGradePermissions = (studentGrades: Record<string, string>): GradePermissions => {
+    const p1 = Number.parseFloat(studentGrades["1P"]) || 0
+    const p2 = Number.parseFloat(studentGrades["2P"]) || 0
+    const rec = Number.parseFloat(studentGrades["REC"]) || 0
+
+    const p1Approved = p1 >= 4
+    const p2Approved = p2 >= 4
+
+    // Promoción directa: bloquea REC y FINAL
+    if (p1 >= 8 && p2 >= 8) return { recEnabled: false, finalEnabled: false }
+
+    // Ambos desaprobados: bloquea REC y FINAL
+    if (!p1Approved && !p2Approved) return { recEnabled: false, finalEnabled: false }
+
+    // REC habilitado solo si exactamente uno desaprobado
+    const recEnabled = (p1Approved && !p2Approved) || (!p1Approved && p2Approved)
+
+    // FINAL habilitado si ambas aprobadas (puras) o si una fue aprobada vía REC
+    const finalEnabled = (p1Approved && p2Approved) || (recEnabled && rec >= 4)
+
+    return { recEnabled, finalEnabled }
   }
 
   const updateGrade = (studentId: string, field: string, value: string) => {
@@ -705,19 +1157,27 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           </div>
         </div>
 
-        <div className="flex items-center space-x-6 text-sm">
-          <div className="flex items-center space-x-2">
-            <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>{course.day}</span>
-            <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>
-              {course.shift}
-            </span>
-            <span className="font-medium text-gray-900">{course.schedule}</span>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center space-x-2">
+              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>{course.day}</span>
+              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>
+                {course.shift}
+              </span>
+              <span className="font-medium text-gray-900">{course.schedule}</span>
+            </div>
+            <span className="text-gray-600">{course.dates}</span>
+            <div className="flex items-center space-x-1">
+              <MapPin className="h-4 w-4 text-gray-600" />
+              <span className="text-gray-600">{course.isVirtual ? "VIRTUAL" : course.location}</span>
+            </div>
           </div>
-          <span className="text-gray-600">{course.dates}</span>
-          <div className="flex items-center space-x-1">
-            <MapPin className="h-4 w-4 text-gray-600" />
-            <span className="text-gray-600">{course.isVirtual ? "VIRTUAL" : course.location}</span>
-          </div>
+          <button
+            onClick={() => setShowActaModal(true)}
+            className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 transition-colors"
+          >
+            GESTIONAR ACTA
+          </button>
         </div>
       </div>
 
@@ -746,24 +1206,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       <div className="p-6 bg-gray-100 min-h-screen">
         {activeTab === "Información" && (
           <div className="space-y-6">
-            {/* Course Status */}
-            <div className="bg-white rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Información general del curso</h2>
-
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-1">Estado del curso</h3>
-                  <span className="text-gray-600">{course.status}</span>
-                </div>
-                <button
-                  onClick={() => setShowActaModal(true)}
-                  className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 transition-colors"
-                >
-                  GESTIONAR ACTA
-                </button>
-              </div>
-            </div>
-
             {/* Teachers Section */}
             <div className="bg-white rounded-lg p-6">
               <h3 className="font-medium text-gray-900">Docentes</h3>
@@ -824,15 +1266,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                       <div
                         className="bg-slate-800 h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${course.stats.timeProgress}%` }}
+                        style={{ width: `${timeProgress}%` }}
                       ></div>
                     </div>
-                    <span className="text-2xl font-bold text-gray-600">{course.stats.timeProgress}%</span>
+                    <span className="text-2xl font-bold text-gray-600">{timeProgress}%</span>
                   </div>
                 </div>
 
                 {/* Average Attendance */}
-                <div className="text-center">
+                <div className="flex flex-col items-center justify-center text-center">
                   <h4 className="text-sm font-medium text-gray-700 mb-3">Asistencia Promedio</h4>
                   <div className="relative w-24 h-24 mx-auto mb-2">
                     <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
@@ -844,16 +1286,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       />
                       <path
-                        className="text-cyan-500"
+                        className="text-slate-800"
                         stroke="currentColor"
                         strokeWidth="3"
                         fill="none"
-                        strokeDasharray={`${course.stats.averageAttendance}, 100`}
+                        strokeDasharray={`${averageAttendance}, 100`}
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-lg font-bold text-gray-600">{course.stats.averageAttendance}%</span>
+                      <span className="text-lg font-bold text-gray-600">{averageAttendance}%</span>
                     </div>
                   </div>
                 </div>
@@ -862,7 +1304,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 <div className="text-center">
                   <h4 className="text-sm font-medium text-gray-700 mb-3">Calificación Promedio</h4>
                   <div className="mb-2">
-                    <span className="text-4xl font-bold text-slate-800">{course.stats.averageGrade}</span>
+                    <span className="text-4xl font-bold text-slate-800">{averageGrade}</span>
                   </div>
                   <span className="text-xs text-gray-500">(no considera ausentes)</span>
                 </div>
@@ -1036,19 +1478,24 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     </button>
 
                     <div className="flex space-x-1 mx-2">
-                      {dates.map((date) => (
-                        <button
-                          key={date}
-                          onClick={() => setSelectedDate(date)}
-                          className={`w-8 h-8 rounded-full text-sm font-medium transition-all duration-200 ${
-                            selectedDate === date
-                              ? "bg-slate-800 text-white shadow-md"
-                              : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
-                          }`}
-                        >
-                          {date}
-                        </button>
-                      ))}
+                      {dates.map((date) => {
+                        const inRange = isDateInCourseRange(selectedMonth, date)
+                        const selectable = inRange && isDateSelectable(selectedMonth, date)
+                        return (
+                          <button
+                            key={date}
+                            onClick={() => selectable && setSelectedDate(date)}
+                            disabled={!selectable}
+                            className={`w-8 h-8 rounded-full text-sm font-medium transition-all duration-200 ${
+                              selectedDate === date
+                                ? "bg-slate-800 text-white shadow-md"
+                                : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
+                             } ${!selectable ? "opacity-40 cursor-not-allowed" : ""}`}
+                          >
+                            {date}
+                          </button>
+                        )
+                      })}
                     </div>
 
                     <button
@@ -1348,10 +1795,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   <tr className="bg-gray-50 border-b">
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Legajo</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">1P</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">REC 1P</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">2P</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">REC 2P</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-700">Evaluación 1</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-700">Evaluación 2</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-700">Recuperatorio</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-700">FINAL</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-700">CONDICIÓN FINAL</th>
                   </tr>
@@ -1395,21 +1841,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             min="0"
                             max="10"
                             step="0.1"
-                            value={gradesData[student.id]?.["REC 1P"] || ""}
-                            onChange={(e) => updateGrade(student.id, "REC 1P", e.target.value)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["REC 1P"] || "-"}</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {isEditingGrades ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.1"
                             value={gradesData[student.id]?.["2P"] || ""}
                             onChange={(e) => updateGrade(student.id, "2P", e.target.value)}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1420,30 +1851,46 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       </td>
                       <td className="py-3 px-4 text-center">
                         {isEditingGrades ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.1"
-                            value={gradesData[student.id]?.["REC 2P"] || ""}
-                            onChange={(e) => updateGrade(student.id, "REC 2P", e.target.value)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
+                          (() => {
+                            const perms = getGradePermissions(gradesData[student.id] || {})
+                            return (
+                              <input
+                                type="number"
+                                min="0"
+                                max="10"
+                                step="0.1"
+                                disabled={!perms.recEnabled}
+                                value={gradesData[student.id]?.["REC"] || ""}
+                                onChange={(e) => updateGrade(student.id, "REC", e.target.value)}
+                                className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                  !perms.recEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
+                                }`}
+                              />
+                            )
+                          })()
                         ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["REC 2P"] || "-"}</span>
+                          <span className="text-gray-600">{gradesData[student.id]?.["REC"] || "-"}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {isEditingGrades ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.1"
-                            value={gradesData[student.id]?.["FINAL"] || ""}
-                            onChange={(e) => updateGrade(student.id, "FINAL", e.target.value)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
+                          (() => {
+                            const perms = getGradePermissions(gradesData[student.id] || {})
+                            return (
+                              <input
+                                type="number"
+                                min="0"
+                                max="10"
+                                step="0.1"
+                                disabled={!perms.finalEnabled}
+                                value={gradesData[student.id]?.["FINAL"] || ""}
+                                onChange={(e) => updateGrade(student.id, "FINAL", e.target.value)}
+                                className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                  !perms.finalEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
+                                }`}
+                              />
+                            )
+                          })()
                         ) : (
                           <span className="text-gray-600">{gradesData[student.id]?.["FINAL"] || "-"}</span>
                         )}
@@ -1515,20 +1962,31 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex items-center justify-between">
               <button onClick={() => setShowActaModal(false)} className="text-red-600 hover:text-red-700 font-medium">
                 Cancelar
               </button>
-              <button
-                onClick={() => {
-                  // Here you would implement the actual file download
-                  console.log("Downloading acta file:", generateActaFilename())
-                  setShowActaModal(false)
-                }}
-                className="bg-slate-800 text-white px-6 py-2 rounded font-medium hover:bg-slate-700 transition-colors"
-              >
-                Generar
-              </button>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    downloadXlsxPreview()
+                    // No cerramos el modal para continuar en el curso
+                  }}
+                  className="px-6 py-2 rounded font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Preview (Excel)
+                </button>
+                <button
+                  onClick={() => {
+                    // Here you would implement the actual file download
+                    console.log("Downloading acta file:", generateActaFilename())
+                    setShowActaModal(false)
+                  }}
+                  className="bg-slate-800 text-white px-6 py-2 rounded font-medium hover:bg-slate-700 transition-colors"
+                >
+                  Generar
+                </button>
+              </div>
             </div>
           </div>
         </div>

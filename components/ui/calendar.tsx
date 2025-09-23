@@ -11,6 +11,8 @@ import { DayButton, DayPicker, getDefaultClassNames } from 'react-day-picker'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 
+const EventsContext = React.createContext<Record<string, any> | undefined>(undefined)
+
 function Calendar({
   className,
   classNames,
@@ -19,13 +21,16 @@ function Calendar({
   buttonVariant = 'ghost',
   formatters,
   components,
+  eventsByDay,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>['variant']
+  eventsByDay?: Record<string, any>
 }) {
   const defaultClassNames = getDefaultClassNames()
 
   return (
+    <EventsContext.Provider value={eventsByDay}>
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
@@ -155,7 +160,7 @@ function Calendar({
             <ChevronDownIcon className={cn('size-4', className)} {...props} />
           )
         },
-        DayButton: CalendarDayButton,
+        DayButton: (p) => <CalendarDayButton {...p} />,
         WeekNumber: ({ children, ...props }) => {
           return (
             <td {...props}>
@@ -169,6 +174,7 @@ function Calendar({
       }}
       {...props}
     />
+    </EventsContext.Provider>
   )
 }
 
@@ -179,11 +185,14 @@ function CalendarDayButton({
   ...props
 }: React.ComponentProps<typeof DayButton>) {
   const defaultClassNames = getDefaultClassNames()
+  const events = React.useContext(EventsContext)
 
   const ref = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => {
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
+  const key = day.date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const meta = events?.[key] || {}
 
   return (
     <Button
@@ -206,7 +215,15 @@ function CalendarDayButton({
         className,
       )}
       {...props}
-    />
+    >
+      <span>{(props as any).children}</span>
+      <div className="flex items-center justify-center gap-1">
+        {meta.clase ? <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> : null}
+        {meta.examen ? <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> : null}
+        {meta.evento ? <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> : null}
+        {meta.comedor ? <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" /> : null}
+      </div>
+    </Button>
   )
 }
 

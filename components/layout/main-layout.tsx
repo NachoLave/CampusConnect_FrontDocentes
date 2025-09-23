@@ -29,7 +29,17 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       <div className="flex-1 flex flex-col">
         <Header currentPage={getCurrentPage()} />
-        <main className="flex-1 p-6">{children}</main>
+        <main
+          className={
+            `flex-1 ${
+              pathname.startsWith("/cursos/") && pathname.split("/").filter(Boolean).length === 2
+                ? "p-0"
+                : "p-6"
+            }`
+          }
+        >
+          {children}
+        </main>
       </div>
     </div>
   )

@@ -81,12 +81,9 @@ export function CourseCard({ course }: CourseCardProps) {
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Day Badge */}
-      <div className={`${course.dayColor} text-white text-xs font-semibold px-3 py-1 inline-block`}>{course.day}</div>
-
-      {/* Course Image */}
+      {/* Course Image with Day Badge overlay */}
       <div
-        className="relative h-32 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-90 transition-opacity"
+        className="relative h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-90 transition-opacity"
         onClick={handleInfoClick}
       >
         <img
@@ -94,6 +91,7 @@ export function CourseCard({ course }: CourseCardProps) {
           alt={course.title}
           className="w-full h-full object-cover opacity-30"
         />
+        <div className={`${course.dayColor} text-white text-xs font-semibold px-3 py-1 inline-flex items-center gap-1 rounded-br-md absolute top-0 left-0 m-0`}>{course.day}</div>
       </div>
 
       {/* Course Content */}
@@ -154,57 +152,41 @@ export function CourseCard({ course }: CourseCardProps) {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="border-t border-gray-200 -mx-4 mt-6">
-          <div className="flex items-center h-16">
-            {/* Colored vertical bar */}
-            <div className={`w-1 h-full ${course.shiftColor}`}></div>
-
-            <div className="flex items-center justify-center w-12 h-full">
-              <ChevronRight
-                className={`h-6 w-6 text-gray-600 transition-all duration-300 hover:text-gray-800 cursor-pointer ${
-                  showActions ? "rotate-90" : "rotate-0"
-                }`}
-              />
-            </div>
-
-            <div
-              className={`flex items-center transition-all duration-300 ease-in-out ${
-                showActions ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4"
-              }`}
+        {/* Action Buttons - collapsible on hover */}
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showActions ? "max-h-24 mt-4 pt-4 border-t border-gray-200" : "max-h-0 mt-0 pt-0 border-t-0"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleInfoClick}
+              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
             >
-              {/* Action buttons with smooth slide-in animation */}
-              <div className="flex items-center space-x-3 flex-1 px-2">
-                <button
-                  onClick={handleInfoClick}
-                  className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
-                >
-                  <BookOpen className="h-3 w-3" />
-                  <span>INFO</span>
-                </button>
-                <button
-                  onClick={handleStudentsClick}
-                  className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
-                >
-                  <Users className="h-3 w-3" />
-                  <span>ALUMNOS</span>
-                </button>
-                <button
-                  onClick={handleAttendanceClick}
-                  className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
-                >
-                  <UserCheck className="h-3 w-3" />
-                  <span>ASISTENCIA</span>
-                </button>
-                <button
-                  onClick={handleGradesClick}
-                  className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
-                >
-                  <BarChart3 className="h-3 w-3" />
-                  <span>CALIFICACIONES</span>
-                </button>
-              </div>
-            </div>
+              <BookOpen className="h-3 w-3" />
+              <span>INFO</span>
+            </button>
+            <button
+              onClick={handleStudentsClick}
+              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+            >
+              <Users className="h-3 w-3" />
+              <span>ALUMNOS</span>
+            </button>
+            <button
+              onClick={handleAttendanceClick}
+              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+            >
+              <UserCheck className="h-3 w-3" />
+              <span>ASISTENCIA</span>
+            </button>
+            <button
+              onClick={handleGradesClick}
+              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+            >
+              <BarChart3 className="h-3 w-3" />
+              <span>CALIFICACIONES</span>
+            </button>
           </div>
         </div>
       </div>
