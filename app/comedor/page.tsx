@@ -16,41 +16,42 @@ interface DiningReservation {
   estado: "Finalizado" | "Cancelado" | "Pendiente"
 }
 
+const currentYear = new Date().getFullYear()
 const mockReservations: DiningReservation[] = [
   {
     id: "1",
-    fecha: "15/08/2023",
+    fecha: `05/09/${currentYear}`,
     tipoReserva: "ALMUERZO",
     horario: "13:00 - 14:00",
     sede: "Belgrano",
-    total: "$10.000",
+    total: "$25.000",
     estado: "Finalizado",
   },
   {
     id: "2",
-    fecha: "14/08/2023",
+    fecha: `08/09/${currentYear}`,
     tipoReserva: "DESAYUNO",
     horario: "8:00 - 9:00",
     sede: "Belgrano",
-    total: "-",
+    total: "$10.000",
     estado: "Cancelado",
   },
   {
     id: "3",
-    fecha: "13/08/2023",
-    tipoReserva: "ALMUERZO",
-    horario: "13:00 - 14:00",
+    fecha: `12/09/${currentYear}`,
+    tipoReserva: "CENA",
+    horario: "20:00 - 21:00",
     sede: "Centro",
-    total: "$12.000",
+    total: "$27.000",
     estado: "Pendiente",
   },
   {
     id: "4",
-    fecha: "12/08/2023",
-    tipoReserva: "CENA",
-    horario: "20:00 - 21:00",
+    fecha: `18/09/${currentYear}`,
+    tipoReserva: "MERIENDA",
+    horario: "17:00 - 18:00",
     sede: "Belgrano",
-    total: "$15.000",
+    total: "$18.000",
     estado: "Finalizado",
   },
 ]

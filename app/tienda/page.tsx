@@ -16,10 +16,11 @@ interface StorePurchase {
   sede: string
 }
 
+const yearNow = new Date().getFullYear()
 const mockPurchases: StorePurchase[] = [
   {
     id: "1",
-    fecha: "15/08/2023",
+    fecha: `05/09/${yearNow}`,
     item: "Escritorio de oficina",
     codigo: "#PRD-2023-001",
     cantidad: 2,
@@ -29,7 +30,7 @@ const mockPurchases: StorePurchase[] = [
   },
   {
     id: "2",
-    fecha: "15/10/2023",
+    fecha: `12/09/${yearNow}`,
     item: "Lapicera",
     codigo: "#PRD-2023-122",
     cantidad: 12,
@@ -39,7 +40,7 @@ const mockPurchases: StorePurchase[] = [
   },
   {
     id: "3",
-    fecha: "17/11/2023",
+    fecha: `18/09/${yearNow}`,
     item: "Cuaderno",
     codigo: "#PRD-2023-400",
     cantidad: 2,
@@ -49,7 +50,7 @@ const mockPurchases: StorePurchase[] = [
   },
   {
     id: "4",
-    fecha: "20/11/2023",
+    fecha: `23/09/${yearNow}`,
     item: "Marcadores",
     codigo: "#PRD-2023-450",
     cantidad: 5,
@@ -205,12 +206,7 @@ export default function TiendaPage() {
               {filteredPurchases.map((purchase) => (
                 <tr key={purchase.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{purchase.fecha}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{purchase.item}</div>
-                      <div className="text-sm text-gray-500">{purchase.codigo}</div>
-                    </div>
-                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{purchase.item}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{purchase.cantidad}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{purchase.precioUnitario}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{purchase.total}</td>

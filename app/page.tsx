@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
+import courses from "@/lib/data/courses.json"
 
 const carouselImages = [
   {
@@ -34,33 +35,6 @@ type EventType = {
   type: "class" | "meeting" | "exam"
 }
 
-type EventsData = {
-  [key: number]: EventType[]
-}
-
-const eventsData: EventsData = {
-  18: [
-    { time: "09:00", title: "Matemáticas Avanzadas", type: "class" },
-    { time: "15:00", title: "Tutoría Grupal", type: "meeting" },
-  ],
-  19: [
-    { time: "08:00", title: "Arquitectura de Aplicaciones", type: "class" },
-    { time: "14:00", title: "Desarrollo de Aplicaciones I", type: "class" },
-    { time: "16:30", title: "Reunión departamento", type: "meeting" },
-  ],
-  20: [
-    { time: "10:00", title: "Base de Datos", type: "class" },
-    { time: "13:00", title: "Seminario de Investigación", type: "meeting" },
-  ],
-  21: [
-    { time: "08:30", title: "Programación Web", type: "class" },
-    { time: "16:00", title: "Evaluación Final", type: "exam" },
-  ],
-  22: [{ time: "09:00", title: "Proyecto Final", type: "class" }],
-  23: [],
-  24: [],
-}
-
 export default function DashboardPage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [selectedDate, setSelectedDate] = useState(() => new Date().getDate())
@@ -68,6 +42,13 @@ export default function DashboardPage() {
   const autoTransitionRef = useRef<NodeJS.Timeout | null>(null)
 
   const [isDragging, setIsDragging] = useState(false)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("wallet_balance")
+      if (raw != null) setWalletBalance(Number(raw))
+    } catch {}
+  }, [])
   const [dragStart, setDragStart] = useState(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -206,7 +187,84 @@ export default function DashboardPage() {
   }
 
   const weekDays = getCurrentWeekDays()
-  const selectedEvents = eventsData[selectedDate] || []
+
+  const parseDdMmYyyy = (str: string) => {
+    const [dd, mm, yyyy] = str.split("/").map((s) => parseInt(s, 10))
+    return new Date(yyyy, mm - 1, dd)
+  }
+
+  const spanishDayToIndex: Record<string, number> = {
+    LUNES: 1,
+    MARTES: 2,
+    MIÉRCOLES: 3,
+    JUEVES: 4,
+    VIERNES: 5,
+    SÁBADO: 6,
+    DOMINGO: 0,
+  }
+
+  const getNextClassDate = (course: any, fromDate: Date) => {
+    const [startStr, endStr] = (course.dates as string).split(" - ")
+    const start = parseDdMmYyyy(startStr)
+    const end = parseDdMmYyyy(endStr)
+    const targetDow = spanishDayToIndex[course.day]
+    if (isNaN(targetDow)) return null
+
+    // base date cannot be before start
+    const base = new Date(Math.max(fromDate.getTime(), start.getTime()))
+
+    // move to next occurrence of course weekday
+    const delta = (targetDow - base.getDay() + 7) % 7
+    const next = new Date(base)
+    next.setDate(base.getDate() + delta)
+
+    if (next > end) return null
+    return next
+  }
+
+  const today = new Date()
+  const nextClasses = (courses as any[])
+    .map((c) => ({ course: c, date: getNextClassDate(c, today) }))
+    .filter((x) => x.date) as { course: any; date: Date }[]
+  nextClasses.sort((a, b) => a.date.getTime() - b.date.getTime())
+  const upcoming = nextClasses[0] || null
+
+  // Eventos del día seleccionado
+  const selectedFullDate = weekDays.find((d) => d.date === selectedDate)?.fullDate
+  const selectedEvents: EventType[] = selectedFullDate
+    ? (courses as any[])
+        .filter((c) => {
+          const [startStr, endStr] = (c.dates as string).split(" - ")
+          const start = parseDdMmYyyy(startStr)
+          const end = parseDdMmYyyy(endStr)
+          const dow = spanishDayToIndex[c.day]
+          return (
+            selectedFullDate >= start &&
+            selectedFullDate <= end &&
+            selectedFullDate.getDay() === dow
+          )
+        })
+        .map((c) => ({
+          time: (c.schedule as string).split("-")[0].trim(),
+          title: c.title as string,
+          type: "class" as const,
+        }))
+    : []
+
+  // Tipos de eventos por día de la semana (para los puntitos)
+  const getEventTypesForDate = (date: Date): Set<string> => {
+    const types = new Set<string>()
+    ;(courses as any[]).forEach((c) => {
+      const [startStr, endStr] = (c.dates as string).split(" - ")
+      const start = parseDdMmYyyy(startStr)
+      const end = parseDdMmYyyy(endStr)
+      const dow = spanishDayToIndex[c.day]
+      if (date >= start && date <= end && date.getDay() === dow) {
+        types.add("class")
+      }
+    })
+    return types
+  }
 
   return (
     <>
@@ -437,6 +495,16 @@ export default function DashboardPage() {
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full animate-ping"></div>
                       )}
                     </button>
+                    {/* dots under day if events exist */}
+                    {(() => {
+                      const types = getEventTypesForDate(item.fullDate)
+                      return (
+                        <div className="flex items-center justify-center gap-1 mt-1 h-1.5">
+                          {types.has("class") && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                          {/* place for more types if added later */}
+                        </div>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
@@ -499,27 +567,37 @@ export default function DashboardPage() {
               </div>
 
               <div className="border-l-4 border-slate-600 pl-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <BookOpen className="h-4 w-4 text-slate-600" />
-                  <h3 className="font-semibold text-lg text-slate-800">Desarrollo de Aplicaciones II</h3>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                  <span>18068</span>
-                </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                    <span className="text-xs text-gray-500 uppercase tracking-wide">VIRTUAL</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium text-slate-700">Hoy</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span>14:00 - 18:00</span>
-                </div>
+                {upcoming ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <BookOpen className="h-4 w-4 text-slate-600" />
+                      <h3 className="font-semibold text-lg text-slate-800">{upcoming.course.title}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                      <span>{upcoming.course.code}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">{upcoming.course.location}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <span className="font-medium text-slate-700">
+                        {upcoming.date.toDateString() === today.toDateString()
+                          ? "Hoy"
+                          : upcoming.date.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Clock className="h-4 w-4 text-gray-500" />
+                      <span>{upcoming.course.schedule}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-gray-500">No hay clases próximas</div>
+                )}
               </div>
             </div>
 
@@ -529,9 +607,10 @@ export default function DashboardPage() {
                   <h3 className="text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
                 <AnimatedBalance 
-                  amount={8235.50} 
-                  className="text-3xl font-bold text-slate-900"
-                  animated={true}
+                  amount={walletBalance ?? 0} 
+                  className="text-4xl font-bold text-gray-900"
+                  animated={false}
+                  neutral={true}
                 />
               </div>
 
@@ -550,6 +629,7 @@ export default function DashboardPage() {
         </div>
 
       </div>
+      <div className="h-24" />
     </>
   )
 }

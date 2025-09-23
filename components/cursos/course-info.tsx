@@ -494,6 +494,33 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [isEditingGrades, setIsEditingGrades] = useState(false)
   const [gradesData, setGradesData] = useState<Record<string, Record<string, string>>>({})
 
+  // Persistencia local de calificaciones por curso
+  const gradesStorageKey = `grades_${courseId}`
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(gradesStorageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, Record<string, string>>
+        if (parsed && typeof parsed === 'object') {
+          // Normalizar condición calculada
+          const normalized: Record<string, Record<string, string>> = {}
+          Object.entries(parsed).forEach(([sid, grades]) => {
+            const g = { ...grades }
+            g["CONDICIÓN FINAL"] = calculateFinalCondition(g)
+            normalized[sid] = g
+          })
+          setGradesData(normalized)
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId])
+  useEffect(() => {
+    try {
+      localStorage.setItem(gradesStorageKey, JSON.stringify(gradesData))
+    } catch {}
+  }, [gradesData])
+
   const course = getCourseData(courseId)
   const students = course.studentsData || []
 
@@ -1055,7 +1082,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     course.studentsData?.filter((student) => {
       const matchesSearch =
         student.name.toLowerCase().includes(gradesSearchTerm.toLowerCase()) || student.legajo.includes(gradesSearchTerm)
-      const finalCondition = calculateFinalCondition(student.id)
+      const finalCondition = calculateFinalCondition(gradesData[student.id] || {})
       const matchesFilter = gradesFilterConditions.length === 0 || gradesFilterConditions.includes(finalCondition)
       return matchesSearch && matchesFilter
     }) || []
