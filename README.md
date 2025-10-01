@@ -1,0 +1,21 @@
+#Pendings
+
+- que solo se mueva el contenido ( la navbar y lo de arriba que se ve el perfil y notificaciones que quede fijo)
+- sacar el bienvenido 
+- si entra con el mobile que le salte un aviso de que es recomendable  usar desde la pc 
+-arreglar filtros mis cursos
+-que a donde muestra los cursos mostrando que sea en base a los que se ve en pantalla (ósea que si tenes en el segundo cuatrimestre se ve 2 cursos que diga dos)
+- agregar un botón como de editar en asistencia 
+- ancho fijo de fecha de carga de asistencia 
+- que cuando vayas tocando la flecha te vaya cambiando a la clase anterior 
+- agregar botón en filtros de calificaciones que sea reset y sacar el de afuera
+- filtros de comedor  que queden alineados / igual espaciados
+- filtros de fecha en comedor tiene el logo duplicado
+- sacar el aplicar en comedor y en tienda 
+- revisar el tema de que cuando cambia la nota si el recuperatorio tiene nota, volarlo o hacer algo 
+-pensar otro nombre en vez de preview en el genera acta 
+- sacar el cancelar de generar acta
+- hacer funcionar el botón de generar acta y que bloquee el curso  
+- que el botón generar acta solo se habilite en la fecha que termina el curso 
+- que el botón anteriores de mis cursos cambiarlo a Todas
+- comedor y tienda tiene otro formato de titulo, emparejarlos
