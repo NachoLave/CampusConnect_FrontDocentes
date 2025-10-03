@@ -50,9 +50,9 @@ export function NotificationsDropdown({
   onMarkAsRead,
 }: NotificationsDropdownProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors">
+        <button className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0">
           <Bell className="h-6 w-6 text-gray-600" />
           {unreadCount > 0 && (
             <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 text-white text-xs flex items-center justify-center">
@@ -61,25 +61,25 @@ export function NotificationsDropdown({
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96 p-0 max-h-96 overflow-y-auto">
-        <div className="p-4 border-b flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Notificaciones</h3>
+      <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] max-w-80 lg:max-w-96 lg:w-96 p-0 max-h-[70vh] lg:max-h-96 overflow-y-auto mr-2">
+        <div className="p-3 lg:p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+          <h3 className="font-semibold text-gray-900 text-sm lg:text-base">Notificaciones</h3>
           {notifications.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onMarkAllRead}
-              className="text-blue-600 hover:text-blue-700 text-sm"
+              className="text-blue-600 hover:text-blue-700 text-xs lg:text-sm h-auto py-1 px-2"
             >
-              Marcar todas como leídas
+              Marcar leídas
             </Button>
           )}
         </div>
         <div className="space-y-1 p-2">
           {notifications.filter((notification) => !notification.isRead).length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Bell className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-              <p>No hay notificaciones</p>
+            <div className="p-6 lg:p-8 text-center text-gray-500">
+              <Bell className="h-10 w-10 lg:h-12 lg:w-12 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm lg:text-base">No hay notificaciones</p>
             </div>
           ) : (
             notifications
@@ -90,25 +90,25 @@ export function NotificationsDropdown({
                   <div
                     key={notification.id}
                     className={cn(
-                      "p-4 rounded-lg border transition-colors hover:bg-gray-50 relative",
+                      "p-3 lg:p-4 rounded-lg border transition-colors hover:bg-gray-50 relative",
                       notificationStyles[notification.type],
                     )}
                   >
-                    <div className="flex items-start space-x-3">
+                    <div className="flex items-start space-x-2 lg:space-x-3">
                       <div
                         className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                          "w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0",
                           iconStyles[notification.type],
                         )}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                       </div>
-                      <div className="flex-1 min-w-0 pr-8">
-                        <h4 className="font-semibold text-gray-900 text-sm mb-1">{notification.title}</h4>
-                        <p className="text-gray-700 text-sm leading-relaxed">{notification.message}</p>
-                        {notification.time && <p className="text-gray-500 text-xs mt-2">{notification.time}</p>}
+                      <div className="flex-1 min-w-0 pr-7 lg:pr-8">
+                        <h4 className="font-semibold text-gray-900 text-xs lg:text-sm mb-1 leading-tight">{notification.title}</h4>
+                        <p className="text-gray-700 text-xs lg:text-sm leading-relaxed">{notification.message}</p>
+                        {notification.time && <p className="text-gray-500 text-xs mt-1 lg:mt-2">{notification.time}</p>}
                         {notification.actionText && (
-                          <button className="text-yellow-600 hover:text-yellow-700 text-sm font-medium mt-2">
+                          <button className="text-yellow-600 hover:text-yellow-700 text-xs lg:text-sm font-medium mt-1 lg:mt-2">
                             {notification.actionText}
                           </button>
                         )}
@@ -118,9 +118,9 @@ export function NotificationsDropdown({
                           variant="ghost"
                           size="sm"
                           onClick={() => onMarkAsRead(notification.id)}
-                          className="absolute top-2 right-2 h-6 w-6 p-0 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full"
+                          className="absolute top-1.5 right-1.5 lg:top-2 lg:right-2 h-5 w-5 lg:h-6 lg:w-6 p-0 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full"
                         >
-                          <Check className="h-3 w-3" />
+                          <Check className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
                         </Button>
                       )}
                     </div>

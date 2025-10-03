@@ -271,10 +271,10 @@ export default function DashboardPage() {
       <div className="mb-6 flex items-center justify-end max-w-[95rem] mx-auto px-4"></div>
 
       <div className="mb-8">
-        <div className="relative max-w-7xl mx-auto">
+        <div className="relative max-w-7xl mx-auto px-2 lg:px-0">
           <div
             ref={carouselRef}
-            className="relative h-80 flex items-center justify-center perspective-1000 cursor-grab active:cursor-grabbing select-none overflow-hidden"
+            className="relative h-48 md:h-64 lg:h-80 flex items-center justify-center perspective-1000 cursor-grab active:cursor-grabbing select-none overflow-hidden"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -284,48 +284,54 @@ export default function DashboardPage() {
               transition: isDragging ? "none" : "all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
             }}
           >
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform -translate-x-2 rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image">
+            <div 
+              className="hidden lg:block absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform -translate-x-2 rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
+              onClick={prevSlide}
+            >
               <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-500 hover:shadow-2xl">
                 <Image
                   src={carouselImages[getPrevSlide()].src || "/placeholder.svg"}
                   alt={carouselImages[getPrevSlide()].alt}
                   fill
-                  className="object-cover transition-transform duration-700 hover:scale-105"
+                  className="object-cover transition-transform duration-700 hover:scale-105 animate-breathe"
                   draggable={false}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
               </div>
             </div>
 
-            <div className="relative w-[700px] h-72 z-20 transform transition-all duration-800 ease-out hover:scale-[1.02]">
+            <div className="relative w-full max-w-[700px] h-40 md:h-56 lg:h-72 z-20 transform transition-all duration-800 ease-out hover:scale-[1.02] mx-4 lg:mx-0">
               <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 hover:shadow-3xl">
                 <Image
                   src={carouselImages[currentSlide].src || "/placeholder.svg"}
                   alt={carouselImages[currentSlide].alt}
                   fill
-                  className="object-cover transition-all duration-800 ease-out"
+                  className="object-cover transition-all duration-800 ease-out animate-breathe"
                   priority
                   draggable={false}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent transition-opacity duration-500" />
-                <div className="absolute bottom-6 left-6 text-white transform transition-all duration-500 ease-out">
-                  <h2 className="text-2xl font-bold mb-2 transform transition-transform duration-500 ease-out hover:translate-x-1">
+                <div className="absolute bottom-4 left-4 lg:bottom-6 lg:left-6 text-white transform transition-all duration-500 ease-out">
+                  <h2 className="text-base md:text-xl lg:text-2xl font-bold mb-1 lg:mb-2 transform transition-transform duration-500 ease-out hover:translate-x-1">
                     {carouselImages[currentSlide].title}
                   </h2>
-                  <p className="text-lg opacity-90 transform transition-all duration-500 ease-out delay-100 hover:translate-x-1">
+                  <p className="text-sm md:text-base lg:text-lg opacity-90 transform transition-all duration-500 ease-out delay-100 hover:translate-x-1">
                     {carouselImages[currentSlide].subtitle}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform translate-x-2 -rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image">
+            <div 
+              className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform translate-x-2 -rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
+              onClick={nextSlide}
+            >
               <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-500 hover:shadow-2xl">
                 <Image
                   src={carouselImages[getNextSlide()].src || "/placeholder.svg"}
                   alt={carouselImages[getNextSlide()].alt}
                   fill
-                  className="object-cover transition-transform duration-700 hover:scale-105"
+                  className="object-cover transition-transform duration-700 hover:scale-105 animate-breathe"
                   draggable={false}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
@@ -335,16 +341,16 @@ export default function DashboardPage() {
             <button
               onClick={prevSlide}
               disabled={isTransitioning}
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-14 h-14 glass-button rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-30 hover:scale-110 hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute left-2 lg:left-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-14 lg:h-14 glass-button rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-30 hover:scale-110 hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ChevronLeft className="h-6 w-6 text-gray-700 transition-transform duration-200 group-hover:-translate-x-0.5" />
+              <ChevronLeft className="h-5 w-5 lg:h-6 lg:w-6 text-gray-700 transition-transform duration-200 group-hover:-translate-x-0.5" />
             </button>
             <button
               onClick={nextSlide}
               disabled={isTransitioning}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-14 h-14 glass-button rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-30 hover:scale-110 hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute right-2 lg:right-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-14 lg:h-14 glass-button rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-30 hover:scale-110 hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ChevronRight className="h-6 w-6 text-gray-700 transition-transform duration-200 group-hover:translate-x-0.5" />
+              <ChevronRight className="h-5 w-5 lg:h-6 lg:w-6 text-gray-700 transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
           </div>
 
@@ -449,30 +455,31 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg p-6 border border-gray-200 h-full">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-slate-700">Calendario semanal</h2>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-4 md:mb-6">
+                <h2 className="text-lg md:text-xl font-semibold text-slate-700">Calendario semanal</h2>
+                <div className="flex items-center gap-1 md:gap-2">
                   <button onClick={prevWeek} className="p-1 hover:bg-gray-100 rounded">
-                    <ChevronLeft className="h-4 w-4 text-slate-600" />
+                    <ChevronLeft className="h-3 w-3 md:h-4 md:w-4 text-slate-600" />
                   </button>
                   <button
                     onClick={goToToday}
-                    className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-md transition-colors flex items-center gap-1"
+                    className="px-2 md:px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-md transition-colors flex items-center gap-1"
                   >
-                    Hoy ({new Date().getDate()})
+                    <span className="hidden md:inline">Hoy ({new Date().getDate()})</span>
+                    <span className="md:hidden">{new Date().getDate()}</span>
                   </button>
-                  <Calendar className="h-5 w-5 text-slate-600" />
+                  <Calendar className="h-4 w-4 md:h-5 md:w-5 text-slate-600" />
                   <button onClick={nextWeek} className="p-1 hover:bg-gray-100 rounded">
-                    <ChevronRight className="h-4 w-4 text-slate-600" />
+                    <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-slate-600" />
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-4 mb-6">
+              <div className="grid grid-cols-7 gap-2 md:gap-4 mb-6">
                 {weekDays.map((item) => (
                   <div key={item.day} className="text-center">
                     <div
-                      className={`text-sm font-medium mb-2 ${
+                      className={`text-xs md:text-sm font-medium mb-1 md:mb-2 ${
                         item.day === "SÁB" || item.day === "DOM" ? "text-gray-400" : "text-slate-600"
                       }`}
                     >
@@ -480,7 +487,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       onClick={() => setSelectedDate(item.date)}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium mx-auto transition-all duration-300 relative ${
+                      className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-xs md:text-sm font-medium mx-auto transition-all duration-300 relative ${
                         selectedDate === item.date
                           ? "border-2 border-slate-600 text-slate-600 bg-slate-50 shadow-md"
                           : item.isToday
@@ -555,9 +562,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-lg p-6 border border-gray-200">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-slate-700">Próxima clase</h2>
+            <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
+              <div className="flex items-center justify-between mb-4 md:mb-6">
+                <h2 className="text-lg md:text-xl font-semibold text-slate-700">Próxima clase</h2>
                 <Link
                   href="/cursos"
                   className="text-sm text-slate-600 hover:text-slate-800 hover:underline font-medium"
@@ -602,21 +609,21 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white rounded-lg p-6 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-semibold text-slate-700">Saldo</h3>
+              <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-3 md:mb-4">
+                  <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
                 <AnimatedBalance 
                   amount={walletBalance ?? 0} 
-                  className="text-4xl font-bold text-gray-900"
+                  className="text-2xl md:text-4xl font-bold text-gray-900"
                   animated={false}
                   neutral={true}
                 />
               </div>
 
-              <div className="bg-white rounded-lg p-6 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-semibold text-slate-700">Mis reservas</h3>
+              <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-3 md:mb-4">
+                  <h3 className="text-lg md:text-xl font-semibold text-slate-700">Mis reservas</h3>
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="h-4 w-4 text-gray-500" />

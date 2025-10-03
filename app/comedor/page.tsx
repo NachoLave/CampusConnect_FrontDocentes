@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, ExternalLink, RotateCcw } from "lucide-react"
+import { ExternalLink, X, Filter, ChevronDown } from "lucide-react"
+import { DatePicker } from "@/components/ui/date-range-picker"
 
 interface DiningReservation {
   id: string
@@ -57,16 +56,40 @@ const mockReservations: DiningReservation[] = [
 ]
 
 export default function ComedorPage() {
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
-  const [tipo, setTipo] = useState("")
-  const [estado, setEstado] = useState("")
-  const [appliedFilters, setAppliedFilters] = useState({
-    fromDate: "",
-    toDate: "",
-    tipo: "",
-    estado: "",
-  })
+  const [fromDate, setFromDate] = useState<Date | null>(null)
+  const [toDate, setToDate] = useState<Date | null>(null)
+  const [tipos, setTipos] = useState<string[]>([])
+  const [estados, setEstados] = useState<string[]>([])
+  const [showTipoFilter, setShowTipoFilter] = useState(false)
+  const [showEstadoFilter, setShowEstadoFilter] = useState(false)
+
+  // Cerrar filtros al hacer click afuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      
+      const tipoButton = document.querySelector('[aria-label="Filtrar por tipo"]')
+      const tipoDropdown = tipoButton?.nextElementSibling
+      if (showTipoFilter && tipoButton && tipoDropdown) {
+        if (!tipoButton.contains(target) && !tipoDropdown.contains(target)) {
+          setShowTipoFilter(false)
+        }
+      }
+      
+      const estadoButton = document.querySelector('[aria-label="Filtrar por estado"]')
+      const estadoDropdown = estadoButton?.nextElementSibling
+      if (showEstadoFilter && estadoButton && estadoDropdown) {
+        if (!estadoButton.contains(target) && !estadoDropdown.contains(target)) {
+          setShowEstadoFilter(false)
+        }
+      }
+    }
+
+    if (showTipoFilter || showEstadoFilter) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showTipoFilter, showEstadoFilter])
 
   const convertDateForComparison = (dateStr: string) => {
     const [day, month, year] = dateStr.split("/")
@@ -75,54 +98,70 @@ export default function ComedorPage() {
 
   const filteredReservations = useMemo(() => {
     return mockReservations.filter((reservation) => {
-      // Date filtering
-      if (appliedFilters.fromDate) {
-        const reservationDate = convertDateForComparison(reservation.fecha)
-        if (reservationDate < appliedFilters.fromDate) return false
+      const reservationDate = convertDateForComparison(reservation.fecha)
+
+      // Date filtering - Desde (mayor o igual)
+      if (fromDate) {
+        const fromDateStr = fromDate.toISOString().split('T')[0]
+        if (reservationDate < fromDateStr) {
+          return false
+        }
       }
 
-      if (appliedFilters.toDate) {
-        const reservationDate = convertDateForComparison(reservation.fecha)
-        if (reservationDate > appliedFilters.toDate) return false
+      // Date filtering - Hasta (menor o igual)
+      if (toDate) {
+        const toDateStr = toDate.toISOString().split('T')[0]
+        if (reservationDate > toDateStr) {
+          return false
+        }
       }
 
       // Type filtering
-      if (appliedFilters.tipo) {
-        const filterTipo = appliedFilters.tipo.toUpperCase()
-        if (!reservation.tipoReserva.toUpperCase().includes(filterTipo)) return false
+      if (tipos.length > 0) {
+        const matchesTipo = tipos.some(tipo => 
+          reservation.tipoReserva.toUpperCase() === tipo.toUpperCase()
+        )
+        if (!matchesTipo) return false
       }
 
       // Status filtering
-      if (appliedFilters.estado) {
-        const filterEstado = appliedFilters.estado.toLowerCase()
-        const reservationEstado = reservation.estado.toLowerCase()
-        if (reservationEstado !== filterEstado) return false
+      if (estados.length > 0) {
+        const matchesEstado = estados.some(estado => 
+          reservation.estado.toLowerCase() === estado.toLowerCase()
+        )
+        if (!matchesEstado) return false
       }
 
       return true
     })
-  }, [appliedFilters])
+  }, [fromDate, toDate, tipos, estados])
 
-  const applyFilters = () => {
-    setAppliedFilters({
-      fromDate,
-      toDate,
-      tipo,
-      estado,
-    })
+  const toggleTipo = (tipo: string) => {
+    setTipos(prev => 
+      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
+    )
   }
 
-  const resetFilters = () => {
-    setFromDate("")
-    setToDate("")
-    setTipo("")
-    setEstado("")
-    setAppliedFilters({
-      fromDate: "",
-      toDate: "",
-      tipo: "",
-      estado: "",
-    })
+  const toggleEstado = (estado: string) => {
+    setEstados(prev => 
+      prev.includes(estado) ? prev.filter(e => e !== estado) : [...prev, estado]
+    )
+  }
+
+  const clearFilters = () => {
+    setFromDate(null)
+    setToDate(null)
+    setTipos([])
+    setEstados([])
+    setShowTipoFilter(false)
+    setShowEstadoFilter(false)
+  }
+
+  const hasActiveFilters = fromDate !== null || toDate !== null || tipos.length > 0 || estados.length > 0
+  
+  const formatDateForTag = (date: Date | null) => {
+    if (!date) return ""
+    return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
   const getStatusColor = (status: string) => {
@@ -143,74 +182,254 @@ export default function ComedorPage() {
       {/* Header Section */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Historial de Comedor</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Historial de Comedor</h1>
+          <p className="text-sm md:text-base text-gray-600">
             Desde acá podes ver el historial más reciente del comedor.
             <br />
-            Para ver mas información visitá el{" "}
+            Para ver más información visitá el{" "}
             <span className="text-blue-600 underline cursor-pointer">sitio oficial</span>
           </p>
         </div>
-        <Button className="bg-slate-800 hover:bg-slate-700 text-white mt-4">
-          <ExternalLink className="h-4 w-4 mr-2" />
-          Visitar Comedor
+        <Button className="bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2">
+          <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+          <span className="hidden sm:inline">Visitar Comedor</span>
+          <span className="sm:hidden">Comedor</span>
         </Button>
       </div>
 
       {/* Filters Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_200px] gap-4 items-end">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
-            <div className="relative">
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="pl-10" />
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Filtros</h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+        
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Filtros de fecha */}
+          <div className="flex flex-col sm:flex-row gap-4 lg:flex-1">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
+              <DatePicker
+                selectedDate={fromDate}
+                onChange={(date) => setFromDate(date)}
+                placeholder="Seleccionar fecha"
+                maxDate={toDate}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
+              <DatePicker
+                selectedDate={toDate}
+                onChange={(date) => setToDate(date)}
+                placeholder="Seleccionar fecha"
+                minDate={fromDate}
+              />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
-            <div className="relative">
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="pl-10" />
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+
+          {/* Filtros con dropdowns */}
+          <div className="flex flex-col sm:flex-row gap-4 lg:w-auto">
+            {/* Filtro Tipo */}
+            <div className="relative flex-shrink-0">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+              <button
+                onClick={() => setShowTipoFilter(!showTipoFilter)}
+                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto min-w-[160px]"
+                aria-label="Filtrar por tipo"
+                aria-expanded={showTipoFilter}
+              >
+                <Filter className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1 text-left">
+                  {tipos.length === 0 ? "Todos" : `${tipos.length} seleccionado${tipos.length > 1 ? "s" : ""}`}
+                </span>
+                {tipos.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
+                    {tipos.length}
+                  </span>
+                )}
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              </button>
+              {showTipoFilter && (
+                <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                  <div className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-medium text-gray-700">Tipo de Reserva</label>
+                      <div className="flex items-center gap-2">
+                        {tipos.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setTipos([])
+                              setShowTipoFilter(false)
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            aria-label="Limpiar filtros"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowTipoFilter(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                          aria-label="Cerrar filtro"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {["Desayuno", "Almuerzo", "Merienda", "Cena"].map((tipo) => (
+                        <label key={tipo} className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={tipos.includes(tipo)}
+                            onChange={() => toggleTipo(tipo)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{tipo}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-            <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desayuno">Desayuno</SelectItem>
-                <SelectItem value="almuerzo">Almuerzo</SelectItem>
-                <SelectItem value="merienda">Merienda</SelectItem>
-                <SelectItem value="cena">Cena</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-            <Select value={estado} onValueChange={setEstado}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="finalizado">Finalizado</SelectItem>
-                <SelectItem value="cancelado">Cancelado</SelectItem>
-                <SelectItem value="pendiente">Pendiente</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Button variant="outline" onClick={resetFilters} className="w-full bg-transparent">
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Restaurar filtros
-            </Button>
-            <Button className="bg-slate-800 hover:bg-slate-700 text-white w-full" onClick={applyFilters}>
-              Aplicar filtros
-            </Button>
+
+            {/* Filtro Estado */}
+            <div className="relative flex-shrink-0">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+              <button
+                onClick={() => setShowEstadoFilter(!showEstadoFilter)}
+                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto min-w-[160px]"
+                aria-label="Filtrar por estado"
+                aria-expanded={showEstadoFilter}
+              >
+                <Filter className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1 text-left">
+                  {estados.length === 0 ? "Todos" : `${estados.length} seleccionado${estados.length > 1 ? "s" : ""}`}
+                </span>
+                {estados.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
+                    {estados.length}
+                  </span>
+                )}
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              </button>
+              {showEstadoFilter && (
+                <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                  <div className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-medium text-gray-700">Estado</label>
+                      <div className="flex items-center gap-2">
+                        {estados.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setEstados([])
+                              setShowEstadoFilter(false)
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            aria-label="Limpiar filtros"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowEstadoFilter(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                          aria-label="Cerrar filtro"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {["Finalizado", "Cancelado", "Pendiente"].map((estado) => (
+                        <label key={estado} className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={estados.includes(estado)}
+                            onChange={() => toggleEstado(estado)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{estado}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Active Filters Tags */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-gray-200">
+            {fromDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                Desde: {formatDateForTag(fromDate)}
+                <button
+                  onClick={() => setFromDate(null)}
+                  className="rounded-full p-0.5 hover:opacity-80"
+                  aria-label="Remover filtro desde"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {toDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                Hasta: {formatDateForTag(toDate)}
+                <button
+                  onClick={() => setToDate(null)}
+                  className="rounded-full p-0.5 hover:opacity-80"
+                  aria-label="Remover filtro hasta"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {tipos.map((tipo) => (
+              <span key={tipo} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                {tipo}
+                <button
+                  onClick={() => toggleTipo(tipo)}
+                  className="rounded-full p-0.5 hover:opacity-80"
+                  aria-label={`Remover filtro ${tipo}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {estados.map((estado) => (
+              <span 
+                key={estado}
+                className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${
+                  estado === "Finalizado" 
+                    ? "bg-green-100 text-green-800"
+                    : estado === "Cancelado"
+                      ? "bg-orange-100 text-orange-800"
+                      : "bg-blue-100 text-blue-800"
+                }`}
+              >
+                {estado}
+                <button
+                  onClick={() => toggleEstado(estado)}
+                  className="rounded-full p-0.5 hover:opacity-80"
+                  aria-label={`Remover filtro ${estado}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Table Section */}
