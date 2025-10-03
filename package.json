@@ -1,5 +1,5 @@
 {
-  "_comment": "Fixed ERR_PNPM_OUTDATED_LOCKFILE for Vercel deployment",
+  "_comment": "Fixed ERR_PNPM_OUTDATED_LOCKFILE for Vercel deployment - Production ready",
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
