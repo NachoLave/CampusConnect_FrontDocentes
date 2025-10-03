@@ -1,19 +1,19 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Search, Filter, Building, Calendar, X, ChevronDown } from "lucide-react"
+import { Search, Filter, Building, Calendar, X, ChevronDown, RotateCcw } from "lucide-react"
 import { CourseCard } from "./course-card"
 // Importamos los datos directamente por ahora
 import coursesData from "@/lib/data/courses.json"
 
 const dayOrder = {
-  LUNES: 1,
-  MARTES: 2,
-  MIÉRCOLES: 3,
-  JUEVES: 4,
-  VIERNES: 5,
-  SÁBADO: 6,
-  DOMINGO: 7,
+  Lunes: 1,
+  Martes: 2,
+  Miércoles: 3,
+  Jueves: 4,
+  Viernes: 5,
+  Sábado: 6,
+  Domingo: 7,
 }
 
 const shiftOrder = {
@@ -26,19 +26,23 @@ type CoursesGridProps = {
   externalSelectedPeriod?: string
   externalSelectedSedes?: string[]
   externalSelectedDays?: string[]
+  onChangeSedes?: (sedes: string[]) => void
+  onChangeDays?: (days: string[]) => void
 }
 
-export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays }: CoursesGridProps) {
+export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays, onChangeSedes, onChangeDays }: CoursesGridProps) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedSedes, setSelectedSedes] = useState<string[]>(externalSelectedSedes ?? [])
-  const [selectedDays, setSelectedDays] = useState<string[]>(externalSelectedDays ?? [])
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(externalSelectedPeriod ?? "Todos")
   const [showSedeDropdown, setShowSedeDropdown] = useState(false)
   const [showDayDropdown, setShowDayDropdown] = useState(false)
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false)
 
   // Usar los datos importados directamente
   const allCourses = coursesData
+  
+  // Usar directamente los valores externos en lugar de estado interno
+  const selectedPeriod = externalSelectedPeriod ?? "Todos"
+  const selectedSedes = externalSelectedSedes ?? []
+  const selectedDays = externalSelectedDays ?? []
   
   const sedes = useMemo(() => {
     const uniqueSedes = [...new Set(allCourses.map((course) => course.sede))]
@@ -68,12 +72,13 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     })
   }, [allCourses])
 
-  // Sincronizar cuando viene el período seleccionado desde afuera
-  useEffect(() => {
-    if (externalSelectedPeriod !== undefined) {
-      setSelectedPeriod(externalSelectedPeriod)
-    }
-  }, [externalSelectedPeriod])
+  // Cursos del período actual (para el contador)
+  const coursesInPeriod = useMemo(() => {
+    return allCourses.filter((course) => {
+      const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
+      return matchesPeriod
+    })
+  }, [allCourses, selectedPeriod])
 
   const filteredAndSortedCourses = useMemo(() => {
     const filtered = allCourses.filter((course) => {
@@ -99,28 +104,10 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
 
   const resetFilters = () => {
     setSearchTerm("")
-    setSelectedSedes([])
-    setSelectedDays([])
-    setSelectedPeriod("Todos")
     setShowSedeDropdown(false)
     setShowDayDropdown(false)
     setShowPeriodDropdown(false)
-  }
-
-  const toggleSede = (sede: string) => {
-    setSelectedSedes((prev) => (prev.includes(sede) ? prev.filter((s) => s !== sede) : [...prev, sede]))
-  }
-
-  const toggleDay = (day: string) => {
-    setSelectedDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
-  }
-
-  const removeSede = (sede: string) => {
-    setSelectedSedes((prev) => prev.filter((s) => s !== sede))
-  }
-
-  const removeDay = (day: string) => {
-    setSelectedDays((prev) => prev.filter((d) => d !== day))
+    // Los filtros externos se resetean desde la página padre
   }
 
   // Cerrar dropdowns cuando se hace clic fuera
@@ -138,27 +125,85 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const hasActiveFilters = selectedSedes.length > 0 || selectedDays.length > 0
+  
+  const removeSede = (sede: string) => {
+    if (onChangeSedes) {
+      onChangeSedes(selectedSedes.filter((s) => s !== sede))
+    }
+  }
+
+  const removeDay = (day: string) => {
+    if (onChangeDays) {
+      onChangeDays(selectedDays.filter((d) => d !== day))
+    }
+  }
+
+  const clearAllFilters = () => {
+    if (onChangeSedes) onChangeSedes([])
+    if (onChangeDays) onChangeDays([])
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Results count */}
-      <div className="text-sm text-gray-600">
-        Mostrando {filteredAndSortedCourses.length} de {allCourses.length} cursos
+    <div className="space-y-4 lg:space-y-6">
+      {/* Results count and clear filters */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs lg:text-sm text-gray-600">
+          Mostrando {filteredAndSortedCourses.length} de {coursesInPeriod.length} cursos
+        </div>
+        {hasActiveFilters && (
+          <button
+            onClick={clearAllFilters}
+            className="flex items-center gap-1.5 px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            <RotateCcw className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+            <span>Limpiar filtros</span>
+          </button>
+        )}
       </div>
 
+      {/* Active Filters Tags */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2">
+          {selectedSedes.map((sede) => (
+            <button
+              key={sede}
+              onClick={() => removeSede(sede)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full text-xs lg:text-sm font-medium transition-colors group"
+            >
+              <Building className="h-3 w-3 lg:h-3.5 lg:w-3.5 flex-shrink-0" />
+              <span>{sede}</span>
+              <X className="h-3 w-3 lg:h-3.5 lg:w-3.5 flex-shrink-0 group-hover:text-blue-900" />
+            </button>
+          ))}
+          {selectedDays.map((day) => (
+            <button
+              key={day}
+              onClick={() => removeDay(day)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded-full text-xs lg:text-sm font-medium transition-colors group"
+            >
+              <Calendar className="h-3 w-3 lg:h-3.5 lg:w-3.5 flex-shrink-0" />
+              <span>{day}</span>
+              <X className="h-3 w-3 lg:h-3.5 lg:w-3.5 flex-shrink-0 group-hover:text-green-900" />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Courses Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {filteredAndSortedCourses.map((course) => (
           <CourseCard key={course.id} course={course} />
         ))}
       </div>
 
       {filteredAndSortedCourses.length === 0 && (
-        <div className="text-center py-12">
+        <div className="text-center py-8 lg:py-12">
           <div className="text-gray-400 mb-2">
-            <Filter className="h-12 w-12 mx-auto" />
+            <Filter className="h-10 w-10 lg:h-12 lg:w-12 mx-auto" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-1">No se encontraron cursos</h3>
-          <p className="text-gray-500">Intenta ajustar los filtros de búsqueda</p>
+          <h3 className="text-base lg:text-lg font-medium text-gray-900 mb-1">No se encontraron cursos</h3>
+          <p className="text-sm lg:text-base text-gray-500">Intenta ajustar los filtros de búsqueda</p>
         </div>
       )}
     </div>

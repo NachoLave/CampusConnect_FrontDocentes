@@ -208,6 +208,15 @@
     }
   }
 
+  @keyframes breathe {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.01);
+    }
+  }
+
   .animate-shimmer {
     animation: shimmer 2s infinite;
   }
@@ -226,5 +235,9 @@
   
   .animate-counting-glow {
     animation: countingGlow 1.5s ease-in-out infinite;
+  }
+
+  .animate-breathe {
+    animation: breathe 6s ease-in-out infinite;
   }
 }

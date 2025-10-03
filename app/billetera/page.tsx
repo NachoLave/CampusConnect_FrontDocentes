@@ -163,59 +163,59 @@ export default function BilleteraPage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header Section */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Saldo de cuenta</h1>
-        <p className="text-gray-600">Visualización de tu saldo actual y movimientos recientes</p>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Saldo de cuenta</h1>
+        <p className="text-sm md:text-base text-gray-600">Visualización de tu saldo actual y movimientos recientes</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Current Balance Card */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3">
               <div className="flex items-center space-x-3">
-                <h2 className="text-lg font-semibold text-gray-900">Saldo actual</h2>
+                <h2 className="text-base md:text-lg font-semibold text-gray-900">Saldo actual</h2>
                 <button onClick={() => setShowBalance(!showBalance)} className="p-1 hover:bg-gray-100 rounded">
                   {showBalance ? (
-                    <Eye className="h-5 w-5 text-gray-500" />
+                    <Eye className="h-4 w-4 md:h-5 md:w-5 text-gray-500" />
                   ) : (
-                    <EyeOff className="h-5 w-5 text-gray-500" />
+                    <EyeOff className="h-4 w-4 md:h-5 md:w-5 text-gray-500" />
                   )}
                 </button>
               </div>
-              <div className="flex items-center text-sm text-gray-500">
-                <RefreshCw className="h-4 w-4 mr-1" />
+              <div className="flex items-center text-xs md:text-sm text-gray-500">
+                <RefreshCw className="h-3 w-3 md:h-4 md:w-4 mr-1" />
                 Actualizado: {lastUpdated}
               </div>
             </div>
-            <div className="text-4xl font-bold text-gray-900">{showBalance ? formatBalance(totalBalance) : "••••••"}</div>
+            <div className="text-2xl md:text-4xl font-bold text-gray-900">{showBalance ? formatBalance(totalBalance) : "••••••"}</div>
           </div>
 
           {/* Recent Movements */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Movimientos recientes</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Movimientos recientes</h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               {transactions.map((transaction) => (
                 <div
                   key={transaction.id}
-                  className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
+                  className="flex items-center justify-between py-2 md:py-3 border-b border-gray-100 last:border-b-0 gap-3"
                 >
-                  <div className="flex items-center space-x-4">
-                    <div className={`p-2 rounded-lg bg-slate-100`}>
-                      <transaction.icon className={`h-5 w-5 text-slate-600`} />
+                  <div className="flex items-center space-x-3 md:space-x-4 min-w-0 flex-1">
+                    <div className={`p-1.5 md:p-2 rounded-lg bg-slate-100 flex-shrink-0`}>
+                      <transaction.icon className={`h-4 w-4 md:h-5 md:w-5 text-slate-600`} />
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{transaction.description}</p>
-                      <p className="text-sm text-gray-500">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900 text-sm md:text-base truncate">{transaction.description}</p>
+                      <p className="text-xs md:text-sm text-gray-500">
                         {transaction.date} • {transaction.time}
                       </p>
                     </div>
                   </div>
-                  <div className={`font-semibold ${transaction.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  <div className={`font-semibold text-sm md:text-base flex-shrink-0 ${transaction.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
                     {formatCurrency(transaction.amount)}
                   </div>
                 </div>
@@ -225,10 +225,10 @@ export default function BilleteraPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Account Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información de cuenta</h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Información de cuenta</h3>
             <div className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-gray-600">Tipo de cuenta</span>
@@ -248,8 +248,8 @@ export default function BilleteraPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones rápidas</h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Acciones rápidas</h3>
             <Link href="/billetera/cargar-saldo">
               <Button className="w-full bg-slate-800 hover:bg-slate-700 text-white">
                 <CreditCard className="h-4 w-4 mr-2" />
@@ -259,32 +259,32 @@ export default function BilleteraPage() {
           </div>
 
           {/* Gasto del mes (gráfico dona) */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen del mes</h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Resumen del mes</h3>
             {totalExpenses === 0 ? (
               <div className="text-sm text-gray-500">Sin gastos registrados este mes</div>
             ) : (
-              <div className="flex items-center gap-6">
-                <svg viewBox="0 0 100 100" className="w-28 h-28">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+                <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
                   {computeArcs().map((arc, i) => (
                     <path key={i} d={arc.path} fill={arc.color} />
                   ))}
                   {/* agujero para dona */}
                   <circle cx="50" cy="50" r="24" fill="#fff" />
                 </svg>
-                <div className="flex-1">
+                <div className="flex-1 w-full">
                   <div className="grid grid-cols-1 gap-2">
                     {pieData.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
+                      <div key={i} className="flex items-center justify-between text-xs md:text-sm">
                         <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors[i % colors.length] }} />
+                          <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
                           <span className="text-gray-700">{d.label}</span>
                         </div>
                         <span className="font-medium text-gray-900">${Math.round(d.value).toLocaleString("es-AR")}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="mt-3 md:mt-4 grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                       <div className="text-slate-600">Total depositado</div>
                       <div className="text-slate-900 font-semibold">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>

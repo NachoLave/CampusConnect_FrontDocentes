@@ -258,40 +258,106 @@ export default function CalendarioPage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Calendario</h1>
-        <p className="text-gray-600">Podes visualizar tus clases, eventos y turnos programados</p>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Calendario</h1>
+        <p className="text-sm md:text-base text-gray-600">Podes visualizar tus clases, eventos y turnos programados</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-8">
+        {/* Filters - Mobile: Above Calendar */}
+        <div className="lg:hidden space-y-4">
+          {/* Filters */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Filtros</h3>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="clases-mobile"
+                  checked={filters.clases}
+                  onCheckedChange={(checked) => handleFilterChange("clases", checked as boolean)}
+                />
+                <div className="flex items-center space-x-1.5">
+                  <div className="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+                  <label htmlFor="clases-mobile" className="text-xs font-medium text-gray-700">
+                    Clases
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="examenes-mobile"
+                  checked={filters.examenes}
+                  onCheckedChange={(checked) => handleFilterChange("examenes", checked as boolean)}
+                />
+                <div className="flex items-center space-x-1.5">
+                  <div className="w-2.5 h-2.5 bg-orange-500 rounded-full"></div>
+                  <label htmlFor="examenes-mobile" className="text-xs font-medium text-gray-700">
+                    Exámenes
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="eventos-mobile"
+                  checked={filters.eventos}
+                  onCheckedChange={(checked) => handleFilterChange("eventos", checked as boolean)}
+                />
+                <div className="flex items-center space-x-1.5">
+                  <div className="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
+                  <label htmlFor="eventos-mobile" className="text-xs font-medium text-gray-700">
+                    Eventos
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="comedor-mobile"
+                  checked={filters.comedor}
+                  onCheckedChange={(checked) => handleFilterChange("comedor", checked as boolean)}
+                />
+                <div className="flex items-center space-x-1.5">
+                  <div className="w-2.5 h-2.5 bg-yellow-500 rounded-full"></div>
+                  <label htmlFor="comedor-mobile" className="text-xs font-medium text-gray-700">
+                    Comedor
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Calendar Section */}
         <div className="lg:col-span-3">
           {/* Two Month Calendar View */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6 relative">
-            <div className="flex items-center justify-between mb-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-4 md:mb-6 relative">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
               <button
                 onClick={prevMonth}
-                className="p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
+                className="p-2 md:p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
               >
-                <ChevronLeft className="h-5 w-5 text-gray-600" />
+                <ChevronLeft className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
               </button>
 
-              <div className="flex items-center justify-center space-x-16">
-                <h2 className="text-lg font-semibold text-gray-900">{capitalizeFirst(getMonthName(currentMonth))}</h2>
-                <h2 className="text-lg font-semibold text-gray-900">
+              <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-16">
+                <h2 className="text-sm md:text-lg font-semibold text-gray-900">{capitalizeFirst(getMonthName(currentMonth))}</h2>
+                <h2 className="hidden md:block text-lg font-semibold text-gray-900">
                   {capitalizeFirst(getMonthName(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)))}
                 </h2>
               </div>
 
               <button
                 onClick={nextMonth}
-                className="p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
+                className="p-2 md:p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
               >
-                <ChevronRight className="h-5 w-5 text-gray-600" />
+                <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
               {/* Spanish locale added to both Calendar components */}
               <Calendar
                 mode="single"
@@ -328,7 +394,7 @@ export default function CalendarioPage() {
                 onSelect={setSelectedDate}
                 month={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)}
                 locale={es}
-                className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
+                className="hidden md:block w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
                   const add = (e: any) => {
@@ -350,35 +416,35 @@ export default function CalendarioPage() {
           </div>
 
           {/* Events Section */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Eventos del {selectedLabel}</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4">Eventos del {selectedLabel}</h2>
 
             <div className="space-y-4">
               {eventsOfSelected.length === 0 && (
                 <p className="text-sm text-gray-500">No hay eventos para esta fecha.</p>
               )}
               {eventsOfSelected.map((event) => (
-                <div key={event.id} className={`p-4 rounded-lg border ${event.color} relative`}>
-                  <div className="flex justify-between items-start">
+                <div key={event.id} className={`p-3 md:p-4 rounded-lg border ${event.color} relative`}>
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-2">{event.title}</h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                      <h3 className="font-semibold text-gray-900 mb-2 text-sm md:text-base">{event.title}</h3>
+                      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs md:text-sm text-gray-600 mb-2">
                         <div className="flex items-center space-x-1">
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-3 w-3 md:h-4 md:w-4" />
                           <span>
                             {event.date} • {event.time}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1">
-                          <MapPin className="h-4 w-4" />
+                          <MapPin className="h-3 w-3 md:h-4 md:w-4" />
                           <span>
                             {event.location} • {event.section}
                           </span>
                         </div>
                       </div>
-                      {event.description && <p className="text-sm text-gray-700 mb-3">{event.description}</p>}
+                      {event.description && <p className="text-xs md:text-sm text-gray-700 mb-3">{event.description}</p>}
                     </div>
-                    <Button variant="outline" size="sm" className="ml-4 bg-transparent">
+                    <Button variant="outline" size="sm" className="md:ml-4 bg-transparent w-full md:w-auto text-xs md:text-sm">
                       VER MAS
                     </Button>
                   </div>
@@ -388,11 +454,11 @@ export default function CalendarioPage() {
           </div>
         </div>
 
-        {/* Filters and Upcoming Events Sidebar */}
-        <div className="space-y-6">
+        {/* Filters and Upcoming Events Sidebar - Desktop Only */}
+        <div className="hidden lg:block space-y-4 md:space-y-6">
           {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtros</h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Filtros</h3>
 
             <div className="space-y-3 mb-6">
               <div className="flex items-center space-x-3">
@@ -479,15 +545,32 @@ export default function CalendarioPage() {
             {/* Botones removidos: los filtros aplican automáticamente al seleccionar */}
           </div>
 
-          {/* Upcoming Events (dinámicos con base al día actual) */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Próximos eventos</h3>
+          {/* Upcoming Events (dinámicos con base al día actual) - Desktop Only */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Próximos eventos</h3>
 
             <div className="space-y-4">
               {upcoming.map((event) => (
                 <div key={event.id} className={`p-3 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
                   <h4 className="font-medium text-gray-900 text-sm mb-1">{event.title}</h4>
                   <p className="text-xs text-gray-600 mb-1">{event.time}</p>
+                  <p className="text-xs text-gray-500">{event.location}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Upcoming Events - Mobile: Below Events */}
+        <div className="lg:hidden">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Próximos eventos</h3>
+
+            <div className="space-y-3">
+              {upcoming.map((event) => (
+                <div key={event.id} className={`p-2.5 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
+                  <h4 className="font-medium text-gray-900 text-xs mb-1">{event.title}</h4>
+                  <p className="text-xs text-gray-600 mb-0.5">{event.time}</p>
                   <p className="text-xs text-gray-500">{event.location}</p>
                 </div>
               ))}
