@@ -469,10 +469,51 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [showStudentsFilter, setShowStudentsFilter] = useState(false)
   const [studentsFilterConditions, setStudentsFilterConditions] = useState<string[]>([])
 
+  // Cerrar filtros al hacer click afuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      
+      // Para el filtro de Alumnos
+      const studentsButton = document.querySelector('[aria-label="Filtrar por condición"]')
+      const studentsDropdown = studentsButton?.nextElementSibling
+      if (showStudentsFilter && studentsButton && studentsDropdown) {
+        if (!studentsButton.contains(target) && !studentsDropdown.contains(target)) {
+          setShowStudentsFilter(false)
+        }
+      }
+      
+      // Para el filtro de Asistencia
+      const attendanceButton = document.querySelector('[aria-label="Filtrar por asistencia"]')
+      const attendanceDropdown = attendanceButton?.nextElementSibling
+      if (showAttendanceFilter && attendanceButton && attendanceDropdown) {
+        if (!attendanceButton.contains(target) && !attendanceDropdown.contains(target)) {
+          setShowAttendanceFilter(false)
+        }
+      }
+      
+      // Para el filtro de Calificaciones
+      const gradesButton = document.querySelector('[aria-label="Filtrar por condición final"]')
+      const gradesDropdown = gradesButton?.nextElementSibling
+      if (showGradesFilter && gradesButton && gradesDropdown) {
+        if (!gradesButton.contains(target) && !gradesDropdown.contains(target)) {
+          setShowGradesFilter(false)
+        }
+      }
+    }
+
+    if (showStudentsFilter || showAttendanceFilter || showGradesFilter) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showStudentsFilter, showAttendanceFilter, showGradesFilter])
+
   const [showActaModal, setShowActaModal] = useState(false)
+  const [showAttendanceSavedModal, setShowAttendanceSavedModal] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
   const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
+  const [hasUnsavedAttendance, setHasUnsavedAttendance] = useState(false)
 
   // Persistencia local por curso
   const attendanceStorageKey = `attendance_${courseId}`
@@ -858,6 +899,24 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
   const courseWeekday = weekdayMap[(course.day || '').toUpperCase()] ?? 0
 
+  // Generar TODAS las fechas válidas del curso (día de cursada)
+  const allCourseDates = useMemo(() => {
+    const dates: Date[] = []
+    const current = new Date(courseStartDate)
+    
+    while (current <= courseEndDate) {
+      if (current.getDay() === courseWeekday) {
+        dates.push(new Date(current))
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return dates
+  }, [courseStartDate, courseEndDate, courseWeekday])
+
+  // Fecha seleccionada como objeto Date completo
+  const [selectedDateObj, setSelectedDateObj] = useState<Date | null>(null)
+
   const availableMonthsIdx = useMemo(() => {
     const monthsIdx: number[] = []
     const start = new Date(courseStartDate.getFullYear(), courseStartDate.getMonth(), 1)
@@ -910,6 +969,37 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return d.getTime() <= limit.getTime()
   }
 
+  const isDateObjSelectable = (dateObj: Date): boolean => {
+    const limit = getThisWeekClassDate()
+    return dateObj.getTime() <= limit.getTime()
+  }
+
+  // Navegar entre fechas (día por día)
+  const navigateDate = (direction: "prev" | "next") => {
+    if (!selectedDateObj) return
+    
+    const currentIndex = allCourseDates.findIndex(
+      d => d.getTime() === selectedDateObj.getTime()
+    )
+    
+    if (currentIndex === -1) return
+    
+    if (direction === "prev" && currentIndex > 0) {
+      const newDate = allCourseDates[currentIndex - 1]
+      setSelectedDateObj(newDate)
+      setSelectedMonth(monthNamesEs[newDate.getMonth()])
+      setSelectedDate(newDate.getDate())
+    } else if (direction === "next" && currentIndex < allCourseDates.length - 1) {
+      const newDate = allCourseDates[currentIndex + 1]
+      // Solo navegar si la fecha es seleccionable
+      if (isDateObjSelectable(newDate)) {
+        setSelectedDateObj(newDate)
+        setSelectedMonth(monthNamesEs[newDate.getMonth()])
+        setSelectedDate(newDate.getDate())
+      }
+    }
+  }
+
   const navigateMonth = (direction: "prev" | "next") => {
     const currentIndex = months.indexOf(selectedMonth)
     if (direction === "prev" && currentIndex > 0) {
@@ -923,37 +1013,28 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [attendanceInit, setAttendanceInit] = useState(false)
   const [dateInit, setDateInit] = useState(false)
 
-  // Elegir por defecto el mes de la clase de esta semana (o el más cercano dentro del rango)
+  // Elegir por defecto la última fecha seleccionable (clase de esta semana o anterior)
   useEffect(() => {
     if (attendanceInit) return
-    if (!months || months.length === 0) return
+    if (allCourseDates.length === 0) return
+    
     const limit = getThisWeekClassDate()
-    let target = limit
-    if (limit < courseStartDate) target = courseStartDate
-    if (limit > courseEndDate) target = courseEndDate
-    const monthLabel = monthNamesEs[target.getMonth()]
-    setSelectedMonth(monthLabel)
-    setAttendanceInit(true)
-  }, [months, attendanceInit])
-
-  // Elegir por defecto el día: última clase seleccionable de ese mes
-  useEffect(() => {
-    if (!attendanceInit || dateInit) return
-    if (dates.length === 0) return
-    const limit = getThisWeekClassDate()
-    const currentMonthIdx = monthToIndex[selectedMonth] ?? limit.getMonth()
-    let chosen = dates[0]
-    if (currentMonthIdx === limit.getMonth()) {
-      const valid = dates.filter((d) => d <= limit.getDate())
-      chosen = valid.length ? valid[valid.length - 1] : dates[0]
-    } else if (currentMonthIdx < limit.getMonth()) {
-      chosen = dates[dates.length - 1]
-    } else {
-      chosen = dates[0]
+    
+    // Buscar la última fecha que sea <= limit
+    let targetDate = allCourseDates[0]
+    for (const date of allCourseDates) {
+      if (date.getTime() <= limit.getTime()) {
+        targetDate = date
+      } else {
+        break
+      }
     }
-    setSelectedDate(chosen)
-    setDateInit(true)
-  }, [attendanceInit, dateInit, selectedMonth, dates])
+    
+    setSelectedDateObj(targetDate)
+    setSelectedMonth(monthNamesEs[targetDate.getMonth()])
+    setSelectedDate(targetDate.getDate())
+    setAttendanceInit(true)
+  }, [allCourseDates, attendanceInit])
 
   const setAttendance = (studentId: number, status: "P" | "1/2" | "A") => {
     if (!isDateSelectable(selectedMonth, selectedDate)) return
@@ -965,6 +1046,23 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         [studentId]: status,
       },
     }))
+    setHasUnsavedAttendance(true)
+  }
+
+  const handleSaveAttendance = () => {
+    // TODO: Aquí irá la request al backend
+    // Ejemplo: await saveAttendanceToBackend(courseId, selectedMonth, selectedDate, attendanceData)
+    
+    console.log('Guardando asistencia:', {
+      courseId,
+      month: selectedMonth,
+      date: selectedDate,
+      attendanceData: attendanceData[`${selectedMonth}-${selectedDate}`]
+    })
+    
+    // Simular guardado exitoso
+    setHasUnsavedAttendance(false)
+    setShowAttendanceSavedModal(true)
   }
 
   const getAttendance = (studentId: number): "P" | "1/2" | "A" | null => {
@@ -1097,8 +1195,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const matchesSearch =
       student.name.toLowerCase().includes(attendanceSearchTerm.toLowerCase()) ||
       student.legajo.toString().includes(attendanceSearchTerm)
+    
+    // Obtener el status de asistencia para el estudiante en la fecha seleccionada
+    const attendanceStatus = getAttendance(student.id)
+    const statusLabel = attendanceStatus === "P" ? "Presente" : attendanceStatus === "1/2" ? "1/2 Falta" : attendanceStatus === "A" ? "Ausente" : null
+    
     const matchesAttendance =
-      attendanceFilterStatuses.length === 0 || attendanceFilterStatuses.includes(student.attendance)
+      attendanceFilterStatuses.length === 0 || 
+      (statusLabel && attendanceFilterStatuses.includes(statusLabel))
+    
     return matchesSearch && matchesAttendance
   })
 
@@ -1163,7 +1268,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     <div className="min-h-screen">
       {/* Hero Section with Course Header */}
       <div
-        className="relative h-48 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900"
+        className="relative h-32 lg:h-48 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900"
         style={{
           backgroundImage: `url('/geometric-architectural-pattern-dark-blue-building.jpg')`,
           backgroundSize: "cover",
@@ -1174,58 +1279,57 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         {/* Back Button */}
         <button
           onClick={() => router.push("/cursos")}
-          className="absolute top-4 left-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors z-10"
+          className="absolute top-2 left-2 lg:top-4 lg:left-4 p-1.5 lg:p-2 text-white hover:bg-white/10 rounded-lg transition-colors z-10"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-4 w-4 lg:h-5 lg:w-5" />
         </button>
       </div>
 
-      <div className="bg-white px-6 py-6 border-b">
-        <h1 className="text-2xl font-bold mb-4 text-gray-900">{course.title}</h1>
+      <div className="bg-white px-3 py-4 lg:px-6 lg:py-6 border-b">
+        <h1 className="text-lg lg:text-2xl font-bold mb-3 lg:mb-4 text-gray-900 line-clamp-2">{course.title}</h1>
 
-        <div className="flex items-center space-x-6 text-sm mb-3">
+        <div className="flex flex-wrap items-center gap-3 lg:gap-6 text-xs lg:text-sm mb-3">
           <div className="flex items-center space-x-1">
-            <FileText className="h-4 w-4 text-gray-600" />
+            <FileText className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600 flex-shrink-0" />
             <span className="text-gray-600">{course.code}</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Users className="h-4 w-4 text-gray-600" />
-            <span className="text-gray-600">{course.students} alumnos</span>
+            <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600 flex-shrink-0" />
+            <span className="text-gray-600 whitespace-nowrap">{course.students} alumnos</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Users className="h-4 w-4 text-gray-600" />
             <div className="flex -space-x-1">
               {course.teachers.map((teacher) => (
                 <div
                   key={teacher.id}
-                  className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
+                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
                   title={teacher.name}
                 >
-                  <span className="text-white text-xs font-semibold">{getInitials(teacher.name)}</span>
+                  <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center space-x-2">
-              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>{course.day}</span>
-              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 text-xs lg:text-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-6">
+            <div className="flex items-center flex-wrap gap-2">
+              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>{course.day}</span>
+              <span className={`${dayShiftColor} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
                 {course.shift}
               </span>
-              <span className="font-medium text-gray-900">{course.schedule}</span>
+              <span className="font-medium text-gray-900 whitespace-nowrap">{course.schedule}</span>
             </div>
             <span className="text-gray-600">{course.dates}</span>
             <div className="flex items-center space-x-1">
-              <MapPin className="h-4 w-4 text-gray-600" />
-              <span className="text-gray-600">{course.isVirtual ? "VIRTUAL" : course.location}</span>
+              <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600 flex-shrink-0" />
+              <span className="text-gray-600 truncate">{course.isVirtual ? "VIRTUAL" : course.location}</span>
             </div>
           </div>
           <button
             onClick={() => setShowActaModal(true)}
-            className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 transition-colors"
+            className="bg-slate-800 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded text-xs lg:text-sm font-medium hover:bg-slate-700 transition-colors whitespace-nowrap"
           >
             GESTIONAR ACTA
           </button>
@@ -1233,16 +1337,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       </div>
 
       {/* Tab Navigation */}
-      <div className="bg-gray-200 border-b">
-        <div className="px-6">
-          <div className="flex space-x-0">
+      <div className="bg-gray-200 border-b overflow-x-auto">
+        <div className="px-3 lg:px-6">
+          <div className="flex space-x-0 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-3 lg:px-6 py-2 lg:py-3 text-xs lg:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab
-                    ? "border-slate-700 text-slate-700 bg-white" // Changed from orange to slate-700 to match navbar
+                    ? "border-slate-700 text-slate-700 bg-white"
                     : "border-transparent text-gray-600 hover:text-gray-800"
                 }`}
               >
@@ -1254,42 +1358,42 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       </div>
 
       {/* Content Area */}
-      <div className="p-6 bg-gray-100 min-h-screen">
+      <div className="p-3 lg:p-6 bg-gray-100 min-h-screen">
         {activeTab === "Información" && (
-          <div className="space-y-6">
+          <div className="space-y-4 lg:space-y-6">
             {/* Teachers Section */}
-            <div className="bg-white rounded-lg p-6">
-              <h3 className="font-medium text-gray-900">Docentes</h3>
+            <div className="bg-white rounded-lg p-4 lg:p-6">
+              <h3 className="font-medium text-gray-900 text-sm lg:text-base mb-3 lg:mb-4">Docentes</h3>
 
               {/* Teachers Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <table className="w-full min-w-[600px]">
                   <thead>
                     <tr className="bg-gray-50 border-b">
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Legajo</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Mail</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Rol</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Rol</th>
                     </tr>
                   </thead>
                   <tbody>
                     {course.teachers.map((teacher) => (
                       <tr key={teacher.id} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center space-x-3">
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                          <div className="flex items-center space-x-2 lg:space-x-3">
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center ${getTeacherColor(teacher.id)}`}
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getTeacherColor(teacher.id)}`}
                             >
-                              <span className="text-white text-xs font-semibold">{getInitials(teacher.name)}</span>
+                              <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>
                             </div>
-                            <span className="font-medium">{teacher.name}</span>
+                            <span className="font-medium text-xs lg:text-sm">{teacher.name}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-600">{teacher.legajo}</td>
-                        <td className="py-3 px-4 text-gray-600">{teacher.email}</td>
-                        <td className="py-3 px-4">
+                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{teacher.legajo}</td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{teacher.email}</td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
                           <span
-                            className={`px-2 py-1 rounded text-xs font-medium ${
+                            className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium ${
                               teacher.role === "Titular"
                                 ? "bg-green-100 text-green-800"
                                 : "bg-orange-100 text-orange-800"
@@ -1306,29 +1410,29 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             </div>
 
             {/* Statistics Section */}
-            <div className="bg-white rounded-lg p-6">
-              <h3 className="font-medium text-gray-900 mb-6">Estadísticas</h3>
+            <div className="bg-white rounded-lg p-4 lg:p-6">
+              <h3 className="font-medium text-gray-900 text-sm lg:text-base mb-4 lg:mb-6">Estadísticas</h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-8">
                 {/* Time Progress */}
                 <div className="text-center">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Tiempo transcurrido</h4>
+                  <h4 className="text-xs lg:text-sm font-medium text-gray-700 mb-2 lg:mb-3">Tiempo transcurrido</h4>
                   <div className="relative">
-                    <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2 lg:h-3 mb-2">
                       <div
-                        className="bg-slate-800 h-3 rounded-full transition-all duration-500"
+                        className="bg-slate-800 h-2 lg:h-3 rounded-full transition-all duration-500"
                         style={{ width: `${timeProgress}%` }}
                       ></div>
                     </div>
-                    <span className="text-2xl font-bold text-gray-600">{timeProgress}%</span>
+                    <span className="text-xl lg:text-2xl font-bold text-gray-600">{timeProgress}%</span>
                   </div>
                 </div>
 
                 {/* Average Attendance */}
                 <div className="flex flex-col items-center justify-center text-center">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Asistencia Promedio</h4>
-                  <div className="relative w-24 h-24 mx-auto mb-2">
-                    <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
+                  <h4 className="text-xs lg:text-sm font-medium text-gray-700 mb-2 lg:mb-3">Asistencia Promedio</h4>
+                  <div className="relative w-20 h-20 lg:w-24 lg:h-24 mx-auto mb-2">
+                    <svg className="w-20 h-20 lg:w-24 lg:h-24 transform -rotate-90" viewBox="0 0 36 36">
                       <path
                         className="text-gray-200"
                         stroke="currentColor"
@@ -1346,18 +1450,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-lg font-bold text-gray-600">{averageAttendance}%</span>
+                      <span className="text-base lg:text-lg font-bold text-gray-600">{averageAttendance}%</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Average Grade */}
                 <div className="text-center">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Calificación Promedio</h4>
+                  <h4 className="text-xs lg:text-sm font-medium text-gray-700 mb-2 lg:mb-3">Calificación Promedio</h4>
                   <div className="mb-2">
-                    <span className="text-4xl font-bold text-slate-800">{averageGrade}</span>
+                    <span className="text-3xl lg:text-4xl font-bold text-slate-800">{averageGrade}</span>
                   </div>
-                  <span className="text-xs text-gray-500">(no considera ausentes)</span>
+                  <span className="text-[10px] lg:text-xs text-gray-500">(no considera ausentes)</span>
                 </div>
               </div>
             </div>
@@ -1365,18 +1469,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         )}
 
         {activeTab === "Alumnos" && (
-          <div className="bg-white rounded-lg p-6">
+          <div className="bg-white rounded-lg p-4 lg:p-6">
             <div className="mb-4">
-              <h3 className="font-medium text-gray-900 mb-3">Alumnos</h3>
-              <div className="flex items-center space-x-2 mb-3">
-                <div className="relative">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <h3 className="font-medium text-gray-900 text-sm lg:text-base mb-3">Alumnos</h3>
+              <div className="flex flex-col lg:flex-row lg:items-center gap-2 mb-3">
+                <div className="relative flex-1 lg:flex-initial">
+                  <Search className="h-3.5 w-3.5 lg:h-4 lg:w-4 absolute left-2 lg:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Buscar por nombre o legajo"
                     value={studentSearchTerm}
                     onChange={(e) => setStudentSearchTerm(e.target.value)}
-                    className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full lg:w-64 pl-8 lg:pl-10 pr-3 lg:pr-4 py-1.5 lg:py-2 border border-gray-300 rounded-lg text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     aria-label="Buscar estudiantes por nombre o legajo"
                   />
                 </div>
@@ -1384,31 +1488,44 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 <div className="relative">
                   <button
                     onClick={() => setShowStudentsFilter(!showStudentsFilter)}
-                    className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    className="flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                     aria-label="Filtrar por condición"
                     aria-expanded={showStudentsFilter}
                   >
-                    <Filter className="h-4 w-4" />
+                    <Filter className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                     <span>Condición</span>
                     {studentsFilterConditions.length > 0 && (
                       <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
                         {studentsFilterConditions.length}
                       </span>
                     )}
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                   </button>
                   {showStudentsFilter && (
                     <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
                       <div className="p-3">
                         <div className="flex items-center justify-between mb-3">
                           <label className="text-sm font-medium text-gray-700">Condición</label>
-                          <button
-                            onClick={() => setShowStudentsFilter(false)}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Cerrar filtro"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {studentsFilterConditions.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setStudentsFilterConditions([])
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                aria-label="Limpiar filtros"
+                              >
+                                Limpiar
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setShowStudentsFilter(false)}
+                              className="text-gray-400 hover:text-gray-600"
+                              aria-label="Cerrar filtro"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                         <div className="space-y-2">
                           {["Regular", "Adeuda final"].map((condition) => (
@@ -1427,48 +1544,43 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     </div>
                   )}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={resetStudentsFilters}
-                  className="flex items-center space-x-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors active:bg-gray-50"
-                  aria-label="Restaurar filtros"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  <span>Restaurar</span>
-                </button>
               </div>
 
               {studentsFilterConditions.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {studentsFilterConditions.map((condition) => (
-                    <span
-                      key={condition}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                    >
-                      {condition}
-                      <button
-                        onClick={() => removeStudentCondition(condition)}
-                        className="hover:bg-blue-200 rounded-full p-0.5"
-                        aria-label={`Remover filtro ${condition}`}
+                  {studentsFilterConditions.map((condition) => {
+                    const colors = condition === "Regular" 
+                      ? "bg-green-100 text-green-800 hover:bg-green-200"
+                      : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                    return (
+                      <span
+                        key={condition}
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${colors}`}
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+                        {condition}
+                        <button
+                          onClick={() => removeStudentCondition(condition)}
+                          className="rounded-full p-0.5 hover:opacity-80"
+                          aria-label={`Remover filtro ${condition}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
                 </div>
               )}
             </div>
 
             {/* Students Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto -mx-4 lg:mx-0">
+              <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="bg-gray-50 border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Legajo</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Mail</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Condición</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Condición</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1477,21 +1589,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       key={student.id}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                     >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-3">
+                      <td className="py-2 lg:py-3 px-3 lg:px-4">
+                        <div className="flex items-center space-x-2 lg:space-x-3">
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center ${getStudentColor(student.id)}`}
+                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
                           >
-                            <span className="text-white text-xs font-semibold">{getInitials(student.name)}</span>
+                            <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                           </div>
-                          <span className="font-medium">{student.name}</span>
+                          <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-600">{student.legajo}</td>
-                      <td className="py-3 px-4 text-gray-600">{student.email}</td>
-                      <td className="py-3 px-4">
+                      <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
+                      <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
+                      <td className="py-2 lg:py-3 px-3 lg:px-4">
                         <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
+                          className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${
                             student.condition === "Adeuda final"
                               ? "bg-red-100 text-red-800"
                               : "bg-orange-100 text-orange-800"
@@ -1509,69 +1621,88 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         )}
 
         {activeTab === "Asistencia" && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-6">Carga de Asistencia</h2>
+          <div className="space-y-4 lg:space-y-6">
+            <div className="bg-white rounded-lg p-4 lg:p-6">
+              <h2 className="text-lg lg:text-xl font-semibold mb-4 lg:mb-6">Carga de Asistencia</h2>
 
-              <div className="mb-6">
-                <div className="flex items-center">
-                  <div className="flex items-center bg-gray-100 rounded-lg p-2">
-                    <span className="text-sm font-medium text-gray-700 px-3">{selectedMonth}</span>
-                    <span className="text-sm font-medium text-gray-500 px-2">•</span>
-                    <span className="text-sm font-medium text-gray-700 px-1">Fecha</span>
+              <div className="mb-4 lg:mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center bg-gray-100 rounded-lg p-1.5 lg:p-2 w-full max-w-full lg:w-auto overflow-x-auto" style={{ maxWidth: '100%' }}>
+                    <div className="flex items-center min-w-max lg:min-w-0" style={{ width: '500px', maxWidth: '100%' }}>
+                      <span className="text-sm lg:text-base font-bold text-slate-800 whitespace-nowrap text-center flex-shrink-0" style={{ width: '90px', minWidth: '90px' }}>
+                        {selectedMonth}
+                      </span>
+                      <div className="h-6 w-px bg-gray-300 mx-2 lg:mx-3 flex-shrink-0"></div>
+                      <span className="text-xs lg:text-sm font-medium text-gray-700 whitespace-nowrap hidden sm:inline mr-1 lg:mr-2">Fecha</span>
 
-                    <button
-                      onClick={() => navigateMonth("prev")}
-                      disabled={months.indexOf(selectedMonth) === 0}
-                      className="p-1 mx-2 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="h-4 w-4 text-gray-600" />
-                    </button>
+                      <button
+                        onClick={() => navigateDate("prev")}
+                        disabled={!selectedDateObj || allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) === 0}
+                        className="p-0.5 lg:p-1 mx-0.5 sm:mx-1 lg:mx-2 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        title="Clase anterior"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600" />
+                      </button>
 
-                    <div className="flex space-x-1 mx-2">
-                      {dates.map((date) => {
-                        const inRange = isDateInCourseRange(selectedMonth, date)
-                        const selectable = inRange && isDateSelectable(selectedMonth, date)
-                        return (
-                          <button
-                            key={date}
-                            onClick={() => selectable && setSelectedDate(date)}
-                            disabled={!selectable}
-                            className={`w-8 h-8 rounded-full text-sm font-medium transition-all duration-200 ${
-                              selectedDate === date
-                                ? "bg-slate-800 text-white shadow-md"
-                                : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
-                             } ${!selectable ? "opacity-40 cursor-not-allowed" : ""}`}
-                          >
-                            {date}
-                          </button>
-                        )
-                      })}
+                      <div className="flex items-center justify-center gap-0.5 sm:gap-1 mx-0.5 sm:mx-1 lg:mx-2 flex-1" style={{ minWidth: '180px', maxWidth: '240px' }}>
+                        {dates.map((date) => {
+                          const inRange = isDateInCourseRange(selectedMonth, date)
+                          const selectable = inRange && isDateSelectable(selectedMonth, date)
+                          return (
+                            <button
+                              key={date}
+                              onClick={() => {
+                                if (selectable) {
+                                  setSelectedDate(date)
+                                  // Actualizar selectedDateObj
+                                  const year = courseStartDate.getFullYear()
+                                  const newDateObj = new Date(year, monthToIndex[selectedMonth] ?? 0, date)
+                                  setSelectedDateObj(newDateObj)
+                                }
+                              }}
+                              disabled={!selectable}
+                              className={`w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 rounded-full text-xs lg:text-sm font-medium transition-all duration-200 flex-shrink-0 ${
+                                selectedDate === date
+                                  ? "bg-slate-800 text-white shadow-md"
+                                  : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
+                               } ${!selectable ? "opacity-40 cursor-not-allowed" : ""}`}
+                            >
+                              {date}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <button
+                        onClick={() => navigateDate("next")}
+                        disabled={
+                          !selectedDateObj || 
+                          allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) === allCourseDates.length - 1 ||
+                          (allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) < allCourseDates.length - 1 &&
+                           !isDateObjSelectable(allCourseDates[allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) + 1]))
+                        }
+                        className="p-0.5 lg:p-1 mx-0.5 sm:mx-1 lg:mx-2 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        title="Clase siguiente"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600" />
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() => navigateMonth("next")}
-                      disabled={months.indexOf(selectedMonth) === months.length - 1}
-                      className="p-1 mx-2 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="h-4 w-4 text-gray-600" />
-                    </button>
                   </div>
                 </div>
               </div>
 
               {/* Students Section */}
               <div className="mb-4">
-                <h3 className="font-medium text-gray-900 mb-4">Alumnos</h3>
-                <div className="flex items-center space-x-2 mb-3">
-                  <div className="relative">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <h3 className="font-medium text-gray-900 text-sm lg:text-base mb-3 lg:mb-4">Alumnos</h3>
+                <div className="flex flex-col lg:flex-row lg:items-center gap-2 mb-3">
+                  <div className="relative flex-1 lg:flex-initial">
+                    <Search className="h-3.5 w-3.5 lg:h-4 lg:w-4 absolute left-2 lg:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Buscar por nombre o legajo"
                       value={attendanceSearchTerm}
                       onChange={(e) => setAttendanceSearchTerm(e.target.value)}
-                      className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full lg:w-64 pl-8 lg:pl-10 pr-3 lg:pr-4 py-1.5 lg:py-2 border border-gray-300 rounded-lg text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       aria-label="Buscar estudiantes por nombre o legajo"
                     />
                   </div>
@@ -1579,31 +1710,44 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   <div className="relative">
                     <button
                       onClick={() => setShowAttendanceFilter(!showAttendanceFilter)}
-                      className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                      className="flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                       aria-label="Filtrar por asistencia"
                       aria-expanded={showAttendanceFilter}
                     >
-                      <Filter className="h-4 w-4" />
+                      <Filter className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                       <span>Asistencia</span>
                       {attendanceFilterStatuses.length > 0 && (
                         <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
                           {attendanceFilterStatuses.length}
                         </span>
                       )}
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                     </button>
                     {showAttendanceFilter && (
                       <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
                         <div className="p-3">
                           <div className="flex items-center justify-between mb-3">
                             <label className="text-sm font-medium text-gray-700">Asistencia</label>
-                            <button
-                              onClick={() => setShowAttendanceFilter(false)}
-                              className="text-gray-400 hover:text-gray-600"
-                              aria-label="Cerrar filtro"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {attendanceFilterStatuses.length > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setAttendanceFilterStatuses([])
+                                  }}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                  aria-label="Limpiar filtros"
+                                >
+                                  Limpiar
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowAttendanceFilter(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                                aria-label="Cerrar filtro"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-2">
                             {["Presente", "1/2 Falta", "Ausente"].map((status) => (
@@ -1623,47 +1767,55 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={resetAttendanceFilters}
-                    className="flex items-center space-x-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors active:bg-gray-50"
-                    aria-label="Restaurar filtros"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    <span>Restaurar</span>
-                  </button>
+                  {/* Botón Guardar - Desktop: margen izquierdo auto para empujarlo a la derecha, Mobile: full width */}
+                  {hasUnsavedAttendance && (
+                    <button
+                      onClick={handleSaveAttendance}
+                      className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-slate-700 hover:bg-slate-800 text-white font-medium rounded-md transition-colors lg:ml-auto"
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+                      <span>Guardar</span>
+                    </button>
+                  )}
                 </div>
 
                 {attendanceFilterStatuses.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {attendanceFilterStatuses.map((status) => (
-                      <span
-                        key={status}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                      >
-                        {status}
-                        <button
-                          onClick={() => removeAttendanceStatus(status)}
-                          className="hover:bg-blue-200 rounded-full p-0.5"
-                          aria-label={`Remover filtro ${status}`}
+                    {attendanceFilterStatuses.map((status) => {
+                      const colors = status === "Presente"
+                        ? "bg-green-100 text-green-800 hover:bg-green-200"
+                        : status === "1/2 Falta"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                      return (
+                        <span
+                          key={status}
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${colors}`}
                         >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
+                          {status}
+                          <button
+                            onClick={() => removeAttendanceStatus(status)}
+                            className="rounded-full p-0.5 hover:opacity-80"
+                            aria-label={`Remover filtro ${status}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
               </div>
 
               {/* Attendance Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <table className="w-full min-w-[640px]">
                   <thead>
                     <tr className="bg-gray-50 border-b">
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Legajo</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Mail</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Asistencia</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Asistencia</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1672,47 +1824,50 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         key={student.id}
                         className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                       >
-                        <td className="py-3 px-4">
-                          <div className="flex items-center space-x-3">
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                          <div className="flex items-center space-x-2 lg:space-x-3">
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center ${getStudentColor(student.id)}`}
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
                             >
-                              <span className="text-white text-xs font-semibold">{getInitials(student.name)}</span>
+                              <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                             </div>
-                            <span className="font-medium">{student.name}</span>
+                            <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-600">{student.legajo}</td>
-                        <td className="py-3 px-4 text-gray-600">{student.email}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex space-x-2">
+                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                          <div className="flex space-x-1.5 lg:space-x-2">
                             <button
                               onClick={() => setAttendance(student.id, "P")}
-                              className={`w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
                                 getAttendance(student.id) === "P"
-                                  ? "bg-green-500 text-white"
+                                  ? "bg-green-500 text-white shadow-md"
                                   : "bg-gray-200 text-gray-600 hover:bg-green-100"
                               }`}
+                              title="Presente"
                             >
                               P
                             </button>
                             <button
                               onClick={() => setAttendance(student.id, "1/2")}
-                              className={`w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
                                 getAttendance(student.id) === "1/2"
-                                  ? "bg-yellow-500 text-white"
+                                  ? "bg-yellow-500 text-white shadow-md"
                                   : "bg-gray-200 text-gray-600 hover:bg-yellow-100"
                               }`}
+                              title="Media falta"
                             >
                               1/2
                             </button>
                             <button
                               onClick={() => setAttendance(student.id, "A")}
-                              className={`w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
                                 getAttendance(student.id) === "A"
-                                  ? "bg-red-500 text-white"
+                                  ? "bg-red-500 text-white shadow-md"
                                   : "bg-gray-200 text-gray-600 hover:bg-red-100"
                               }`}
+                              title="Ausente"
                             >
                               A
                             </button>
@@ -1728,66 +1883,79 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         )}
 
         {activeTab === "Calificaciones" && (
-          <div className="bg-white rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">Calificaciones</h2>
+          <div className="bg-white rounded-lg p-4 lg:p-6">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
+              <h2 className="text-lg lg:text-xl font-semibold">Calificaciones</h2>
             </div>
 
             <div className="mb-4">
-              <h3 className="text-lg font-medium mb-4">Alumnos</h3>
-              <div className="flex items-center space-x-2 mb-3">
-                <div className="relative flex-1 max-w-xs">
+              <h3 className="text-base lg:text-lg font-medium mb-3 lg:mb-4">Alumnos</h3>
+              <div className="flex flex-col lg:flex-row lg:items-center gap-2 mb-3">
+                <div className="relative flex-1 lg:max-w-xs">
                   <input
                     type="text"
                     placeholder="Buscar por nombre o legajo"
                     value={gradesSearchTerm}
                     onChange={(e) => setGradesSearchTerm(e.target.value)}
-                    className="w-64 pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-8 pr-3 py-1.5 lg:py-2 text-xs lg:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     aria-label="Buscar estudiantes por nombre o legajo"
                   />
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-2.5 top-2 lg:top-2.5 h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-400" />
                 </div>
 
                 <button
                   onClick={() => setIsEditingGrades(!isEditingGrades)}
-                  className={`flex items-center space-x-1 px-3 py-2 text-sm rounded-md transition-colors ${
+                  className={`flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm rounded-md transition-colors ${
                     isEditingGrades
                       ? "bg-green-600 text-white hover:bg-green-700"
                       : "bg-slate-700 text-white hover:bg-slate-800"
                   }`}
                 >
-                  <Edit className="h-4 w-4" />
+                  <Edit className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                   <span>{isEditingGrades ? "Guardar" : "Editar"}</span>
                 </button>
 
                 <div className="relative">
                   <button
                     onClick={() => setShowGradesFilter(!showGradesFilter)}
-                    className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    className="flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                     aria-label="Filtrar por condición final"
                     aria-expanded={showGradesFilter}
                   >
-                    <Filter className="h-4 w-4" />
+                    <Filter className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                     <span>Condición</span>
                     {gradesFilterConditions.length > 0 && (
                       <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
                         {gradesFilterConditions.length}
                       </span>
                     )}
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                   </button>
                   {showGradesFilter && (
                     <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
                       <div className="p-3">
                         <div className="flex items-center justify-between mb-3">
                           <label className="text-sm font-medium text-gray-700">Condición Final</label>
-                          <button
-                            onClick={() => setShowGradesFilter(false)}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Cerrar filtro"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {gradesFilterConditions.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setGradesFilterConditions([])
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                aria-label="Limpiar filtros"
+                              >
+                                Limpiar
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setShowGradesFilter(false)}
+                              className="text-gray-400 hover:text-gray-600"
+                              aria-label="Cerrar filtro"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                         <div className="space-y-2">
                           {["PROMOCIONA", "APROBADO", "FINAL PENDIENTE", "RECURSA"].map((condition) => (
@@ -1806,51 +1974,50 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     </div>
                   )}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={resetGradesFilters}
-                  className="flex items-center space-x-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors active:bg-gray-50"
-                  aria-label="Restaurar filtros"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  <span>Restaurar</span>
-                </button>
               </div>
 
               {gradesFilterConditions.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {gradesFilterConditions.map((condition) => (
-                    <span
-                      key={condition}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                    >
-                      {condition}
-                      <button
-                        onClick={() => removeGradeCondition(condition)}
-                        className="hover:bg-blue-200 rounded-full p-0.5"
-                        aria-label={`Remover filtro ${condition}`}
+                  {gradesFilterConditions.map((condition) => {
+                    const colors = condition === "PROMOCIONA"
+                      ? "bg-green-100 text-green-800 hover:bg-green-200"
+                      : condition === "APROBADO"
+                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        : condition === "FINAL PENDIENTE"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                    return (
+                      <span
+                        key={condition}
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${colors}`}
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+                        {condition}
+                        <button
+                          onClick={() => removeGradeCondition(condition)}
+                          className="rounded-full p-0.5 hover:opacity-80"
+                          aria-label={`Remover filtro ${condition}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
                 </div>
               )}
             </div>
 
             {/* Grades Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto -mx-4 lg:mx-0">
+              <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="bg-gray-50 border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Legajo</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">Evaluación 1</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">Evaluación 2</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">Recuperatorio</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">FINAL</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">CONDICIÓN FINAL</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
+                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 1</th>
+                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 2</th>
+                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">REC</th>
+                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">FINAL</th>
+                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">CONDICIÓN</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1859,18 +2026,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       key={student.id}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                     >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-3">
+                      <td className="py-2 lg:py-3 px-3 lg:px-4">
+                        <div className="flex items-center space-x-2 lg:space-x-3">
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center ${getStudentColor(student.id)}`}
+                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
                           >
-                            <span className="text-white text-xs font-semibold">{getInitials(student.name)}</span>
+                            <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                           </div>
-                          <span className="font-medium">{student.name}</span>
+                          <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-600">{student.legajo}</td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
+                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           <input
                             type="number"
@@ -1878,14 +2045,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             max="10"
                             step="0.1"
                             value={gradesData[student.id]?.["1P"] || ""}
-                            onChange={(e) => updateGrade(student.id, "1P", e.target.value)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => updateGrade(String(student.id), "1P", e.target.value)}
+                            className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["1P"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["1P"] || "-"}</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           <input
                             type="number"
@@ -1893,14 +2060,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             max="10"
                             step="0.1"
                             value={gradesData[student.id]?.["2P"] || ""}
-                            onChange={(e) => updateGrade(student.id, "2P", e.target.value)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => updateGrade(String(student.id), "2P", e.target.value)}
+                            className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["2P"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["2P"] || "-"}</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           (() => {
                             const perms = getGradePermissions(gradesData[student.id] || {})
@@ -1912,7 +2079,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 step="0.1"
                                 disabled={!perms.recEnabled}
                                 value={gradesData[student.id]?.["REC"] || ""}
-                                onChange={(e) => updateGrade(student.id, "REC", e.target.value)}
+                                onChange={(e) => updateGrade(String(student.id), "REC", e.target.value)}
                                 className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                   !perms.recEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
                                 }`}
@@ -1935,7 +2102,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 step="0.1"
                                 disabled={!perms.finalEnabled}
                                 value={gradesData[student.id]?.["FINAL"] || ""}
-                                onChange={(e) => updateGrade(student.id, "FINAL", e.target.value)}
+                                onChange={(e) => updateGrade(String(student.id), "FINAL", e.target.value)}
                                 className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                   !perms.finalEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
                                 }`}
@@ -2038,6 +2205,42 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   Generar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación - Asistencia Guardada */}
+      {showAttendanceSavedModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 animate-in fade-in zoom-in duration-300">
+            {/* Icono de éxito */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
+                Asistencias Registradas
+              </h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">
+                Se registraron exitosamente las asistencias del día{" "}
+                <span className="font-semibold text-gray-900">
+                  {selectedDate} de {selectedMonth}
+                </span>
+                .
+              </p>
+
+              {/* Botón de confirmación */}
+              <button
+                onClick={() => setShowAttendanceSavedModal(false)}
+                className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+              >
+                Entendido
+              </button>
             </div>
           </div>
         </div>

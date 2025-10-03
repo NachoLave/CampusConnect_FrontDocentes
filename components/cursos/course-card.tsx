@@ -83,7 +83,7 @@ export function CourseCard({ course }: CourseCardProps) {
     >
       {/* Course Image with Day Badge overlay */}
       <div
-        className="relative h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-90 transition-opacity"
+        className="relative h-32 lg:h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-90 transition-opacity"
         onClick={handleInfoClick}
       >
         <img
@@ -91,37 +91,36 @@ export function CourseCard({ course }: CourseCardProps) {
           alt={course.title}
           className="w-full h-full object-cover opacity-30"
         />
-        <div className={`${course.dayColor} text-white text-xs font-semibold px-3 py-1 inline-flex items-center gap-1 rounded-br-md absolute top-0 left-0 m-0`}>{course.day}</div>
+        <div className={`${course.dayColor} text-white text-xs font-semibold px-2 lg:px-3 py-1 inline-flex items-center gap-1 rounded-br-md absolute top-0 left-0 m-0`}>{course.day}</div>
       </div>
 
       {/* Course Content */}
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-900 text-lg mb-3">{course.title}</h3>
+      <div className="p-3 lg:p-4">
+        <h3 className="font-semibold text-gray-900 text-base lg:text-lg mb-2 lg:mb-3 line-clamp-2">{course.title}</h3>
 
         {/* Course Details */}
-        <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4 text-xs lg:text-sm text-gray-600">
           <div className="flex items-center space-x-1">
-            <BookOpen className="h-4 w-4" />
-            <span>{course.code}</span>
+            <BookOpen className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+            <span className="truncate">{course.code}</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Users className="h-4 w-4" />
-            <span>{course.students} alumnos</span>
+            <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+            <span className="whitespace-nowrap">{course.students} alumnos</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Building className="h-4 w-4" />
-            <span>{course.sede}</span> {/* Use dynamic sede from course data */}
+            <Building className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+            <span className="truncate">{course.sede}</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Users className="h-4 w-4" />
             <div className="flex -space-x-1">
               {course.teachers.map((teacher) => (
                 <div
                   key={teacher.id}
-                  className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
+                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
                   title={teacher.name}
                 >
-                  <span className="text-white text-xs font-semibold">{getInitials(teacher.name)}</span>
+                  <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>
                 </div>
               ))}
             </div>
@@ -129,63 +128,64 @@ export function CourseCard({ course }: CourseCardProps) {
         </div>
 
         {/* Schedule and Location */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className={`${course.shiftColor} text-white text-xs font-semibold px-2 py-1 rounded`}>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
+          <div className="flex items-center flex-wrap gap-2 lg:gap-3">
+            <div className={`${course.shiftColor} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
               {course.shift}
             </div>
-            <span className="text-sm font-medium">{course.schedule}</span>
-            <span className="text-sm text-gray-500">{course.dates}</span>
+            <span className="text-xs lg:text-sm font-medium whitespace-nowrap">{course.schedule}</span>
+            <span className="text-xs lg:text-sm text-gray-500 truncate">{course.dates}</span>
           </div>
-          <div className="flex items-center space-x-1 text-sm text-gray-600">
+          <div className="flex items-center space-x-1 text-xs lg:text-sm text-gray-600">
             {course.isVirtual ? (
               <>
-                <MapPin className="h-4 w-4" />
+                <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
                 <span>VIRTUAL</span>
               </>
             ) : (
               <>
-                <MapPin className="h-4 w-4" />
-                <span>{course.location}</span> {/* Show only location without sede info */}
+                <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+                <span className="truncate">{course.location}</span>
               </>
             )}
           </div>
         </div>
 
-        {/* Action Buttons - collapsible on hover */}
+        {/* Action Buttons - collapsible on hover (desktop) / always visible (mobile) */}
         <div
-          className={`overflow-hidden transition-all duration-300 ${
-            showActions ? "max-h-24 mt-4 pt-4 border-t border-gray-200" : "max-h-0 mt-0 pt-0 border-t-0"
-          }`}
+          className={`overflow-hidden transition-all duration-300
+            ${showActions ? "lg:max-h-24 lg:mt-4 lg:pt-4 lg:border-t lg:border-gray-200" : "lg:max-h-0 lg:mt-0 lg:pt-0 lg:border-t-0"}
+            max-h-24 mt-3 pt-3 border-t border-gray-200
+          `}
         >
-          <div className="flex items-center gap-3">
+          <div className="grid grid-cols-2 lg:flex lg:items-center gap-2 lg:gap-3">
             <button
               onClick={handleInfoClick}
-              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+              className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 border border-gray-300 text-gray-700 text-[10px] lg:text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
             >
-              <BookOpen className="h-3 w-3" />
-              <span>INFO</span>
+              <BookOpen className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">INFO</span>
             </button>
             <button
               onClick={handleStudentsClick}
-              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+              className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 border border-gray-300 text-gray-700 text-[10px] lg:text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
             >
-              <Users className="h-3 w-3" />
-              <span>ALUMNOS</span>
+              <Users className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">ALUMNOS</span>
             </button>
             <button
               onClick={handleAttendanceClick}
-              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+              className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 border border-gray-300 text-gray-700 text-[10px] lg:text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
             >
-              <UserCheck className="h-3 w-3" />
-              <span>ASISTENCIA</span>
+              <UserCheck className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">ASISTENCIA</span>
             </button>
             <button
               onClick={handleGradesClick}
-              className="flex items-center space-x-1 px-3 py-2 border border-gray-300 text-gray-700 text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
+              className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 border border-gray-300 text-gray-700 text-[10px] lg:text-xs rounded hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-200"
             >
-              <BarChart3 className="h-3 w-3" />
-              <span>CALIFICACIONES</span>
+              <BarChart3 className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">CALIFICACIONES</span>
             </button>
           </div>
         </div>
