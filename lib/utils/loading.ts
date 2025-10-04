@@ -9,7 +9,7 @@ export interface LoadingOptions {
 export function useLoadingState(options: LoadingOptions = {}) {
   const { minLoadingTime = 0, showLoadingAfter = 0 } = options
 
-  const withLoading = async <T>(
+  const withLoading = async <T,>(
     asyncFn: () => Promise<T>,
     setLoading: (loading: boolean) => void
   ): Promise<T> => {
