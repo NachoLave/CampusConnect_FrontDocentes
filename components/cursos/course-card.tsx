@@ -1,7 +1,7 @@
 "use client"
 
 import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building } from "lucide-react"
-import { useState } from "react"
+import { useState, memo } from "react"
 import { useRouter } from "next/navigation" // Added router import for navigation
 
 interface Teacher {
@@ -55,7 +55,7 @@ function getTeacherColor(teacherId: number): string {
   return colors[teacherId % colors.length]
 }
 
-export function CourseCard({ course }: CourseCardProps) {
+export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
   const router = useRouter() // Added router instance
 
@@ -192,4 +192,4 @@ export function CourseCard({ course }: CourseCardProps) {
       </div>
     </div>
   )
-}
+})

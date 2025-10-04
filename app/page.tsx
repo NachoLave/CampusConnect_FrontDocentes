@@ -80,8 +80,8 @@ export default function DashboardPage() {
     setCurrentSlide((prev) => (prev + 1) % carouselImages.length)
     startAutoTransition() // Reset timer
     
-    // Resetear el estado de transición después de la animación
-    setTimeout(() => setIsTransitioning(false), 800)
+    // Reducido a 400ms para mejor responsividad
+    setTimeout(() => setIsTransitioning(false), 400)
   }
 
   const prevSlide = () => {
@@ -91,8 +91,8 @@ export default function DashboardPage() {
     setCurrentSlide((prev) => (prev - 1 + carouselImages.length) % carouselImages.length)
     startAutoTransition() // Reset timer
     
-    // Resetear el estado de transición después de la animación
-    setTimeout(() => setIsTransitioning(false), 800)
+    // Reducido a 400ms para mejor responsividad
+    setTimeout(() => setIsTransitioning(false), 400)
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -281,41 +281,41 @@ export default function DashboardPage() {
             onMouseLeave={handleMouseLeave}
             style={{
               transform: isDragging ? `translateX(${dragOffset * 0.5}px)` : "translateX(0px)",
-              transition: isDragging ? "none" : "all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+              transition: isDragging ? "none" : "all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
             }}
           >
             <div 
-              className="hidden lg:block absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform -translate-x-2 rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
+              className="hidden lg:block absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform -translate-x-2 rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-400 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
               onClick={prevSlide}
             >
-              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-500 hover:shadow-2xl">
+              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-300 hover:shadow-2xl">
                 <Image
                   src={carouselImages[getPrevSlide()].src || "/placeholder.svg"}
                   alt={carouselImages[getPrevSlide()].alt}
                   fill
-                  className="object-cover transition-transform duration-700 hover:scale-105 animate-breathe"
+                  className="object-cover transition-transform duration-400 hover:scale-105 animate-breathe"
                   draggable={false}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
               </div>
             </div>
 
-            <div className="relative w-full max-w-[700px] h-40 md:h-56 lg:h-72 z-20 transform transition-all duration-800 ease-out hover:scale-[1.02] mx-4 lg:mx-0">
-              <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 hover:shadow-3xl">
+            <div className="relative w-full max-w-[700px] h-40 md:h-56 lg:h-72 z-20 transform transition-all duration-400 ease-out hover:scale-[1.02] mx-4 lg:mx-0">
+              <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 hover:shadow-3xl">
                 <Image
                   src={carouselImages[currentSlide].src || "/placeholder.svg"}
                   alt={carouselImages[currentSlide].alt}
                   fill
-                  className="object-cover transition-all duration-800 ease-out animate-breathe"
+                  className="object-cover transition-all duration-400 ease-out animate-breathe"
                   priority
                   draggable={false}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent transition-opacity duration-500" />
-                <div className="absolute bottom-4 left-4 lg:bottom-6 lg:left-6 text-white transform transition-all duration-500 ease-out">
-                  <h2 className="text-base md:text-xl lg:text-2xl font-bold mb-1 lg:mb-2 transform transition-transform duration-500 ease-out hover:translate-x-1">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent transition-opacity duration-300" />
+                <div className="absolute bottom-4 left-4 lg:bottom-6 lg:left-6 text-white transform transition-all duration-300 ease-out">
+                  <h2 className="text-base md:text-xl lg:text-2xl font-bold mb-1 lg:mb-2 transform transition-transform duration-300 ease-out hover:translate-x-1">
                     {carouselImages[currentSlide].title}
                   </h2>
-                  <p className="text-sm md:text-base lg:text-lg opacity-90 transform transition-all duration-500 ease-out delay-100 hover:translate-x-1">
+                  <p className="text-sm md:text-base lg:text-lg opacity-90 transform transition-all duration-300 ease-out delay-100 hover:translate-x-1">
                     {carouselImages[currentSlide].subtitle}
                   </p>
                 </div>
@@ -323,15 +323,15 @@ export default function DashboardPage() {
             </div>
 
             <div 
-              className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform translate-x-2 -rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-700 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
+              className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[400px] h-64 transform translate-x-2 -rotate-y-12 scale-75 opacity-60 z-10 transition-all duration-400 ease-out hover:opacity-80 hover:scale-[0.78] carousel-side-image cursor-pointer"
               onClick={nextSlide}
             >
-              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-500 hover:shadow-2xl">
+              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-xl transition-shadow duration-300 hover:shadow-2xl">
                 <Image
                   src={carouselImages[getNextSlide()].src || "/placeholder.svg"}
                   alt={carouselImages[getNextSlide()].alt}
                   fill
-                  className="object-cover transition-transform duration-700 hover:scale-105 animate-breathe"
+                  className="object-cover transition-transform duration-400 hover:scale-105 animate-breathe"
                   draggable={false}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
@@ -363,11 +363,11 @@ export default function DashboardPage() {
                     setIsTransitioning(true)
                     setCurrentSlide(index)
                     startAutoTransition() // Reset timer on manual selection
-                    setTimeout(() => setIsTransitioning(false), 800)
+                    setTimeout(() => setIsTransitioning(false), 400)
                   }
                 }}
                 disabled={isTransitioning}
-                className={`transition-all duration-500 ease-out hover:scale-125 active:scale-95 disabled:cursor-not-allowed ${
+                className={`transition-all duration-300 ease-out hover:scale-125 active:scale-95 disabled:cursor-not-allowed ${
                   index === currentSlide
                     ? "w-10 h-3 bg-slate-600 rounded-full shadow-md"
                     : "w-3 h-3 bg-gray-300 rounded-full hover:bg-slate-400 hover:w-6 shadow-sm"
@@ -435,7 +435,7 @@ export default function DashboardPage() {
         
         /* Smooth transition para el contenedor principal */
         .carousel-container {
-          transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         
         /* Glass effect para los botones */

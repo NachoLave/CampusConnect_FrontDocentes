@@ -40,7 +40,7 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center space-x-2 px-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/teacher-profile.png" />
+                  <AvatarImage src="/placeholder-user.jpg" />
                   <AvatarFallback className="bg-blue-100 text-blue-900">JS</AvatarFallback>
                 </Avatar>
                 <span className="text-gray-700 font-medium">Juan Sánchez</span>
@@ -51,7 +51,7 @@ export function Header() {
               <div className="px-3 py-2">
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src="/teacher-profile.png" />
+                    <AvatarImage src="/placeholder-user.jpg" />
                     <AvatarFallback className="bg-blue-100 text-blue-900">JS</AvatarFallback>
                   </Avatar>
                   <div>

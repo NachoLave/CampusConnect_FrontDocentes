@@ -20,7 +20,7 @@ export default function PerfilPage() {
     name: "Juan Sánchez",
     id: "11223344",
     email: "juan.sanchez@campusconnect.com.ar",
-    avatar: "/teacher-profile.png",
+    avatar: "/placeholder-user.jpg",
     department: "Facultad de Ingeniería",
     status: "Activo",
   }

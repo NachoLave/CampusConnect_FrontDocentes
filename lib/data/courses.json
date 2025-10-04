@@ -7,8 +7,8 @@
     "code": "18068",
     "students": 31,
     "teachers": [
-      { "id": 1, "name": "Prof 1", "avatar": "/teacher-profile.png" },
-      { "id": 2, "name": "Prof 2", "avatar": "/teacher-profile.png" }
+      { "id": 1, "name": "Prof 1", "avatar": "/placeholder-user.jpg" },
+      { "id": 2, "name": "Prof 2", "avatar": "/placeholder-user.jpg" }
     ],
     "shift": "TT",
     "shiftColor": "bg-green-600",
@@ -27,7 +27,7 @@
     "dayColor": "bg-yellow-600",
     "code": "18068",
     "students": 60,
-    "teachers": [{ "id": 1, "name": "Prof 1", "avatar": "/teacher-profile.png" }],
+    "teachers": [{ "id": 1, "name": "Prof 1", "avatar": "/placeholder-user.jpg" }],
     "shift": "TM",
     "shiftColor": "bg-yellow-600",
     "schedule": "8:00 - 12:00",
@@ -45,7 +45,7 @@
     "dayColor": "bg-green-600",
     "code": "18068",
     "students": 55,
-    "teachers": [{ "id": 1, "name": "Prof 1", "avatar": "/teacher-profile.png" }],
+    "teachers": [{ "id": 1, "name": "Prof 1", "avatar": "/placeholder-user.jpg" }],
     "shift": "TT",
     "shiftColor": "bg-green-600",
     "schedule": "14:00 - 18:00",
@@ -64,8 +64,8 @@
     "code": "18075",
     "students": 42,
     "teachers": [
-      { "id": 3, "name": "Prof 3", "avatar": "/teacher-profile.png" },
-      { "id": 4, "name": "Prof 4", "avatar": "/teacher-profile.png" }
+      { "id": 3, "name": "Prof 3", "avatar": "/placeholder-user.jpg" },
+      { "id": 4, "name": "Prof 4", "avatar": "/placeholder-user.jpg" }
     ],
     "shift": "TN",
     "shiftColor": "bg-gray-600",
@@ -84,7 +84,7 @@
     "dayColor": "bg-yellow-600",
     "code": "18082",
     "students": 38,
-    "teachers": [{ "id": 5, "name": "Prof 5", "avatar": "/teacher-profile.png" }],
+    "teachers": [{ "id": 5, "name": "Prof 5", "avatar": "/placeholder-user.jpg" }],
     "shift": "TM",
     "shiftColor": "bg-yellow-600",
     "schedule": "8:00 - 12:00",
@@ -103,8 +103,8 @@
     "code": "18090",
     "students": 28,
     "teachers": [
-      { "id": 6, "name": "Prof 6", "avatar": "/teacher-profile.png" },
-      { "id": 7, "name": "Prof 7", "avatar": "/teacher-profile.png" }
+      { "id": 6, "name": "Prof 6", "avatar": "/placeholder-user.jpg" },
+      { "id": 7, "name": "Prof 7", "avatar": "/placeholder-user.jpg" }
     ],
     "shift": "TT",
     "shiftColor": "bg-green-600",
@@ -123,7 +123,7 @@
     "dayColor": "bg-yellow-600",
     "code": "18095",
     "students": 35,
-    "teachers": [{ "id": 8, "name": "Prof 8", "avatar": "/teacher-profile.png" }],
+    "teachers": [{ "id": 8, "name": "Prof 8", "avatar": "/placeholder-user.jpg" }],
     "shift": "TM",
     "shiftColor": "bg-yellow-600",
     "schedule": "9:00 - 13:00",
@@ -141,7 +141,7 @@
     "dayColor": "bg-blue-600",
     "code": "18045",
     "students": 48,
-    "teachers": [{ "id": 9, "name": "Prof 9", "avatar": "/teacher-profile.png" }],
+    "teachers": [{ "id": 9, "name": "Prof 9", "avatar": "/placeholder-user.jpg" }],
     "shift": "TM",
     "shiftColor": "bg-blue-600",
     "schedule": "8:00 - 12:00",
