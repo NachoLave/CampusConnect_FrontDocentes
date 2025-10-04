@@ -6,7 +6,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MapPin, Clock, ChevronLeft, ChevronRight } from "lucide-react"
-import { es } from "date-fns/locale"
+import { es } from "date-fns/locale/es"
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -442,7 +442,7 @@ export default function CalendarioPage() {
                           </span>
                         </div>
                       </div>
-                      {event.description && <p className="text-xs md:text-sm text-gray-700 mb-3">{event.description}</p>}
+                      {'description' in event && event.description && <p className="text-xs md:text-sm text-gray-700 mb-3">{event.description}</p>}
                     </div>
                     <Button variant="outline" size="sm" className="md:ml-4 bg-transparent w-full md:w-auto text-xs md:text-sm">
                       VER MAS

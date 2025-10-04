@@ -25,7 +25,7 @@ const nextConfig = {
   compress: true,
   // Optimizaciones experimentales
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // Deshabilitado temporalmente - requiere critters package
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 }

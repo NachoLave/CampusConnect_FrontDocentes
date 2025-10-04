@@ -140,22 +140,12 @@ npm run lint
 
 ## 📋 Tareas Pendientes
 
-### Alta Prioridad
-- [ ] Sistema de generación de actas
-  - [ ] Cambiar nombre "Preview" por otro más descriptivo
-  - [ ] Eliminar botón "Cancelar"
-  - [ ] Implementar funcionalidad de generar acta
-  - [ ] Bloquear curso al generar acta
-  - [ ] Habilitar botón solo cuando termina el curso
-- [ ] Lógica de recuperatorio en calificaciones
-  - [ ] Decidir comportamiento cuando se modifica nota con recuperatorio existente
-
-### Mejoras Futuras
-- [ ] Cambiar botón "Anteriores" por "Todas" en Mis Cursos
-- [ ] Integración con backend (APIs)
-- [ ] Sistema de autenticación real
-- [ ] Notificaciones push
-- [ ] Exportar datos (PDF, Excel)
+- revisar el tema de que cuando cambia la nota si el recuperatorio tiene nota, volarlo o hacer algo 
+- pensar otro nombre en vez de preview en el genera acta 
+- sacar el cancelar de generar acta
+- hacer funcionar el botón de generar acta y que bloquee el curso  
+- que el botón generar acta solo se habilite en la fecha que termina el curso 
+- que el botón anteriores de mis cursos cambiarlo a Todas
 
 ## 📄 Licencia
 
