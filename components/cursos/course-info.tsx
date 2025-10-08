@@ -511,6 +511,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [showStudentsFilter, showAttendanceFilter, showGradesFilter])
 
   const [showActaModal, setShowActaModal] = useState(false)
+  const [showActaPreviewModal, setShowActaPreviewModal] = useState(false)
+  const [showActaConfirmModal, setShowActaConfirmModal] = useState(false)
   const [showAttendanceSavedModal, setShowAttendanceSavedModal] = useState(false)
   const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
   const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
@@ -519,6 +521,19 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [selectedDate, setSelectedDate] = useState(21)
   const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
   const [hasUnsavedAttendance, setHasUnsavedAttendance] = useState(false)
+
+  // Bloquear scroll del body cuando el modal de preview está abierto
+  useEffect(() => {
+    if (showActaPreviewModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [showActaPreviewModal])
 
   // Persistencia local por curso
   const attendanceStorageKey = `attendance_${courseId}`
@@ -2378,8 +2393,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             <div className="flex flex-col sm:flex-row gap-3 justify-end">
               <button
                 onClick={() => {
-                  downloadXlsxPreview()
-                  // No cerramos el modal para continuar en el curso
+                  setShowActaPreviewModal(true)
                 }}
                 className="flex items-center justify-center space-x-2 px-5 py-2.5 rounded-lg font-medium border-2 border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors"
               >
@@ -2388,15 +2402,220 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               </button>
               <button
                 onClick={() => {
-                  // Here you would implement the actual file download
-                  console.log("Downloading acta file:", generateActaFilename())
                   setShowActaModal(false)
+                  setShowActaConfirmModal(true)
                 }}
                 className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors"
               >
                 <ClipboardCheck className="h-4 w-4 flex-shrink-0" />
                 <span>Generar</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Previsualización del Acta */}
+      {showActaPreviewModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+          onClick={() => setShowActaPreviewModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden transform transition-all duration-150 flex flex-col"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b bg-slate-50">
+              <div>
+                <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-1">
+                  Previsualización del Acta
+                </h3>
+                <p className="text-sm text-gray-600">{generateActaFilename()}</p>
+              </div>
+              <button 
+                onClick={() => setShowActaPreviewModal(false)} 
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="flex-1 overflow-hidden flex flex-col p-6">
+              {/* Encabezado del Acta */}
+              <div className="bg-slate-700 text-white p-6 rounded-t-lg mb-0 flex-shrink-0">
+                <h4 className="text-2xl font-bold text-center mb-6">{course.title}</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="text-center">
+                    <p className="text-slate-300 text-xs mb-1">Turno</p>
+                    <p className="font-semibold text-base">{getShiftLabel()}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-slate-300 text-xs mb-1">Cuatrimestre</p>
+                    <p className="font-semibold text-base">{getSemesterLabel()}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-slate-300 text-xs mb-1">Alumnos</p>
+                    <p className="font-semibold text-base">{students.length}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-600">
+                  <div>
+                    <p className="text-slate-300 text-xs mb-1">Profesor/es</p>
+                    <p className="font-semibold">{getTeachersSummary().titulares || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 text-xs mb-1">Ayudante/s</p>
+                    <p className="font-semibold">{getTeachersSummary().auxiliares || "-"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabla de Datos con scroll */}
+              <div className="flex-1 overflow-auto border border-t-0 rounded-b-lg">
+                <table className="w-full min-w-[900px] table-fixed">
+                  <colgroup>
+                    <col className="w-[22%]" /> {/* Nombre */}
+                    <col className="w-[10%]" /> {/* Legajo */}
+                    <col className="w-[20%]" /> {/* Mail */}
+                    <col className="w-[7%]" /> {/* Nota 1 */}
+                    <col className="w-[7%]" /> {/* Nota 2 */}
+                    <col className="w-[7%]" /> {/* REC */}
+                    <col className="w-[7%]" /> {/* Final */}
+                    <col className="w-[12%]" /> {/* Condición */}
+                    <col className="w-[8%]" /> {/* Asistencia */}
+                  </colgroup>
+                  <thead className="bg-slate-100 sticky top-0">
+                    <tr>
+                      <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Nombre y Apellido</th>
+                      <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Legajo</th>
+                      <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Mail</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Nota 1</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Nota 2</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">REC</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Final</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Condición</th>
+                      <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b">Asistencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((student, index) => {
+                      const g = gradesData[student.id] || {}
+                      const condition = calculateFinalCondition(g)
+                      const attendancePercent = computeAttendancePercentByStudent()
+                      const asistencia = attendancePercent[student.id] ?? 0
+                      
+                      return (
+                        <tr key={student.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="py-2.5 px-3 text-xs border-b border-r truncate">{student.name}</td>
+                          <td className="py-2.5 px-3 text-xs border-b border-r">{student.legajo}</td>
+                          <td className="py-2.5 px-3 text-xs border-b border-r truncate">{student.email}</td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
+                            {g["1P"] || "-"}
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
+                            {g["2P"] || "-"}
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
+                            {g["REC"] || "-"}
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
+                            {g["FINAL"] || "-"}
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b border-r">
+                            {condition ? (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                condition === "PROMOCIONA" ? "bg-green-100 text-green-800" :
+                                condition === "APROBADO" ? "bg-blue-100 text-blue-800" :
+                                condition === "FINAL PENDIENTE" ? "bg-yellow-100 text-yellow-800" :
+                                condition === "RECURSA" ? "bg-red-100 text-red-800" :
+                                "bg-gray-100 text-gray-800"
+                              }`}>
+                                {condition}
+                              </span>
+                            ) : "-"}
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-center border-b font-medium">
+                            {asistencia}%
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer con botón */}
+            <div className="border-t bg-gray-50 p-4 flex justify-center">
+              <button
+                onClick={() => setShowActaPreviewModal(false)}
+                className="px-8 py-2.5 rounded-lg font-medium bg-slate-700 text-white hover:bg-slate-800 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación - Generar Acta */}
+      {showActaConfirmModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Icono de advertencia */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+                <ClipboardCheck className="h-8 w-8 text-amber-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
+                ¿Confirmar Generación del Acta?
+              </h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-4 leading-relaxed">
+                Estás por generar el acta oficial de <span className="font-semibold text-gray-900">{course.title}</span>.
+              </p>
+              
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded text-left mb-6">
+                <p className="text-sm text-amber-900 font-semibold mb-2">⚠️ Importante:</p>
+                <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                  <li>Una vez generada, <strong>no podrás modificar</strong> las calificaciones ni asistencias</li>
+                  <li>El acta quedará registrada en el sistema</li>
+                  <li>Se generará un archivo Excel con todos los datos</li>
+                  <li>Asegúrate de haber revisado todos los datos antes de confirmar</li>
+                </ul>
+              </div>
+
+              {/* Botones */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => setShowActaConfirmModal(false)}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    downloadXlsxPreview()
+                    setShowActaConfirmModal(false)
+                  }}
+                  className="flex-1 bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+                >
+                  Confirmar y Generar
+                </button>
+              </div>
             </div>
           </div>
         </div>
