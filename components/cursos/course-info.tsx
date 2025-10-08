@@ -14,6 +14,8 @@ import {
   Edit,
   RotateCcw,
   ChevronDown,
+  ClipboardCheck,
+  Eye,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
@@ -510,6 +512,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   const [showActaModal, setShowActaModal] = useState(false)
   const [showAttendanceSavedModal, setShowAttendanceSavedModal] = useState(false)
+  const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
+  const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
+  const [gradesAlertMessage, setGradesAlertMessage] = useState("")
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
   const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
@@ -1070,6 +1075,32 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return attendanceData[key]?.[studentId] || null
   }
 
+  // Validar y redondear nota a incrementos de 0.5
+  const validateAndRoundGrade = (value: string): string => {
+    if (!value || value.trim() === "") return ""
+    
+    // Remover caracteres no numéricos excepto punto y signo negativo
+    let cleanValue = value.replace(/[^\d.-]/g, "")
+    
+    // Convertir a número
+    const num = Number.parseFloat(cleanValue)
+    
+    // Validar que sea un número válido
+    if (!Number.isFinite(num)) return ""
+    
+    // Prevenir valores negativos
+    if (num < 0) return ""
+    
+    // Validar rango 1-10
+    if (num < 1) return "1"
+    if (num > 10) return "10"
+    
+    // Redondear a 0.5: 4.4 -> 4, 4.5 -> 5, 4.6 -> 5
+    const rounded = Math.round(num * 2) / 2
+    
+    return rounded.toString()
+  }
+
   const calculateFinalCondition = (studentGrades: Record<string, string>) => {
     const getVal = (k: string) => {
       const v = studentGrades[k]
@@ -1093,8 +1124,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
     // Necesitamos ambos parciales para decidir estados definitivos/promoción
     if (hasP1 && hasP2) {
-      // Promoción directa
-      if ((p1 as number) >= 8 && (p2 as number) >= 8) return "PROMOCIONA"
+      // Promoción directa: calcula promedio automático
+      if ((p1 as number) >= 8 && (p2 as number) >= 8) {
+        // Calcular promedio de todas las evaluaciones cargadas
+        const grades = [p1 as number, p2 as number]
+        if (hasRec && (rec as number) >= 8) grades.push(rec as number)
+        const average = grades.reduce((a, b) => a + b, 0) / grades.length
+        const roundedAverage = Math.round(average * 2) / 2
+        // Auto-asignar la nota final (se hará en updateGrade)
+        return "PROMOCIONA"
+      }
 
       const p1Approved = (p1 as number) >= 4
       const p2Approved = (p2 as number) >= 4
@@ -1126,7 +1165,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return ""
   }
 
-  type GradePermissions = { recEnabled: boolean; finalEnabled: boolean }
+  type GradePermissions = { recEnabled: boolean; finalEnabled: boolean; finalAutoCalculated: boolean }
 
   const getGradePermissions = (studentGrades: Record<string, string>): GradePermissions => {
     const p1 = Number.parseFloat(studentGrades["1P"]) || 0
@@ -1136,11 +1175,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const p1Approved = p1 >= 4
     const p2Approved = p2 >= 4
 
-    // Promoción directa: bloquea REC y FINAL
-    if (p1 >= 8 && p2 >= 8) return { recEnabled: false, finalEnabled: false }
+    // Promoción directa: bloquea REC y FINAL (FINAL se calcula automático)
+    if (p1 >= 8 && p2 >= 8) return { recEnabled: false, finalEnabled: false, finalAutoCalculated: true }
 
     // Ambos desaprobados: bloquea REC y FINAL
-    if (!p1Approved && !p2Approved) return { recEnabled: false, finalEnabled: false }
+    if (!p1Approved && !p2Approved) return { recEnabled: false, finalEnabled: false, finalAutoCalculated: false }
 
     // REC habilitado solo si exactamente uno desaprobado
     const recEnabled = (p1Approved && !p2Approved) || (!p1Approved && p2Approved)
@@ -1148,19 +1187,63 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     // FINAL habilitado si ambas aprobadas (puras) o si una fue aprobada vía REC
     const finalEnabled = (p1Approved && p2Approved) || (recEnabled && rec >= 4)
 
-    return { recEnabled, finalEnabled }
+    return { recEnabled, finalEnabled, finalAutoCalculated: false }
+  }
+
+  const calculateAutoFinalGrade = (studentGrades: Record<string, string>): string => {
+    const getVal = (k: string) => {
+      const v = studentGrades[k]
+      if (v === undefined || v === null || String(v).trim() === "") return null
+      const n = Number.parseFloat(String(v))
+      return Number.isFinite(n) ? n : null
+    }
+
+    const p1 = getVal("1P")
+    const p2 = getVal("2P")
+    const rec = getVal("REC")
+
+    // Solo calcular si promociona
+    if (p1 !== null && p2 !== null && p1 >= 8 && p2 >= 8) {
+      const grades = [p1, p2]
+      if (rec !== null && rec >= 8) grades.push(rec)
+      const average = grades.reduce((a, b) => a + b, 0) / grades.length
+      const rounded = Math.round(average * 2) / 2
+      return rounded.toString()
+    }
+
+    return ""
   }
 
   const updateGrade = (studentId: string, field: string, value: string) => {
     setGradesData((prev) => {
+      // Validar y redondear el valor si no está vacío
+      const validatedValue = value.trim() === "" ? "" : validateAndRoundGrade(value)
+      
       const updated = {
         ...prev,
         [studentId]: {
           ...prev[studentId],
-          [field]: value,
+          [field]: validatedValue,
         },
       }
 
+      // Obtener permisos para este estudiante
+      const permissions = getGradePermissions(updated[studentId])
+
+      // Si REC está bloqueado, limpiar su valor
+      if (!permissions.recEnabled && updated[studentId]["REC"]) {
+        updated[studentId]["REC"] = ""
+      }
+
+      // Si promociona, calcular FINAL automáticamente
+      if (permissions.finalAutoCalculated) {
+        const autoFinal = calculateAutoFinalGrade(updated[studentId])
+        if (autoFinal) {
+          updated[studentId]["FINAL"] = autoFinal
+        }
+      }
+
+      // Recalcular condición final
       if (field !== "CONDICIÓN FINAL") {
         updated[studentId]["CONDICIÓN FINAL"] = calculateFinalCondition(updated[studentId])
       }
@@ -1169,8 +1252,49 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     })
   }
 
-  const saveGrades = () => {
+  const validateGradesBeforeSave = (): { valid: boolean; message: string } => {
+    // Validar que todas las notas cargadas estén entre 1 y 10
+    for (const [studentId, grades] of Object.entries(gradesData)) {
+      for (const [field, value] of Object.entries(grades)) {
+        if (field === "CONDICIÓN FINAL") continue
+        if (!value || value.trim() === "") continue
+        
+        const numValue = Number.parseFloat(value)
+        if (!Number.isFinite(numValue)) {
+          return { valid: false, message: `Valor inválido encontrado para un estudiante en ${field}` }
+        }
+        
+        if (numValue < 1 || numValue > 10) {
+          return { valid: false, message: `Las notas deben estar entre 1 y 10. Se encontró ${numValue} en ${field}` }
+        }
+
+        // Validar incrementos de 0.5
+        const remainder = (numValue * 2) % 1
+        if (remainder !== 0) {
+          return { valid: false, message: `Las notas deben ser múltiplos de 0.5. Se encontró ${numValue} en ${field}` }
+        }
+      }
+    }
+
+    return { valid: true, message: "" }
+  }
+
+  const handleSaveGradesClick = () => {
+    const validation = validateGradesBeforeSave()
+    
+    if (!validation.valid) {
+      setGradesAlertMessage(validation.message)
+      setShowGradesAlertModal(true)
+      return
+    }
+
+    // Mostrar modal de confirmación
+    setShowGradesSaveModal(true)
+  }
+
+  const confirmSaveGrades = () => {
     setIsEditingGrades(false)
+    setShowGradesSaveModal(false)
     // Here you would save to backend
     console.log("Saving grades:", gradesData)
   }
@@ -1329,9 +1453,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           </div>
           <button
             onClick={() => setShowActaModal(true)}
-            className="bg-slate-800 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded text-xs lg:text-sm font-medium hover:bg-slate-700 transition-colors whitespace-nowrap"
+            className="flex items-center space-x-2 bg-slate-700 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md text-xs lg:text-sm font-medium hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
-            GESTIONAR ACTA
+            <ClipboardCheck className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+            <span>Gestionar Acta</span>
           </button>
         </div>
       </div>
@@ -1904,7 +2029,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 </div>
 
                 <button
-                  onClick={() => setIsEditingGrades(!isEditingGrades)}
+                  onClick={() => {
+                    if (isEditingGrades) {
+                      handleSaveGradesClick()
+                    } else {
+                      setIsEditingGrades(true)
+                    }
+                  }}
                   className={`flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm rounded-md transition-colors ${
                     isEditingGrades
                       ? "bg-green-600 text-white hover:bg-green-700"
@@ -2008,7 +2139,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
             {/* Grades Table */}
             <div className="overflow-x-auto -mx-4 lg:mx-0">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[800px] table-fixed">
+                <colgroup>
+                  <col className="w-[30%]" /> {/* Nombre */}
+                  <col className="w-[12%]" /> {/* Legajo */}
+                  <col className="w-[9%]" /> {/* Eval 1 */}
+                  <col className="w-[9%]" /> {/* Eval 2 */}
+                  <col className="w-[9%]" /> {/* REC */}
+                  <col className="w-[9%]" /> {/* FINAL */}
+                  <col className="w-[22%]" /> {/* CONDICIÓN */}
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b">
                     <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
@@ -2041,11 +2181,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         {isEditingGrades ? (
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             max="10"
-                            step="0.1"
+                            step="0.5"
                             value={gradesData[student.id]?.["1P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "1P", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                e.preventDefault()
+                              }
+                            }}
                             className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         ) : (
@@ -2056,11 +2201,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         {isEditingGrades ? (
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             max="10"
-                            step="0.1"
+                            step="0.5"
                             value={gradesData[student.id]?.["2P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "2P", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                e.preventDefault()
+                              }
+                            }}
                             className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         ) : (
@@ -2074,43 +2224,70 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             return (
                               <input
                                 type="number"
-                                min="0"
+                                min="1"
                                 max="10"
-                                step="0.1"
+                                step="0.5"
                                 disabled={!perms.recEnabled}
                                 value={gradesData[student.id]?.["REC"] || ""}
                                 onChange={(e) => updateGrade(String(student.id), "REC", e.target.value)}
-                                className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                onKeyDown={(e) => {
+                                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                    e.preventDefault()
+                                  }
+                                }}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                   !perms.recEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
                                 }`}
                               />
                             )
                           })()
                         ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["REC"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["REC"] || "-"}</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           (() => {
                             const perms = getGradePermissions(gradesData[student.id] || {})
+                            const finalValue = gradesData[student.id]?.["FINAL"] || ""
+                            
+                            // Si es auto-calculado, mostrar solo lectura con estilo especial
+                            if (perms.finalAutoCalculated) {
+                              return (
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    disabled
+                                    value={finalValue}
+                                    className="w-12 lg:w-16 px-1 lg:px-2 py-1 border-2 border-green-300 bg-green-50 rounded text-center text-xs lg:text-sm font-semibold text-green-700 cursor-not-allowed"
+                                    title="Calculado automáticamente (Promoción)"
+                                  />
+                                </div>
+                              )
+                            }
+                            
                             return (
                               <input
                                 type="number"
-                                min="0"
+                                min="1"
                                 max="10"
-                                step="0.1"
+                                step="0.5"
                                 disabled={!perms.finalEnabled}
-                                value={gradesData[student.id]?.["FINAL"] || ""}
+                                value={finalValue}
                                 onChange={(e) => updateGrade(String(student.id), "FINAL", e.target.value)}
-                                className={`w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                onKeyDown={(e) => {
+                                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                    e.preventDefault()
+                                  }
+                                }}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                   !perms.finalEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
                                 }`}
                               />
                             )
                           })()
                         ) : (
-                          <span className="text-gray-600">{gradesData[student.id]?.["FINAL"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["FINAL"] || "-"}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -2152,59 +2329,74 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
       {/* Acta Modal */}
       {showActaModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 shadow-2xl border">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg lg:text-xl font-bold text-gray-900">
                 {course.title} - {course.code}
               </h3>
-              <button onClick={() => setShowActaModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button 
+                onClick={() => setShowActaModal(false)} 
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {/* Contenido */}
             <div className="mb-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="text-gray-900">Se generó correctamente el acta</span>
-              </div>
-
               <div className="flex items-center space-x-3 mb-4">
-                <img src="/excel-icon.png" alt="Excel" className="w-10 h-10" />
-                <span className="text-gray-900 text-sm">{generateActaFilename()}</span>
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-gray-900">Acta generada correctamente</p>
+                  <p className="text-sm text-gray-600">Lista para descargar</p>
+                </div>
               </div>
 
-              <div className="bg-gray-100 p-3 rounded text-sm text-gray-700">
-                Recordá descargarla y revisar que los datos sean correctos. Una vez confirmado, no será posible
-                modificar los datos.
+              <div className="flex items-center space-x-3 mb-5 p-4 bg-gray-50 rounded-lg">
+                <img src="/excel-icon.png" alt="Excel" className="w-10 h-10 flex-shrink-0" />
+                <span className="text-sm font-medium text-gray-900 break-all">{generateActaFilename()}</span>
+              </div>
+
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                <p className="text-sm text-blue-800">
+                  <strong>Importante:</strong> Recordá descargarla y revisar que los datos sean correctos. Una vez confirmado, no será posible modificar los datos.
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <button onClick={() => setShowActaModal(false)} className="text-red-600 hover:text-red-700 font-medium">
-                Cancelar
+            {/* Botones */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <button
+                onClick={() => {
+                  downloadXlsxPreview()
+                  // No cerramos el modal para continuar en el curso
+                }}
+                className="flex items-center justify-center space-x-2 px-5 py-2.5 rounded-lg font-medium border-2 border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors"
+              >
+                <Eye className="h-4 w-4 flex-shrink-0" />
+                <span>Visualizar</span>
               </button>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => {
-                    downloadXlsxPreview()
-                    // No cerramos el modal para continuar en el curso
-                  }}
-                  className="px-6 py-2 rounded font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Preview (Excel)
-                </button>
-                <button
-                  onClick={() => {
-                    // Here you would implement the actual file download
-                    console.log("Downloading acta file:", generateActaFilename())
-                    setShowActaModal(false)
-                  }}
-                  className="bg-slate-800 text-white px-6 py-2 rounded font-medium hover:bg-slate-700 transition-colors"
-                >
-                  Generar
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  // Here you would implement the actual file download
+                  console.log("Downloading acta file:", generateActaFilename())
+                  setShowActaModal(false)
+                }}
+                className="flex items-center justify-center space-x-2 bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+              >
+                <ClipboardCheck className="h-4 w-4 flex-shrink-0" />
+                <span>Generar</span>
+              </button>
             </div>
           </div>
         </div>
@@ -2212,8 +2404,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
       {/* Modal de Confirmación - Asistencia Guardada */}
       {showAttendanceSavedModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 animate-in fade-in zoom-in duration-300">
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
             {/* Icono de éxito */}
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -2237,7 +2435,91 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               {/* Botón de confirmación */}
               <button
                 onClick={() => setShowAttendanceSavedModal(false)}
-                className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+                className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación - Guardar Calificaciones */}
+      {showGradesSaveModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Icono de pregunta */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-blue-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
+                ¿Confirmar guardado?
+              </h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">
+                Estás a punto de guardar las calificaciones cargadas. Una vez guardadas, los datos serán permanentes.
+              </p>
+
+              {/* Botones */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowGradesSaveModal(false)}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmSaveGrades}
+                  className="flex-1 bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Alerta - Error en Calificaciones */}
+      {showGradesAlertModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Icono de alerta */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <X className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
+                Error de Validación
+              </h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">
+                {gradesAlertMessage}
+              </p>
+
+              {/* Botón de confirmación */}
+              <button
+                onClick={() => setShowGradesAlertModal(false)}
+                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 Entendido
               </button>
