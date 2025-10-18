@@ -1,8 +1,10 @@
 import { WalletInfo, Transaction, ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
-import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
+import { API_CONFIG } from '@/lib/config/api'
+import { APP_CONFIG } from '@/lib/config/app'
 import walletData from '@/lib/data/wallet.json'
 import { GraduationCap, DollarSign, UtensilsCrossed } from 'lucide-react'
+import { postmanProxy } from '@/lib/utils/postmanProxy'
 
 // Mapeo de iconos para los datos mock
 const iconMap = {
@@ -12,37 +14,75 @@ const iconMap = {
 }
 
 export class WalletService {
+  // Variable para almacenar el balance actualizado manualmente
+  private static currentBalance: number | null = null
+
+  // Método para actualizar el balance manualmente (desde Postman)
+  static updateBalanceFromPostman(newBalance: number) {
+    this.currentBalance = newBalance
+    console.log(`💰 Balance actualizado desde Postman: $${newBalance}`)
+  }
   // Obtener información de la billetera
   static async getWalletInfo(): Promise<ApiResponse<WalletInfo>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 400))
+    try {
+      // Obtener balance real del backend
+      const balanceResponse = await this.getBalance()
+
+      if (balanceResponse.success && balanceResponse.data !== null) {
+        // Combinar balance real con información mock para el resto
+        const walletInfo: WalletInfo = {
+          ...walletData.walletInfo,
+          balance: balanceResponse.data // Usar el balance real del backend
+        }
+
+        return {
+          data: walletInfo,
+          success: true,
+          message: 'Información de billetera obtenida correctamente desde el backend'
+        }
+      } else {
+        throw new Error('No se pudo obtener el balance del backend')
+      }
+    } catch (error) {
+      console.error('Error obteniendo información de billetera real:', error)
+      // Retornar error para que el usuario sepa que hay un problema
       return {
-        data: walletData.walletInfo as WalletInfo,
-        success: true,
-        message: 'Información de billetera obtenida correctamente'
+        data: null as any,
+        success: false,
+        message: 'No se pudo obtener la información de la billetera'
       }
     }
-
-    return apiClient.get<WalletInfo>(API_CONFIG.ENDPOINTS.WALLET)
   }
 
   // Obtener saldo actual
   static async getBalance(): Promise<ApiResponse<number>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 300))
+    console.log('🔍 WalletService.getBalance() - Obteniendo datos reales del backend')
+    
+    try {
+      console.log('🌐 Llamando al backend real...')
+      // Usar el proxy de Postman para obtener el balance real
+      const balance = await postmanProxy.getBalance()
+      
+      console.log('✅ Balance obtenido exitosamente:', balance)
       return {
-        data: walletData.walletInfo.balance,
+        data: balance,
         success: true,
-        message: 'Saldo obtenido correctamente'
+        message: 'Saldo obtenido desde el backend'
+      }
+    } catch (error) {
+      console.error('❌ Error obteniendo saldo real:', error)
+      // Retornar error en lugar de fallback
+      return {
+        data: null as any,
+        success: false,
+        error: 'No se pudo obtener el saldo del backend'
       }
     }
-
-    return apiClient.get<number>(API_CONFIG.ENDPOINTS.WALLET_BALANCE)
   }
 
   // Obtener transacciones
   static async getTransactions(): Promise<ApiResponse<Transaction[]>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
       
       // Convertir los datos JSON a objetos Transaction con iconos
@@ -68,7 +108,7 @@ export class WalletService {
     page: number
     totalPages: number
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 400))
       
       const allTransactions = walletData.transactions.map(transaction => ({
@@ -108,7 +148,7 @@ export class WalletService {
     newBalance: number
     transactionId: string
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 1500)) // Simular proceso de pago
       
       const newBalance = walletData.walletInfo.balance + amount
@@ -135,7 +175,7 @@ export class WalletService {
     newBalance: number
     transactionId: string
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 1000))
       
       const newBalance = walletData.walletInfo.balance - amount

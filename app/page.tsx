@@ -6,7 +6,8 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
-import courses from "@/lib/data/courses.json"
+import { useWeeklyCalendar, useNextClass } from "@/lib/hooks/useCalendar"
+import { useBalance } from "@/lib/hooks/useWallet"
 
 const carouselImages = [
   {
@@ -42,17 +43,43 @@ export default function DashboardPage() {
   const autoTransitionRef = useRef<NodeJS.Timeout | null>(null)
 
   const [isDragging, setIsDragging] = useState(false)
-  const [walletBalance, setWalletBalance] = useState<number | null>(null)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("wallet_balance")
-      if (raw != null) setWalletBalance(Number(raw))
-    } catch {}
-  }, [])
   const [dragStart, setDragStart] = useState(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const carouselRef = useRef<HTMLDivElement>(null)
+
+  // Usar hooks del backend para obtener datos reales
+  const { balance, isLoading: balanceLoading } = useBalance()
+  const { nextClass, isLoading: nextClassLoading } = useNextClass()
+
+  // Calcular fechas para la semana actual usando enero 2025
+  const getCurrentWeekRange = () => {
+    // Usar fechas fijas de enero 2025 para evitar problemas de zona horaria
+    const january2025Weeks = [
+      { start: '2025-01-06', end: '2025-01-12' }, // Semana 1
+      { start: '2025-01-13', end: '2025-01-19' }, // Semana 2 (actual)
+      { start: '2025-01-20', end: '2025-01-26' }, // Semana 3
+      { start: '2025-01-27', end: '2025-01-31' }  // Semana 4
+    ]
+    
+    const weekIndex = Math.max(0, Math.min(currentWeek + 1, january2025Weeks.length - 1))
+    const selectedWeek = january2025Weeks[weekIndex]
+    
+    console.log('🔍 getCurrentWeekRange Debug:', {
+      currentWeek,
+      weekIndex,
+      selectedWeek
+    })
+    
+    return selectedWeek
+  }
+
+  const weekRange = getCurrentWeekRange()
+  const { events: weeklyEvents, isLoading: eventsLoading } = useWeeklyCalendar(weekRange.start, weekRange.end)
+
+  // Debug: Log de eventos recibidos
+  console.log('🔍 Dashboard - Eventos semanales recibidos:', weeklyEvents)
+  console.log('📅 Dashboard - Rango de semana:', weekRange)
 
 
   const startAutoTransition = () => {
@@ -143,33 +170,46 @@ export default function DashboardPage() {
   const getNextSlide = () => (currentSlide + 1) % carouselImages.length
 
   const getCurrentWeekDays = () => {
-    const today = new Date()
-    const currentDayOfWeek = today.getDay() // 0 = Sunday, 1 = Monday, etc.
-    const mondayOffset = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek // Calculate Monday of current week
-    
-    const monday = new Date(today)
-    monday.setDate(today.getDate() + mondayOffset + (currentWeek * 7))
-
-    const weekDays = [
-      { day: "LUN", dayIndex: 1 },
-      { day: "MAR", dayIndex: 2 },
-      { day: "MIÉ", dayIndex: 3 },
-      { day: "JUE", dayIndex: 4 },
-      { day: "VIE", dayIndex: 5 },
-      { day: "SÁB", dayIndex: 6 },
-      { day: "DOM", dayIndex: 0 },
+    // Usar fechas fijas de enero 2025 para evitar problemas de zona horaria
+    const january2025Weeks = [
+      [
+        { day: "LUN", date: 6, fullDate: new Date('2025-01-06') },
+        { day: "MAR", date: 7, fullDate: new Date('2025-01-07') },
+        { day: "MIÉ", date: 8, fullDate: new Date('2025-01-08') },
+        { day: "JUE", date: 9, fullDate: new Date('2025-01-09') },
+        { day: "VIE", date: 10, fullDate: new Date('2025-01-10') },
+        { day: "SÁB", date: 11, fullDate: new Date('2025-01-11') },
+        { day: "DOM", date: 12, fullDate: new Date('2025-01-12') }
+      ],
+      [
+        { day: "LUN", date: 13, fullDate: new Date('2025-01-13') },
+        { day: "MAR", date: 14, fullDate: new Date('2025-01-14') },
+        { day: "MIÉ", date: 15, fullDate: new Date('2025-01-15') },
+        { day: "JUE", date: 16, fullDate: new Date('2025-01-16') },
+        { day: "VIE", date: 17, fullDate: new Date('2025-01-17') },
+        { day: "SÁB", date: 18, fullDate: new Date('2025-01-18') },
+        { day: "DOM", date: 19, fullDate: new Date('2025-01-19') }
+      ],
+      [
+        { day: "LUN", date: 20, fullDate: new Date('2025-01-20') },
+        { day: "MAR", date: 21, fullDate: new Date('2025-01-21') },
+        { day: "MIÉ", date: 22, fullDate: new Date('2025-01-22') },
+        { day: "JUE", date: 23, fullDate: new Date('2025-01-23') },
+        { day: "VIE", date: 24, fullDate: new Date('2025-01-24') },
+        { day: "SÁB", date: 25, fullDate: new Date('2025-01-25') },
+        { day: "DOM", date: 26, fullDate: new Date('2025-01-26') }
+      ]
     ]
-
-    return weekDays.map((item, index) => {
-      const dayDate = new Date(monday)
-      dayDate.setDate(monday.getDate() + index)
-      return {
-        ...item,
-        date: dayDate.getDate(),
-        fullDate: dayDate,
-        isToday: dayDate.toDateString() === today.toDateString(),
-      }
-    })
+    
+    const weekIndex = Math.max(0, Math.min(currentWeek + 1, january2025Weeks.length - 1))
+    const selectedWeek = january2025Weeks[weekIndex]
+    
+    const today = new Date('2025-01-18') // Fecha fija para "hoy"
+    
+    return selectedWeek.map((item) => ({
+      ...item,
+      isToday: item.fullDate.toDateString() === today.toDateString(),
+    }))
   }
 
   const nextWeek = () => {
@@ -188,79 +228,33 @@ export default function DashboardPage() {
 
   const weekDays = getCurrentWeekDays()
 
-  const parseDdMmYyyy = (str: string) => {
-    const [dd, mm, yyyy] = str.split("/").map((s) => parseInt(s, 10))
-    return new Date(yyyy, mm - 1, dd)
-  }
+  // Debug: Log de días de la semana generados
+  console.log('📅 Dashboard - Días de la semana:', weekDays.map(d => ({
+    day: d.day,
+    date: d.date,
+    fullDate: d.fullDate.toISOString().split('T')[0],
+    dayOfWeek: d.fullDate.getDay(),
+    dayName: ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'][d.fullDate.getDay()]
+  })))
 
-  const spanishDayToIndex: Record<string, number> = {
-    LUNES: 1,
-    MARTES: 2,
-    MIÉRCOLES: 3,
-    JUEVES: 4,
-    VIERNES: 5,
-    SÁBADO: 6,
-    DOMINGO: 0,
-  }
-
-  const getNextClassDate = (course: any, fromDate: Date) => {
-    const [startStr, endStr] = (course.dates as string).split(" - ")
-    const start = parseDdMmYyyy(startStr)
-    const end = parseDdMmYyyy(endStr)
-    const targetDow = spanishDayToIndex[course.day]
-    if (isNaN(targetDow)) return null
-
-    // base date cannot be before start
-    const base = new Date(Math.max(fromDate.getTime(), start.getTime()))
-
-    // move to next occurrence of course weekday
-    const delta = (targetDow - base.getDay() + 7) % 7
-    const next = new Date(base)
-    next.setDate(base.getDate() + delta)
-
-    if (next > end) return null
-    return next
-  }
-
-  const today = new Date()
-  const nextClasses = (courses as any[])
-    .map((c) => ({ course: c, date: getNextClassDate(c, today) }))
-    .filter((x) => x.date) as { course: any; date: Date }[]
-  nextClasses.sort((a, b) => a.date.getTime() - b.date.getTime())
-  const upcoming = nextClasses[0] || null
-
-  // Eventos del día seleccionado
+  // Eventos del día seleccionado usando datos del backend
   const selectedFullDate = weekDays.find((d) => d.date === selectedDate)?.fullDate
   const selectedEvents: EventType[] = selectedFullDate
-    ? (courses as any[])
-        .filter((c) => {
-          const [startStr, endStr] = (c.dates as string).split(" - ")
-          const start = parseDdMmYyyy(startStr)
-          const end = parseDdMmYyyy(endStr)
-          const dow = spanishDayToIndex[c.day]
-          return (
-            selectedFullDate >= start &&
-            selectedFullDate <= end &&
-            selectedFullDate.getDay() === dow
-          )
-        })
-        .map((c) => ({
-          time: (c.schedule as string).split("-")[0].trim(),
-          title: c.title as string,
-          type: "class" as const,
+    ? weeklyEvents.filter((event) => event.date === selectedFullDate.toISOString().split('T')[0])
+        .map((event) => ({
+          time: event.time,
+          title: event.title,
+          type: event.type as "class" | "meeting" | "exam",
         }))
     : []
 
-  // Tipos de eventos por día de la semana (para los puntitos)
+  // Tipos de eventos por día de la semana (para los puntitos) usando datos del backend
   const getEventTypesForDate = (date: Date): Set<string> => {
     const types = new Set<string>()
-    ;(courses as any[]).forEach((c) => {
-      const [startStr, endStr] = (c.dates as string).split(" - ")
-      const start = parseDdMmYyyy(startStr)
-      const end = parseDdMmYyyy(endStr)
-      const dow = spanishDayToIndex[c.day]
-      if (date >= start && date <= end && date.getDay() === dow) {
-        types.add("class")
+    const dateStr = date.toISOString().split('T')[0]
+    weeklyEvents.forEach((event) => {
+      if (event.date === dateStr) {
+        types.add(event.type)
       }
     })
     return types
@@ -517,7 +511,9 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3 mb-6">
-                {selectedEvents.length > 0 ? (
+                {eventsLoading ? (
+                  <div className="text-center py-4 text-gray-500 text-sm">Cargando eventos...</div>
+                ) : selectedEvents.length > 0 ? (
                   selectedEvents.map((event: EventType, index: number) => (
                     <div
                       key={index}
@@ -574,32 +570,36 @@ export default function DashboardPage() {
               </div>
 
               <div className="border-l-4 border-slate-600 pl-4">
-                {upcoming ? (
+                {nextClassLoading ? (
+                  <div className="text-sm text-gray-500">Cargando próxima clase...</div>
+                ) : nextClass ? (
                   <>
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-4 w-4 text-slate-600" />
-                      <h3 className="font-semibold text-lg text-slate-800">{upcoming.course.title}</h3>
+                      <h3 className="font-semibold text-lg text-slate-800">{nextClass.title}</h3>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                      <span>{upcoming.course.code}</span>
+                      <span>{nextClass.courseTitle}</span>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                        <span className="text-xs text-gray-500 uppercase tracking-wide">{upcoming.course.location}</span>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">{nextClass.classroom} - {nextClass.sede}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
                       <Calendar className="h-4 w-4 text-gray-500" />
                       <span className="font-medium text-slate-700">
-                        {upcoming.date.toDateString() === today.toDateString()
+                        {nextClass.daysUntil === 0 
                           ? "Hoy"
-                          : upcoming.date.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
+                          : nextClass.daysUntil === 1
+                            ? "Mañana"
+                            : `En ${nextClass.daysUntil} días`}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Clock className="h-4 w-4 text-gray-500" />
-                      <span>{upcoming.course.schedule}</span>
+                      <span>{nextClass.time}</span>
                     </div>
                   </>
                 ) : (
@@ -613,12 +613,16 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
+                {balanceLoading ? (
+                  <div className="text-2xl md:text-4xl font-bold text-gray-400">Cargando...</div>
+                ) : (
                 <AnimatedBalance 
-                  amount={walletBalance ?? 0} 
+                    amount={balance ?? 0} 
                   className="text-2xl md:text-4xl font-bold text-gray-900"
                   animated={false}
                   neutral={true}
                 />
+                )}
               </div>
 
               <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">

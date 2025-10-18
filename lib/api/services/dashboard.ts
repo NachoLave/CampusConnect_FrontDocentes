@@ -2,6 +2,7 @@ import { CarouselImage, ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
 import carouselData from '@/lib/data/carousel.json'
+import { WalletService } from './wallet'
 
 export class DashboardService {
   // Obtener imágenes del carrusel
@@ -26,8 +27,10 @@ export class DashboardService {
     todayReservation: any
     announcements: any[]
   }>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 600))
+    try {
+      // Obtener balance real del backend
+      const balanceResponse = await WalletService.getBalance()
+      const realBalance = balanceResponse.success ? balanceResponse.data : 0
       
       const dashboardData = {
         carouselImages: carouselData as CarouselImage[],
@@ -38,7 +41,7 @@ export class DashboardService {
           date: "Hoy",
           schedule: "14:00 - 18:00"
         },
-        balance: 8235.50,
+        balance: realBalance, // Usar balance real del backend
         todayReservation: {
           date: "Hoy",
           time: "9:00 - 11:00"
@@ -57,17 +60,16 @@ export class DashboardService {
       return {
         data: dashboardData,
         success: true,
-        message: 'Datos del dashboard obtenidos correctamente'
+        message: 'Datos del dashboard obtenidos correctamente desde el backend'
+      }
+    } catch (error) {
+      console.error('Error obteniendo datos del dashboard:', error)
+      return {
+        data: null as any,
+        success: false,
+        message: 'No se pudieron obtener los datos del dashboard'
       }
     }
-
-    return apiClient.get<{
-      carouselImages: CarouselImage[]
-      nextClass: any
-      balance: number
-      todayReservation: any
-      announcements: any[]
-    }>(API_CONFIG.ENDPOINTS.DASHBOARD_DATA)
   }
 
   // Obtener estadísticas rápidas
@@ -77,29 +79,31 @@ export class DashboardService {
     thisWeekClasses: number
     balance: number
   }>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 400))
+    try {
+      // Obtener balance real del backend
+      const balanceResponse = await WalletService.getBalance()
+      const realBalance = balanceResponse.success ? balanceResponse.data : 0
       
       const stats = {
         totalCourses: 7,
         todayClasses: 2,
         thisWeekClasses: 12,
-        balance: 8235.50
+        balance: realBalance // Usar balance real del backend
       }
 
       return {
         data: stats,
         success: true,
-        message: 'Estadísticas rápidas obtenidas correctamente'
+        message: 'Estadísticas rápidas obtenidas correctamente desde el backend'
+      }
+    } catch (error) {
+      console.error('Error obteniendo estadísticas rápidas:', error)
+      return {
+        data: null as any,
+        success: false,
+        message: 'No se pudieron obtener las estadísticas rápidas'
       }
     }
-
-    return apiClient.get<{
-      totalCourses: number
-      todayClasses: number
-      thisWeekClasses: number
-      balance: number
-    }>(`${API_CONFIG.ENDPOINTS.DASHBOARD_DATA}/stats`)
   }
 
   // Obtener anuncios

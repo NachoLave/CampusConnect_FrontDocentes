@@ -11,19 +11,32 @@ export interface Course {
   id: number
   title: string
   day: string
-  dayColor: string
+  dayColor?: string
   code: string
   students: number
   teachers: Teacher[]
-  shift: 'TM' | 'TT' | 'TN'
-  shiftColor: string
+  shift: string // 'Mañana' | 'Tarde' | 'Noche'
+  shiftColor?: string
   schedule: string
-  dates: string
+  dates?: string
   period: string
-  location: string
+  location?: string
   sede: string
-  isVirtual: boolean
-  image: string
+  isVirtual?: boolean
+  image?: string
+  // Campos adicionales del backend
+  modality?: string
+  classroom?: string
+  professor?: string
+  credits?: number
+  description?: string
+  status?: string
+  // Información automática agregada por el frontend
+  horarioInicio?: string
+  horarioFin?: string
+  turnoAbreviacion?: string
+  fechaInicio?: string
+  fechaFin?: string
 }
 
 export interface Event {
@@ -90,4 +103,55 @@ export interface CourseFilters {
 export interface LoadingState {
   isLoading: boolean
   error: string | null
+}
+
+// Tipos para autenticación
+export interface AuthUser {
+  id: number
+  name: string
+  email: string
+  avatar?: string
+  roles: string[]
+  department?: string
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+
+export interface AuthResponse {
+  user: AuthUser
+  token: string
+  refreshToken?: string
+}
+
+// Tipos para tienda
+export interface StoreOrder {
+  id: string
+  orderNumber: string
+  date: string
+  status: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED'
+  total: number
+  items: StoreOrderItem[]
+  paymentMethod: string
+  deliveryAddress?: string
+  notes?: string
+}
+
+export interface StoreOrderItem {
+  id: string
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+  category: string
+}
+
+export interface StoreOrderSummary {
+  totalOrders: number
+  totalSpent: number
+  pendingOrders: number
+  deliveredOrders: number
 }

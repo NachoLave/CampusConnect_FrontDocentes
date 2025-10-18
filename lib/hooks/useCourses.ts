@@ -145,6 +145,51 @@ export function useCourse(id: number) {
   }
 }
 
+export function useCoursesByPeriod(term: string, includePrevious: boolean = false) {
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    isLoading: true,
+    error: null
+  })
+
+  const fetchCoursesByPeriod = useCallback(async () => {
+    setLoadingState({ isLoading: true, error: null })
+    
+    try {
+      const response = await CoursesService.getCoursesByPeriod(term, includePrevious)
+      
+      if (response.success) {
+        setCourses(response.data)
+      } else {
+        setLoadingState({ 
+          isLoading: false, 
+          error: response.error || 'Error al cargar cursos del período' 
+        })
+        return
+      }
+    } catch (error) {
+      setLoadingState({ 
+        isLoading: false, 
+        error: 'Error inesperado al cargar cursos del período' 
+      })
+      return
+    }
+
+    setLoadingState({ isLoading: false, error: null })
+  }, [term, includePrevious])
+
+  useEffect(() => {
+    fetchCoursesByPeriod()
+  }, [fetchCoursesByPeriod])
+
+  return {
+    courses,
+    isLoading: loadingState.isLoading,
+    error: loadingState.error,
+    refetch: fetchCoursesByPeriod
+  }
+}
+
 export function useCourseOptions() {
   const [sedes, setSedes] = useState<string[]>([])
   const [days, setDays] = useState<string[]>([])
