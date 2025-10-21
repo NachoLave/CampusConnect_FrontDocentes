@@ -71,7 +71,9 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   )
 
   // Usar cursos del backend o fallback a datos mock
+  // Si hay error pero tenemos datos mock, usar los mock sin mostrar error
   const allCourses = backendCourses.length > 0 ? backendCourses : coursesData
+  const shouldShowError = error && backendCourses.length === 0
   
   // Debug logs
   console.log('🔍 CoursesGrid Debug:', {
@@ -80,6 +82,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     allCourses: allCourses.length,
     isLoading,
     error,
+    shouldShowError,
     includePrevious
   })
   
@@ -295,14 +298,14 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       )}
 
       {/* Error State */}
-      {error && !isLoading && (
+      {shouldShowError && !isLoading && (
         <div className="text-center py-8 lg:py-12">
           <div className="text-red-400 mb-2">
             <Filter className="h-10 w-10 lg:h-12 lg:w-12 mx-auto" />
           </div>
           <h3 className="text-base lg:text-lg font-medium text-gray-900 mb-1">Error al cargar cursos</h3>
           <p className="text-sm lg:text-base text-gray-500">{error}</p>
-          <p className="text-xs text-gray-400 mt-2">Mostrando datos de respaldo</p>
+          <p className="text-xs text-gray-400 mt-2">No se pudieron cargar los datos del servidor</p>
         </div>
       )}
 

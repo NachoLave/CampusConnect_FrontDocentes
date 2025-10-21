@@ -4,64 +4,34 @@ import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, X, Filter, ChevronDown } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-range-picker"
+import { useCanteenReservations } from '@/lib/hooks'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-interface DiningReservation {
-  id: string
-  fecha: string
-  tipoReserva: string
-  horario: string
-  sede: string
-  total: string
-  estado: "Finalizado" | "Cancelado" | "Pendiente"
+const formatDate = (iso: string) => {
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return format(d, 'dd/MM/yyyy', { locale: es })
+  } catch { return iso }
 }
 
-const currentYear = new Date().getFullYear()
-const mockReservations: DiningReservation[] = [
-  {
-    id: "1",
-    fecha: `05/09/${currentYear}`,
-    tipoReserva: "ALMUERZO",
-    horario: "13:00 - 14:00",
-    sede: "Belgrano",
-    total: "$25.000",
-    estado: "Finalizado",
-  },
-  {
-    id: "2",
-    fecha: `08/09/${currentYear}`,
-    tipoReserva: "DESAYUNO",
-    horario: "8:00 - 9:00",
-    sede: "Belgrano",
-    total: "$10.000",
-    estado: "Cancelado",
-  },
-  {
-    id: "3",
-    fecha: `12/09/${currentYear}`,
-    tipoReserva: "CENA",
-    horario: "20:00 - 21:00",
-    sede: "Centro",
-    total: "$27.000",
-    estado: "Pendiente",
-  },
-  {
-    id: "4",
-    fecha: `18/09/${currentYear}`,
-    tipoReserva: "MERIENDA",
-    horario: "17:00 - 18:00",
-    sede: "Belgrano",
-    total: "$18.000",
-    estado: "Finalizado",
-  },
-]
-
 export default function ComedorPage() {
+  const { reservations, isLoading, error, refetch } = useCanteenReservations()
   const [fromDate, setFromDate] = useState<Date | null>(null)
   const [toDate, setToDate] = useState<Date | null>(null)
   const [tipos, setTipos] = useState<string[]>([])
   const [estados, setEstados] = useState<string[]>([])
   const [showTipoFilter, setShowTipoFilter] = useState(false)
   const [showEstadoFilter, setShowEstadoFilter] = useState(false)
+
+  // Debug logs
+  console.log('🍽️ ComedorPage - Estado:', { 
+    reservations: reservations.length, 
+    isLoading, 
+    error,
+    reservationsData: reservations 
+  })
 
   // Cerrar filtros al hacer click afuera
   useEffect(() => {
@@ -97,13 +67,24 @@ export default function ComedorPage() {
   }
 
   const filteredReservations = useMemo(() => {
-    return mockReservations.filter((reservation) => {
-      const reservationDate = convertDateForComparison(reservation.fecha)
+    console.log('🔍 Filtrado - Reservas originales:', reservations.length)
+    console.log('🔍 Filtros aplicados:', { fromDate, toDate, tipos, estados })
+    
+    const filtered = reservations.filter((reservation) => {
+      const reservationDate = convertDateForComparison(formatDate(reservation.date))
+      console.log('🔍 Procesando reserva:', { 
+        id: reservation.id, 
+        date: reservation.date, 
+        formattedDate: reservationDate,
+        type: reservation.type,
+        status: reservation.status 
+      })
 
       // Date filtering - Desde (mayor o igual)
       if (fromDate) {
         const fromDateStr = fromDate.toISOString().split('T')[0]
         if (reservationDate < fromDateStr) {
+          console.log('❌ Filtrado por fecha desde:', reservationDate, '<', fromDateStr)
           return false
         }
       }
@@ -112,6 +93,7 @@ export default function ComedorPage() {
       if (toDate) {
         const toDateStr = toDate.toISOString().split('T')[0]
         if (reservationDate > toDateStr) {
+          console.log('❌ Filtrado por fecha hasta:', reservationDate, '>', toDateStr)
           return false
         }
       }
@@ -119,22 +101,32 @@ export default function ComedorPage() {
       // Type filtering
       if (tipos.length > 0) {
         const matchesTipo = tipos.some(tipo => 
-          reservation.tipoReserva.toUpperCase() === tipo.toUpperCase()
+          (reservation.type || '').toUpperCase() === tipo.toUpperCase()
         )
-        if (!matchesTipo) return false
+        if (!matchesTipo) {
+          console.log('❌ Filtrado por tipo:', reservation.type, 'no coincide con', tipos)
+          return false
+        }
       }
 
       // Status filtering
       if (estados.length > 0) {
         const matchesEstado = estados.some(estado => 
-          reservation.estado.toLowerCase() === estado.toLowerCase()
+          (reservation.status || '').toLowerCase() === estado.toLowerCase()
         )
-        if (!matchesEstado) return false
+        if (!matchesEstado) {
+          console.log('❌ Filtrado por estado:', reservation.status, 'no coincide con', estados)
+          return false
+        }
       }
 
+      console.log('✅ Reserva pasa todos los filtros')
       return true
     })
-  }, [fromDate, toDate, tipos, estados])
+    
+    console.log('🔍 Reservas filtradas:', filtered.length)
+    return filtered
+  }, [reservations, fromDate, toDate, tipos, estados])
 
   const toggleTipo = (tipo: string) => {
     setTipos(prev => 
@@ -449,7 +441,7 @@ export default function ComedorPage() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sede</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total
+                  Menú
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
@@ -457,26 +449,68 @@ export default function ComedorPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredReservations.map((reservation) => (
-                <tr key={reservation.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.fecha}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {reservation.tipoReserva}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.horario}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.sede}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{reservation.total}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={getStatusColor(reservation.estado)}>{reservation.estado}</span>
-                  </td>
-                </tr>
-              ))}
-              {filteredReservations.length === 0 && (
+              {isLoading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No se encontraron reservas que coincidan con los filtros aplicados.
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      <span>Cargando reservas...</span>
+                    </div>
                   </td>
                 </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-red-500">
+                    <div className="space-y-2">
+                      <p>Error al cargar las reservas: {error}</p>
+                      <button 
+                        onClick={refetch}
+                        className="text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredReservations.length === 0 && reservations.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <div className="space-y-2">
+                      <p>No hay reservas disponibles.</p>
+                      <p className="text-sm">Las reservas aparecerán aquí una vez que hagas alguna.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredReservations.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <div className="space-y-2">
+                      <p>No se encontraron reservas que coincidan con los filtros aplicados.</p>
+                      <p className="text-sm">Total de reservas: {reservations.length}</p>
+                      <button 
+                        onClick={clearFilters}
+                        className="text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Limpiar filtros
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredReservations.map((reservation) => (
+                  <tr key={reservation.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(reservation.date)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {reservation.type}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.timeRange || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.sede || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{reservation.total || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={getStatusColor(reservation.status)}>{reservation.status}</span>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

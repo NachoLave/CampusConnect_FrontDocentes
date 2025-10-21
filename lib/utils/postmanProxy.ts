@@ -28,8 +28,6 @@ class PostmanProxy {
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive'
       }
-
-      console.log(`📡 Llamando al backend real: ${url}`)
       
       const response = await fetch(url, {
         method: 'GET',
@@ -37,17 +35,18 @@ class PostmanProxy {
       })
 
       if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
+        const errorText = await response.text()
+        throw new Error(`Error del servidor: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
+      
       this.balance = data.balance
       this.lastUpdate = Date.now()
       
-      console.log(`✅ Balance obtenido del backend real: $${this.balance}`)
       return this.balance
     } catch (error) {
-      console.error('❌ Error obteniendo balance del backend:', error)
+      console.error('Error obteniendo balance del backend:', error)
       throw error
     }
   }

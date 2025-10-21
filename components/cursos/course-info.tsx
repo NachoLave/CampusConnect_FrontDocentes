@@ -2749,5 +2749,5 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     </div>
   )
 }
-
 export { CourseInfo }
+

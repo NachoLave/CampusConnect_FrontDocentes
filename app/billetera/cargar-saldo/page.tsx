@@ -6,9 +6,11 @@ import { ArrowLeft, CreditCard, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Image from "next/image"
+import { useWalletActions } from "@/lib/hooks/useWallet"
 
 export default function CargarSaldoPage() {
   const router = useRouter()
+  const { creditBalance, isLoading, error } = useWalletActions()
   const [cardNumber, setCardNumber] = useState("")
   const [cardName, setCardName] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
@@ -67,26 +69,34 @@ export default function CargarSaldoPage() {
     }
   }
 
-  const handleLoadSaldo = () => {
+  const handleLoadSaldo = async () => {
     // Validación
     const newErrors = {
       cardNumber: !cardNumber.trim(),
       cardName: !cardName.trim(),
       cardExpiry: !cardExpiry.trim(),
       cardCvc: !cardCvc.trim(),
-      amount: !amount.trim(),
+      amount: !amount.trim() || parseFloat(amount) <= 0,
     }
     setErrors(newErrors)
 
     // Si hay algún error, no continuar
     if (Object.values(newErrors).some(Boolean)) return
 
-    // Animación y redirección
-    setSuccess(true)
-    setTimeout(() => {
-      setSuccess(false)
-      router.push("/billetera")
-    }, 1500)
+    // Acreditar saldo usando el método del servicio
+    const result = await creditBalance(parseFloat(amount), 1010)
+    
+    if (result) {
+      // Animación de éxito y redirección
+      setSuccess(true)
+      setTimeout(() => {
+        setSuccess(false)
+        router.push("/billetera")
+      }, 1500)
+    } else {
+      // Mostrar error si falla la acreditación
+      console.error('Error al acreditar saldo:', error)
+    }
   }
 
   return (
@@ -200,9 +210,18 @@ export default function CargarSaldoPage() {
           <Button
             className="w-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center"
             onClick={handleLoadSaldo}
+            disabled={isLoading}
           >
-            <CreditCard className="h-4 w-4 mr-2" /> Cargar saldo
+            <CreditCard className="h-4 w-4 mr-2" /> 
+            {isLoading ? "Procesando..." : "Cargar saldo"}
           </Button>
+
+          {/* Mensaje de error */}
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
         </div>
 
         {/* Tarjeta Preview */}

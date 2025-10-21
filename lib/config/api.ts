@@ -9,6 +9,7 @@ export const API_CONFIG = {
     ME: '/api/auth/me',
     
     // Cursos del docente
+    COURSES: '/teaching/courses',
     MY_COURSES: '/teaching/courses/mine',
     COURSE_DETAIL: (id: number) => `/teaching/courses/${id}`,
     COURSE_ROSTER: (id: number) => `/teaching/courses/${id}/roster`,
@@ -53,4 +54,4 @@ export const DEFAULT_HEADERS = {
 
 // Configuración para desarrollo (mock)
 export const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
-export const USE_MOCK_DATA = false // Forzar uso de datos reales del backend
+export const USE_MOCK_DATA = true // Usar datos mock durante desarrollo

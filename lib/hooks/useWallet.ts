@@ -213,9 +213,35 @@ export function useWalletActions() {
     }
   }, [])
 
+  const creditBalance = useCallback(async (amount: number, teacherId: number = 1010) => {
+    setLoadingState({ isLoading: true, error: null })
+    
+    try {
+      const response = await WalletService.creditBalance(amount, teacherId)
+      
+      if (response.success) {
+        setLoadingState({ isLoading: false, error: null })
+        return response.data
+      } else {
+        setLoadingState({ 
+          isLoading: false, 
+          error: response.error || 'Error al acreditar saldo' 
+        })
+        return null
+      }
+    } catch (error) {
+      setLoadingState({ 
+        isLoading: false, 
+        error: 'Error inesperado al acreditar saldo' 
+      })
+      return null
+    }
+  }, [])
+
   return {
     loadBalance,
     makePayment,
+    creditBalance,
     isLoading: loadingState.isLoading,
     error: loadingState.error
   }

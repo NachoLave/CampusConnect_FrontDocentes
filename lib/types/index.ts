@@ -142,6 +142,7 @@ export interface StoreOrder {
 export interface StoreOrderItem {
   id: string
   productId: string
+  product?: string  // Nombre del producto desde el backend
   productName: string
   quantity: number
   unitPrice: number
@@ -154,4 +155,15 @@ export interface StoreOrderSummary {
   totalSpent: number
   pendingOrders: number
   deliveredOrders: number
+}
+
+// Tipos para comedor
+export interface CanteenReservation {
+  id: string
+  date: string
+  type: string // ALMUERZO | DESAYUNO | CENA | MERIENDA
+  timeRange?: string
+  sede?: string
+  total?: number
+  status: 'Finalizado' | 'Cancelado' | 'Pendiente'
 }
