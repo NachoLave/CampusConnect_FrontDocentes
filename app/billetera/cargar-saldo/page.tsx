@@ -1,44 +1,54 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, CreditCard } from "lucide-react"
+import { useRouter } from "next/navigation" 
+import { ArrowLeft, CreditCard, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Image from "next/image"
 
 export default function CargarSaldoPage() {
+  const router = useRouter()
   const [cardNumber, setCardNumber] = useState("")
   const [cardName, setCardName] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvc, setCardCvc] = useState("")
   const [amount, setAmount] = useState("")
   const [cardType, setCardType] = useState<"VISA" | "MASTERCARD" | "">("")
+  const [focusCvc, setFocusCvc] = useState(false)
+  const [success, setSuccess] = useState(false)
 
-  // 🟦 Detectar tipo y formatear número
+  // Logos
+  const cardLogos: Record<string, string> = {
+    VISA: "/images/visa-logo.png",
+    MASTERCARD: "/images/mastercard-logo.png",
+    "": "/images/default.png",
+  }
+
+  // Detectar tipo
   const handleCardNumberChange = (value: string) => {
-    const formatted = value
-      .replace(/\D/g, "")
-      .replace(/(\d{4})(?=\d)/g, "$1 ")
-      .trim()
-
     const clean = value.replace(/\D/g, "")
     if (/^4/.test(clean)) setCardType("VISA")
     else if (/^5[1-5]/.test(clean)) setCardType("MASTERCARD")
     else setCardType("")
-
+    const formatted = value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ").trim()
     setCardNumber(formatted)
   }
 
-  // 🟦 Formatear vencimiento (MM/AA)
+  // Formatear vencimiento
   const handleExpiryChange = (value: string) => {
     let formatted = value.replace(/\D/g, "")
-    if (formatted.length >= 3) {
-      formatted = `${formatted.slice(0, 2)}/${formatted.slice(2, 4)}`
-    }
+    if (formatted.length >= 3) formatted = `${formatted.slice(0, 2)}/${formatted.slice(2, 4)}`
     setCardExpiry(formatted)
   }
 
-  // 🟦 Cambiar color según tipo
+  // Limitar nombre
+  const handleCardNameChange = (value: string) => {
+    if (value.length <= 20) setCardName(value.toUpperCase())
+    else setCardName(value.slice(0, 20).toUpperCase())
+  }
+
+  // Fondo por tipo
   const getCardBackground = () => {
     switch (cardType) {
       case "VISA":
@@ -46,13 +56,21 @@ export default function CargarSaldoPage() {
       case "MASTERCARD":
         return "from-red-600 to-orange-500"
       default:
-        return "from-indigo-600 to-purple-600"
+        return "bg-slate-800" // mismo color que botón
     }
   }
 
+  const handleLoadSaldo = () => {
+    setSuccess(true)
+    setTimeout(() => {
+      setSuccess(false)
+      router.push("/billetera") // <-- redirige después de animación
+    }, 1500) // duración animación
+  }
+
   return (
-    <div className="max-w-5xl mx-auto font-sans">
-      {/* Back Button */}
+    <div className="max-w-5xl mx-auto font-sans p-6">
+      {/* Back */}
       <div className="mb-6">
         <Link href="/billetera">
           <Button variant="ghost" className="flex items-center text-gray-600 hover:text-gray-900">
@@ -62,140 +80,160 @@ export default function CargarSaldoPage() {
         </Link>
       </div>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Acreditar saldo</h1>
-        <p className="text-gray-600">Completá los datos de tu tarjeta para cargar saldo en tu cuenta.</p>
-      </div>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Acreditar saldo</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left Side - Card Preview */}
-        <div className="relative flex items-center justify-center">
-          <div
-            className={`w-96 h-56 rounded-2xl bg-gradient-to-br ${getCardBackground()} text-white p-6 shadow-xl transition-all duration-500 transform`}
-          >
-            <div className="flex justify-between items-center mb-6">
-              <div className="text-sm tracking-wider uppercase">
-                {cardType || "Tarjeta"}
-              </div>
-              {cardType && (
-                <Image
-                  src={
-                    cardType === "VISA"
-                      ? "/images/visa-logo.png"
-                      : "/images/mastercard-logo.png"
-                  }
-                  alt={cardType}
-                  width={50}
-                  height={30}
-                  className="object-contain"
-                />
-              )}
-            </div>
-
-            <div className="text-2xl font-mono tracking-widest mb-6">
-              {cardNumber || "•••• •••• •••• ••••"}
-            </div>
-
-            <div className="flex justify-between items-end text-sm">
-              <div>
-                <div className="text-gray-300 uppercase text-xs">Titular</div>
-                <div className="font-semibold text-base">{cardName || "NOMBRE APELLIDO"}</div>
-              </div>
-
-              <div className="text-right">
-                <div className="text-gray-300 uppercase text-xs">Vencimiento</div>
-                <div className="font-semibold text-base">{cardExpiry || "MM/AA"}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Side - Form */}
+        {/* Formulario */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 space-y-6">
-          {/* Número de tarjeta */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Número de tarjeta</label>
-            <div className="relative">
+          <div className="space-y-4">
+            {/* Número */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Número de tarjeta</label>
+              <div className="flex items-center border border-gray-300 rounded-lg px-3 py-2">
+                <input
+                  type="text"
+                  value={cardNumber}
+                  onChange={(e) => handleCardNumberChange(e.target.value)}
+                  maxLength={19}
+                  placeholder="1234 5678 9012 3456"
+                  className="flex-1 focus:outline-none"
+                  onFocus={() => setFocusCvc(false)}
+                />
+                {cardType && (
+                  <Image src={cardLogos[cardType]} alt={cardType} width={40} height={25} />
+                )}
+              </div>
+            </div>
+
+            {/* Nombre */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del titular</label>
               <input
                 type="text"
-                value={cardNumber}
-                onChange={(e) => handleCardNumberChange(e.target.value)}
-                maxLength={19}
-                placeholder="1234 5678 9012 3456"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={cardName}
+                onChange={(e) => handleCardNameChange(e.target.value)}
+                placeholder="Nombre Apellido"
+                maxLength={20}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                onFocus={() => setFocusCvc(false)}
               />
-              {cardType && (
-                <div className="absolute right-3 top-2.5">
-                  <Image
-                    src={
-                      cardType === "VISA"
-                        ? "/images/visa-logo.png"
-                        : "/images/mastercard-logo.png"
-                    }
-                    alt={cardType}
-                    width={40}
-                    height={25}
-                  />
+            </div>
+
+            {/* Vencimiento + CVC */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vencimiento</label>
+                <input
+                  type="text"
+                  value={cardExpiry}
+                  onChange={(e) => handleExpiryChange(e.target.value)}
+                  placeholder="MM/AA"
+                  maxLength={5}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  onFocus={() => setFocusCvc(false)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
+                <input
+                  type="text"
+                  value={cardCvc}
+                  onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="123"
+                  maxLength={4}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  onFocus={() => setFocusCvc(true)}
+                  onBlur={() => setFocusCvc(false)}
+                />
+              </div>
+            </div>
+
+            {/* Monto a cargar */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Monto a cargar</label>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="$0.00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <Button
+            className="w-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center"
+            onClick={handleLoadSaldo}
+          >
+            <CreditCard className="h-4 w-4 mr-2" /> Cargar saldo
+          </Button>
+        </div>
+
+        {/* Tarjeta Preview */}
+        <div className="flex justify-center items-center">
+          <div className="w-96 h-56 perspective" style={{ perspective: "1000px" }}>
+            <div
+              className={`relative w-full h-full rounded-2xl shadow-xl transition-transform duration-700 transform ${
+                focusCvc ? "rotate-y-180" : ""
+              }`}
+              style={{ transformStyle: "preserve-3d" }}
+            >
+              {/* Front */}
+              <div
+                className={`absolute w-full h-full p-6 flex flex-col justify-between rounded-2xl ${
+                  cardType ? `bg-gradient-to-br ${getCardBackground()}` : "bg-slate-800"
+                } text-white`}
+                style={{ backfaceVisibility: "hidden" }}
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <div className="text-sm tracking-wider uppercase">{cardType || "Tarjeta"}</div>
+                  {cardType && (
+                    <Image
+                      src={cardLogos[cardType]}
+                      alt={cardType}
+                      width={50}
+                      height={30}
+                      className="object-contain"
+                    />
+                  )}
+                </div>
+                <div className="text-2xl font-mono tracking-widest mb-6">
+                  {cardNumber || "•••• •••• •••• ••••"}
+                </div>
+                <div className="flex justify-between items-end text-sm">
+                  <div>
+                    <div className="text-gray-300 uppercase text-xs">Titular</div>
+                    <div className="font-semibold text-base">{cardName || "NOMBRE APELLIDO"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-gray-300 uppercase text-xs">Vencimiento</div>
+                    <div className="font-semibold text-base">{cardExpiry || "MM/AA"}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Back */}
+              <div
+                className="absolute w-full h-full p-6 flex flex-col justify-center items-end bg-gray-800 rounded-2xl"
+                style={{
+                  backfaceVisibility: "hidden",
+                  transform: "rotateY(180deg)",
+                }}
+              >
+                <div className="bg-black h-12 w-full mb-4 rounded"></div>
+                <div className="bg-gray-300 h-8 w-32 text-black flex items-center justify-center rounded">
+                  {cardCvc || "•••"}
+                </div>
+              </div>
+
+              {/* Animación de éxito */}
+              {success && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-2xl">
+                  <CheckCircle className="h-16 w-16 text-green-400 animate-pulse" />
                 </div>
               )}
             </div>
           </div>
-
-          {/* Nombre */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del titular</label>
-            <input
-              type="text"
-              value={cardName}
-              onChange={(e) => setCardName(e.target.value.toUpperCase())}
-              placeholder="Nombre Apellido"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Expiry + CVC */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vencimiento</label>
-              <input
-                type="text"
-                value={cardExpiry}
-                onChange={(e) => handleExpiryChange(e.target.value)}
-                placeholder="MM/AA"
-                maxLength={5}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
-              <input
-                type="password"
-                value={cardCvc}
-                onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                placeholder="•••"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Monto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Monto a cargar</label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="$0.00"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Botón */}
-          <Button className="w-full bg-slate-800 hover:bg-slate-700 text-white text-lg py-2 mt-4 flex items-center justify-center">
-            <CreditCard className="h-4 w-4 mr-2" />
-            Confirmar carga
-          </Button>
         </div>
       </div>
     </div>
