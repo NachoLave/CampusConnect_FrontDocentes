@@ -17,6 +17,13 @@ export default function CargarSaldoPage() {
   const [cardType, setCardType] = useState<"VISA" | "MASTERCARD" | "">("")
   const [focusCvc, setFocusCvc] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [errors, setErrors] = useState({
+  cardNumber: false,
+    cardName: false,
+    cardExpiry: false,
+    cardCvc: false,
+    amount: false,
+  })
 
   // Logos
   const cardLogos: Record<string, string> = {
@@ -61,11 +68,25 @@ export default function CargarSaldoPage() {
   }
 
   const handleLoadSaldo = () => {
+    // Validación
+    const newErrors = {
+      cardNumber: !cardNumber.trim(),
+      cardName: !cardName.trim(),
+      cardExpiry: !cardExpiry.trim(),
+      cardCvc: !cardCvc.trim(),
+      amount: !amount.trim(),
+    }
+    setErrors(newErrors)
+
+    // Si hay algún error, no continuar
+    if (Object.values(newErrors).some(Boolean)) return
+
+    // Animación y redirección
     setSuccess(true)
     setTimeout(() => {
       setSuccess(false)
-      router.push("/billetera") // <-- redirige después de animación
-    }, 1500) // duración animación
+      router.push("/billetera")
+    }, 1500)
   }
 
   return (
@@ -102,6 +123,9 @@ export default function CargarSaldoPage() {
                 {cardType && (
                   <Image src={cardLogos[cardType]} alt={cardType} width={40} height={25} />
                 )}
+                {errors.cardNumber && (
+                  <p className="text-red-500 text-xs mt-1">Completá el número de tarjeta</p>
+                )}
               </div>
             </div>
 
@@ -117,6 +141,9 @@ export default function CargarSaldoPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 onFocus={() => setFocusCvc(false)}
               />
+              {errors.cardName && (
+                <p className="text-red-500 text-xs mt-1">Completá el nombre</p>
+              )}
             </div>
 
             {/* Vencimiento + CVC */}
@@ -132,6 +159,9 @@ export default function CargarSaldoPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   onFocus={() => setFocusCvc(false)}
                 />
+                {errors.cardExpiry && (
+                  <p className="text-red-500 text-xs mt-1">Completá el vencimiento</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
@@ -145,6 +175,9 @@ export default function CargarSaldoPage() {
                   onFocus={() => setFocusCvc(true)}
                   onBlur={() => setFocusCvc(false)}
                 />
+                {errors.cardCvc && (
+                  <p className="text-red-500 text-xs mt-1">Completá el CVV</p>
+                )}
               </div>
             </div>
 
@@ -158,6 +191,9 @@ export default function CargarSaldoPage() {
                 placeholder="$0.00"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               />
+              {errors.amount && (
+                <p className="text-red-500 text-xs mt-1">Completá el monto a acreditar</p>
+              )}
             </div>
           </div>
 
