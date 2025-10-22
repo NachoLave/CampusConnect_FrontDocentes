@@ -164,6 +164,6 @@ export interface CanteenReservation {
   type: string // ALMUERZO | DESAYUNO | CENA | MERIENDA
   timeRange?: string
   sede?: string
-  total?: number
+  total?: number | string // Puede ser precio o información del menú
   status: 'Finalizado' | 'Cancelado' | 'Pendiente'
 }

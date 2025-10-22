@@ -25,13 +25,6 @@ export default function ComedorPage() {
   const [showTipoFilter, setShowTipoFilter] = useState(false)
   const [showEstadoFilter, setShowEstadoFilter] = useState(false)
 
-  // Debug logs
-  console.log('🍽️ ComedorPage - Estado:', { 
-    reservations: reservations.length, 
-    isLoading, 
-    error,
-    reservationsData: reservations 
-  })
 
   // Cerrar filtros al hacer click afuera
   useEffect(() => {
@@ -67,24 +60,13 @@ export default function ComedorPage() {
   }
 
   const filteredReservations = useMemo(() => {
-    console.log('🔍 Filtrado - Reservas originales:', reservations.length)
-    console.log('🔍 Filtros aplicados:', { fromDate, toDate, tipos, estados })
-    
-    const filtered = reservations.filter((reservation) => {
+    return reservations.filter((reservation) => {
       const reservationDate = convertDateForComparison(formatDate(reservation.date))
-      console.log('🔍 Procesando reserva:', { 
-        id: reservation.id, 
-        date: reservation.date, 
-        formattedDate: reservationDate,
-        type: reservation.type,
-        status: reservation.status 
-      })
 
       // Date filtering - Desde (mayor o igual)
       if (fromDate) {
         const fromDateStr = fromDate.toISOString().split('T')[0]
         if (reservationDate < fromDateStr) {
-          console.log('❌ Filtrado por fecha desde:', reservationDate, '<', fromDateStr)
           return false
         }
       }
@@ -93,7 +75,6 @@ export default function ComedorPage() {
       if (toDate) {
         const toDateStr = toDate.toISOString().split('T')[0]
         if (reservationDate > toDateStr) {
-          console.log('❌ Filtrado por fecha hasta:', reservationDate, '>', toDateStr)
           return false
         }
       }
@@ -103,10 +84,7 @@ export default function ComedorPage() {
         const matchesTipo = tipos.some(tipo => 
           (reservation.type || '').toUpperCase() === tipo.toUpperCase()
         )
-        if (!matchesTipo) {
-          console.log('❌ Filtrado por tipo:', reservation.type, 'no coincide con', tipos)
-          return false
-        }
+        if (!matchesTipo) return false
       }
 
       // Status filtering
@@ -114,18 +92,11 @@ export default function ComedorPage() {
         const matchesEstado = estados.some(estado => 
           (reservation.status || '').toLowerCase() === estado.toLowerCase()
         )
-        if (!matchesEstado) {
-          console.log('❌ Filtrado por estado:', reservation.status, 'no coincide con', estados)
-          return false
-        }
+        if (!matchesEstado) return false
       }
 
-      console.log('✅ Reserva pasa todos los filtros')
       return true
     })
-    
-    console.log('🔍 Reservas filtradas:', filtered.length)
-    return filtered
   }, [reservations, fromDate, toDate, tipos, estados])
 
   const toggleTipo = (tipo: string) => {
@@ -505,7 +476,11 @@ export default function ComedorPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.timeRange || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.sede || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{reservation.total || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {typeof reservation.total === 'number' 
+                        ? `$${reservation.total.toLocaleString()}` 
+                        : reservation.total || '-'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={getStatusColor(reservation.status)}>{reservation.status}</span>
                     </td>
