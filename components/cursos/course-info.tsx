@@ -20,6 +20,10 @@ import {
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
+import { CoursesService } from '@/lib/api/services/courses'
+import { apiClient } from '@/lib/utils/api'
+import { API_CONFIG } from '@/lib/config/api'
+import { APP_CONFIG } from '@/lib/config/app'
 
 interface CourseInfoProps {
   courseId: string
@@ -582,8 +586,100 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     } catch {}
   }, [gradesData])
 
-  const course = getCourseData(courseId)
+  // Start with a minimal placeholder (do NOT show full mock data)
+  const placeholderCourse = {
+    id: Number(courseId),
+    title: 'MISSING',
+    code: '',
+    students: 0,
+    day: '',
+    shift: '',
+    schedule: '',
+    // safe default so existing date parsing doesn't crash
+    dates: '01/01/1970 - 01/01/1970',
+    location: '',
+    isVirtual: false,
+    status: '',
+    teachers: [] as any[],
+    studentsData: [] as any[],
+    stats: {
+      timeProgress: 0,
+      averageAttendance: 0,
+      averageGrade: 0,
+    },
+  }
+
+  const [course, setCourse] = useState(() => placeholderCourse)
+  const [loadingCourse, setLoadingCourse] = useState(true)
+  const [courseLoadError, setCourseLoadError] = useState<string | null>(null)
   const students = course.studentsData || []
+
+  // Fetch real course data + roster from backend and merge into the same shape
+  useEffect(() => {
+    let mounted = true
+
+    const load = async () => {
+        setLoadingCourse(true)
+        try {
+          // Ensure apiClient includes mock headers when running without auth
+          apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+
+          // 1) Get detailed course converted to frontend shape
+          const courseResp = await CoursesService.getCourseById(Number(courseId))
+          if (!mounted) return
+
+          if (courseResp && courseResp.success && courseResp.data) {
+            const backendCourse: any = courseResp.data
+
+            // 2) Try to load roster (students) from backend
+            const rosterEndpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ROSTER === 'function'
+              ? API_CONFIG.ENDPOINTS.COURSE_ROSTER(Number(courseId))
+              : `/teaching/courses/${courseId}/roster`
+
+            const rosterResp = await apiClient.get<any[]>(rosterEndpoint)
+
+            // Build studentsData from roster (the backend roster uses studentId/studentName/status)
+            let studentsData: any[] = []
+            if (rosterResp && rosterResp.success && Array.isArray(rosterResp.data)) {
+              studentsData = rosterResp.data.map((s: any, idx: number) => ({
+                id: Number(s.studentId ?? s.id ?? idx + 1),
+                name: s.studentName || s.name || s.fullName || 'Alumno',
+                legajo: s.legajo?.toString?.() || '',
+                email: s.email || '',
+                condition: s.status || s.condition || '',
+                attendance: s.attendance || ''
+              }))
+            }
+
+            // Build a safe dates string: prefer `dates`, fallback to fechaInicio/fechaFin, else placeholder
+            const datesStr = backendCourse.dates || (backendCourse.fechaInicio && backendCourse.fechaFin ? `${backendCourse.fechaInicio} - ${backendCourse.fechaFin}` : placeholderCourse.dates)
+
+            // Merge students into the converted course object and update counts
+            const merged = {
+              ...backendCourse,
+              studentsData,
+              students: studentsData.length || backendCourse.students || 0,
+              stats: backendCourse.stats || placeholderCourse.stats,
+              dates: datesStr,
+            }
+
+            setCourse(merged)
+            setCourseLoadError(null)
+          } else {
+            setCourseLoadError('Course endpoint returned no data')
+          }
+        } catch (err) {
+          setCourseLoadError(String(err))
+          console.warn('Error loading course details or roster:', err)
+        } finally {
+          if (mounted) setLoadingCourse(false)
+        }
+      }
+
+    load()
+
+    return () => { mounted = false }
+  }, [courseId])
 
   // Calcular estadísticas basadas en datos reales
   const computeTimeProgress = (dates: string): number => {
@@ -650,6 +746,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const timeProgress = computeTimeProgress(course.dates)
   const averageAttendance = computeAverageAttendance()
   const averageGrade = computeAverageGrade()
+
+  // Detect missing fields for debugging: useful to know what backend omitted
+  const requiredFieldsForUI = ["title", "code", "dates", "teachers"]
+  const missingFields = requiredFieldsForUI.filter((f) => {
+    const v = (course as any)[f]
+    if (v === undefined || v === null) return true
+    if (typeof v === 'string') return v.trim() === '' || v === 'MISSING'
+    if (Array.isArray(v)) return v.length === 0
+    return false
+  })
 
   // Rango real del curso para bloquear fechas de asistencia fuera del período
   // monthToIndex redefinido más arriba con todos los meses
