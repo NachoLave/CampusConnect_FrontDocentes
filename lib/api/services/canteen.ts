@@ -19,15 +19,16 @@ function mapStatus(backendStatus: string): CanteenReservation['status'] {
 export class CanteenService {
   static async getReservations(): Promise<ApiResponse<CanteenReservation[]>> {
     try {
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
+      // Usar proxy interno para evitar CORS/401 en navegador
+      const url = `/api/canteen/reservations`
       console.log('🔗 URL de la petición:', url)
 
       // Obtener headers según el modo de autenticación
       const user = authService.getProfile()
       const token = authService.getToken()
       
+      // Construir headers emulando Postman; evitar Content-Type en GET
       const headers = {
-        ...DEFAULT_HEADERS,
         // Headers para autenticación real con JWT
         ...(token && { 'Authorization': `Bearer ${token}` }),
         // Headers para modo mock (se ignorarán si hay JWT)

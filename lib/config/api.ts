@@ -54,4 +54,4 @@ export const DEFAULT_HEADERS = {
 
 // Configuración para desarrollo (mock)
 export const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
-export const USE_MOCK_DATA = true // Usar datos mock durante desarrollo
+export const USE_MOCK_DATA = false // Usar datos reales del backend

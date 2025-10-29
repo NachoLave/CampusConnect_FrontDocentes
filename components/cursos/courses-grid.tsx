@@ -61,7 +61,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     return "2025Q2" // Por defecto
   }
 
-  // Determinar si incluir períodos anteriores
+  // Determinar si incluir períodos anteriores (solo en "Todos")
   const includePrevious = selectedPeriod === "Todos"
   
   // Usar el hook para obtener cursos del backend
