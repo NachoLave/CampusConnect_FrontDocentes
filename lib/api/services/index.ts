@@ -5,6 +5,7 @@ export { WalletService } from './wallet'
 export { DashboardService } from './dashboard'
 export { NotificationsService } from './notifications'
 export { StoreService } from './store'
+export { CanteenService } from './canteen'
 export { authService } from './auth'
 
 // Re-exportar tipos para conveniencia

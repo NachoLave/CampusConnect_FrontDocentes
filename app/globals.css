@@ -302,3 +302,49 @@
     }
   }
 }
+
+/* ===== ESTILOS PARA PUNTOS DEL CALENDARIO ===== */
+/* Estilos para puntos creados dinámicamente */
+.calendar button .event-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid;
+  position: absolute;
+  bottom: 2px;
+  z-index: 10;
+}
+
+.calendar button .event-dot.clase {
+  background-color: #3b82f6;
+  border-color: #2563eb;
+}
+
+.calendar button .event-dot.examen {
+  background-color: #f97316;
+  border-color: #ea580c;
+}
+
+.calendar button .event-dot.evento {
+  background-color: #22c55e;
+  border-color: #16a34a;
+}
+
+.calendar button .event-dot.comedor {
+  background-color: #eab308;
+  border-color: #ca8a04;
+}
+
+/* Día actual con fondo azul */
+.calendar button[data-today="true"] {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  font-weight: bold !important;
+  border-radius: 50% !important;
+  padding: 8px !important;
+}
+
+/* Asegurar que los días del calendario tengan posición relativa para los pseudo-elementos */
+.calendar button {
+  position: relative !important;
+}

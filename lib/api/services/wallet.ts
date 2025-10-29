@@ -1,6 +1,6 @@
 import { WalletInfo, Transaction, ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
-import { API_CONFIG } from '@/lib/config/api'
+import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import walletData from '@/lib/data/wallet.json'
 import { GraduationCap, DollarSign, UtensilsCrossed } from 'lucide-react'
@@ -56,26 +56,25 @@ export class WalletService {
 
   // Obtener saldo actual
   static async getBalance(): Promise<ApiResponse<number>> {
-    console.log('🔍 WalletService.getBalance() - Obteniendo datos reales del backend')
-    
     try {
-      console.log('🌐 Llamando al backend real...')
       // Usar el proxy de Postman para obtener el balance real
       const balance = await postmanProxy.getBalance()
       
-      console.log('✅ Balance obtenido exitosamente:', balance)
       return {
         data: balance,
         success: true,
         message: 'Saldo obtenido desde el backend'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo saldo real:', error)
-      // Retornar error en lugar de fallback
+      console.error('Error obteniendo saldo real:', error)
+      
+      // Fallback a datos mock si el backend no está disponible
+      const mockBalance = walletData.walletInfo.balance
+      
       return {
-        data: null as any,
-        success: false,
-        error: 'No se pudo obtener el saldo del backend'
+        data: mockBalance,
+        success: true,
+        message: 'Saldo obtenido desde datos mock (backend no disponible)'
       }
     }
   }
@@ -203,5 +202,75 @@ export class WalletService {
       newBalance: number
       transactionId: string
     }>(`${API_CONFIG.ENDPOINTS.WALLET}/payment`, { amount, description, category })
+  }
+
+  // Acreditar saldo usando tarjeta de crédito
+  static async creditBalance(amount: number, teacherId: number = 1010): Promise<ApiResponse<{
+    newBalance: number
+    transactionId: string
+  }>> {
+    try {
+      // Validar que el monto sea mayor a 0
+      if (amount <= 0) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'El monto debe ser mayor a 0'
+        }
+      }
+
+      console.log('💰 Intentando acreditar saldo:', { amount, teacherId })
+
+      // Usar los mismos headers que postmanProxy para autenticación mock
+      const headers = {
+        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
+        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
+        'Accept': '*/*',
+        'User-Agent': 'PostmanRuntime/7.49.0',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Content-Type': 'application/json'
+      }
+
+      console.log('🔑 Headers de autenticación:', headers)
+
+      // Usar fetch directamente con los mismos headers que postmanProxy
+      const response = await fetch('https://modulodocentefinal-production.up.railway.app/teachers/me/account/balance', {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify({
+          id: teacherId,
+          amount: amount
+        })
+      })
+
+      console.log('📡 Status de respuesta:', response.status)
+      console.log('📡 Headers de respuesta:', response.headers)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Error del servidor:', errorText)
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log('📡 Datos de respuesta:', data)
+
+      return {
+        data: {
+          newBalance: data.balance || amount,
+          transactionId: `CREDIT-${Date.now()}`
+        },
+        success: true,
+        message: 'Saldo acreditado correctamente'
+      }
+    } catch (error) {
+      console.error('❌ Error acreditando saldo:', error)
+      return {
+        data: null as any,
+        success: false,
+        error: `Error al acreditar saldo: ${error instanceof Error ? error.message : 'Error desconocido'}`
+      }
+    }
   }
 }

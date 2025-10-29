@@ -86,6 +86,111 @@ const mockEvents = [
     location: "Laboratorio 2",
     color: "bg-blue-100 border-blue-200 text-blue-800",
   },
+  {
+    id: 9,
+    type: "comedor",
+    title: "Reserva Comedor - Almuerzo",
+    date: "14/02/2025",
+    time: "12:00 - 13:00",
+    location: "Comedor Central",
+    color: "bg-yellow-100 border-yellow-200 text-yellow-800",
+  },
+  {
+    id: 10,
+    type: "comedor",
+    title: "Reserva Comedor - Cena",
+    date: "16/02/2025",
+    time: "19:00 - 20:00",
+    location: "Comedor Central",
+    color: "bg-yellow-100 border-yellow-200 text-yellow-800",
+  },
+  // Eventos para octubre 2025
+  {
+    id: 11,
+    type: "clase",
+    title: "Clase: Matemáticas Avanzadas",
+    date: "15/10/2025",
+    time: "10:00 - 11:30",
+    location: "Aula 201",
+    section: "Sede A",
+    color: "bg-blue-100 border-blue-200 text-blue-800",
+  },
+  {
+    id: 12,
+    type: "examen",
+    title: "Examen Parcial - Programación",
+    date: "18/10/2025",
+    time: "14:00 - 16:00",
+    location: "Aula 105",
+    color: "bg-orange-100 border-orange-200 text-orange-800",
+  },
+  {
+    id: 13,
+    type: "evento",
+    title: "Conferencia: Inteligencia Artificial",
+    date: "22/10/2025",
+    time: "18:00 - 20:00",
+    location: "Auditorio Central",
+    description: "Tendencias actuales en IA y su aplicación en la educación",
+    color: "bg-green-100 border-green-200 text-green-800",
+  },
+  {
+    id: 14,
+    type: "comedor",
+    title: "Reserva Comedor - Almuerzo",
+    date: "25/10/2025",
+    time: "12:00 - 13:00",
+    location: "Comedor Central",
+    color: "bg-yellow-100 border-yellow-200 text-yellow-800",
+  },
+  // Eventos para noviembre 2025
+  {
+    id: 15,
+    type: "clase",
+    title: "Clase: Física Cuántica",
+    date: "05/11/2025",
+    time: "09:00 - 11:00",
+    location: "Laboratorio 3",
+    section: "Sede B",
+    color: "bg-blue-100 border-blue-200 text-blue-800",
+  },
+  {
+    id: 16,
+    type: "examen",
+    title: "Examen Final - Matemáticas",
+    date: "12/11/2025",
+    time: "10:00 - 12:00",
+    location: "Aula 210",
+    color: "bg-orange-100 border-orange-200 text-orange-800",
+  },
+  {
+    id: 17,
+    type: "evento",
+    title: "Workshop: Desarrollo Web",
+    date: "18/11/2025",
+    time: "15:00 - 17:00",
+    location: "Sala de Computación",
+    description: "Taller práctico de desarrollo web moderno",
+    color: "bg-green-100 border-green-200 text-green-800",
+  },
+  {
+    id: 18,
+    type: "comedor",
+    title: "Reserva Comedor - Cena",
+    date: "20/11/2025",
+    time: "19:00 - 20:00",
+    location: "Comedor Central",
+    color: "bg-yellow-100 border-yellow-200 text-yellow-800",
+  },
+  {
+    id: 19,
+    type: "clase",
+    title: "Clase: Química Orgánica",
+    date: "28/11/2025",
+    time: "13:00 - 15:00",
+    location: "Laboratorio 2",
+    color: "bg-blue-100 border-blue-200 text-blue-800",
+  },
 ]
 
 // Helpers para parsear dd/mm/yyyy y hora HH:MM
@@ -107,7 +212,8 @@ const toDdMmYyyy = (d: Date) => d.toLocaleDateString('es-ES', { day: '2-digit', 
 const getCourseEventsForDate = (date: Date) => {
   const label = toDdMmYyyy(date)
   const weekday = date.getDay()
-  return (coursesData as any[])
+  
+  const events = (coursesData as any[])
     .filter((c) => c.dates)
     .filter((c) => weekdayMapCourses[(c.day || '').toUpperCase()] === weekday)
     .filter((c) => {
@@ -128,6 +234,11 @@ const getCourseEventsForDate = (date: Date) => {
       section: c.sede,
       color: 'bg-blue-100 border-blue-200 text-blue-800',
     }))
+    
+  if (events.length > 0) {
+    console.log(`✅ Eventos para ${label}:`, events.map(e => e.title))
+  }
+  return events
 }
 
 export default function CalendarioPage() {
@@ -193,6 +304,28 @@ export default function CalendarioPage() {
     if (e.type === 'evento') return filters.eventos
     if (e.type === 'comedor') return filters.comedor
     return true
+  }
+
+  // Función para obtener tipos de eventos por fecha (igual que en el home)
+  const getEventTypesForDate = (date: Date): Set<string> => {
+    const types = new Set<string>()
+    const label = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    
+    // Agregar eventos mock
+    mockEvents.forEach((event) => {
+      if (event.date === label && isEventVisible(event)) {
+        types.add(event.type)
+      }
+    })
+    
+    // Agregar eventos de cursos
+    getCourseEventsForDate(date).forEach((event) => {
+      if (isEventVisible(event)) {
+        types.add(event.type)
+      }
+    })
+    
+    return types
   }
 
   const eventsOfSelected = useMemo(() => {
@@ -375,16 +508,27 @@ export default function CalendarioPage() {
                     const d = e.date
                     map[d] = map[d] || {}
                     if (e.type) map[d][e.type] = true
+                    console.log(`📌 Agregando evento ${e.type} para ${d}`)
                   }
+                  
                   // eventos mock
                   mockEvents.forEach(add)
-                  // eventos de cursos
-                  const today = new Date()
-                  const startRange = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-                  const endRange = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0)
-                  for (let d = new Date(startRange); d <= endRange; d.setDate(d.getDate() + 1)) {
+                  
+                  // eventos de cursos - generar para octubre y noviembre 2025 específicamente
+                  const october2025 = new Date(2025, 9, 1) // octubre 2025
+                  const november2025 = new Date(2025, 10, 1) // noviembre 2025
+                  
+                  // Generar eventos para octubre 2025
+                  for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
                     getCourseEventsForDate(new Date(d)).forEach(add)
                   }
+                  
+                  // Generar eventos para noviembre 2025
+                  for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
+                    getCourseEventsForDate(new Date(d)).forEach(add)
+                  }
+                  
+                  console.log('🗓️ Mapa final de eventos:', map)
                   return map
                 }, [currentMonth, filters])}
               />
@@ -403,12 +547,24 @@ export default function CalendarioPage() {
                     map[d] = map[d] || {}
                     if (e.type) map[d][e.type] = true
                   }
+                  
+                  // eventos mock
                   mockEvents.forEach(add)
-                  const startRange = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-                  const endRange = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0)
-                  for (let d = new Date(startRange); d <= endRange; d.setDate(d.getDate() + 1)) {
+                  
+                  // eventos de cursos - generar para octubre y noviembre 2025 específicamente
+                  const october2025 = new Date(2025, 9, 1) // octubre 2025
+                  const november2025 = new Date(2025, 10, 1) // noviembre 2025
+                  
+                  // Generar eventos para octubre 2025
+                  for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
                     getCourseEventsForDate(new Date(d)).forEach(add)
                   }
+                  
+                  // Generar eventos para noviembre 2025
+                  for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
+                    getCourseEventsForDate(new Date(d)).forEach(add)
+                  }
+                  
                   return map
                 }, [currentMonth, filters])}
               />

@@ -173,7 +173,7 @@ export default function TiendaPage() {
                             ${(item.unitPrice || 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ${(item.totalPrice || 0).toLocaleString()}
+                            ${((item.unitPrice || 0) * (item.quantity || 1)).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {order.deliveryAddress || 'Monserrat'}

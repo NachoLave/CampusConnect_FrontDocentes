@@ -18,6 +18,7 @@ export interface StoreOrder {
 export interface StoreOrderItem {
   id: string
   productId: string
+  product?: string  // Nombre del producto desde el backend
   productName: string
   quantity: number
   unitPrice: number
@@ -30,6 +31,25 @@ export interface StoreOrderSummary {
   totalSpent: number
   pendingOrders: number
   deliveredOrders: number
+}
+
+// Mapeo de productos para cuando no viene el nombre desde el backend
+const PRODUCT_NAMES: { [key: string]: string } = {
+  '1': 'Café Premium',
+  '2': 'Sandwich Club',
+  '3': 'Agua Mineral',
+  '4': 'Galletas Integrales',
+  '5': 'Jugo de Naranja',
+  '6': 'Ensalada César',
+  '7': 'Pizza Margherita',
+  '8': 'Hamburguesa Clásica',
+  '9': 'Papas Fritas',
+  '10': 'Refresco Cola',
+  '11': 'Té Verde',
+  '12': 'Croissant',
+  '13': 'Yogurt Griego',
+  '14': 'Barra de Cereal',
+  '15': 'Smoothie Frutal'
 }
 
 export class StoreService {
@@ -74,16 +94,23 @@ export class StoreService {
         // Asegurar que el total sea un número
         total: typeof order.total === 'number' ? order.total : 0,
         // Asegurar que los items sean un array y validar sus propiedades
-        items: Array.isArray(order.items) ? order.items.map(item => ({
-          ...item,
-          // Asegurar que los precios sean números
-          unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : 0,
-          totalPrice: typeof item.totalPrice === 'number' ? item.totalPrice : 0,
-          // Asegurar que la cantidad sea un número
-          quantity: typeof item.quantity === 'number' ? item.quantity : 1,
-          // Asegurar que el nombre del producto sea string
-          productName: item.productName || 'Producto sin nombre'
-        })) : []
+        items: Array.isArray(order.items) ? order.items.map(item => {
+          const unitPrice = typeof item.unitPrice === 'number' ? item.unitPrice : 0
+          const quantity = typeof item.quantity === 'number' ? item.quantity : 1
+          const calculatedTotal = unitPrice * quantity
+          
+          return {
+            ...item,
+            // Asegurar que los precios sean números
+            unitPrice,
+            // Calcular el total correctamente como precio unitario × cantidad
+            totalPrice: calculatedTotal,
+            // Asegurar que la cantidad sea un número
+            quantity,
+            // Usar el nombre del producto del backend (variable 'product') o buscar en el mapeo por productId
+            productName: item.product || item.productName || PRODUCT_NAMES[item.productId] || `Producto ${item.productId || 'Desconocido'}`
+          }
+        }) : []
       })) : []
       
       return {
