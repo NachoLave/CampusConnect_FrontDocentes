@@ -1,7 +1,8 @@
 "use client"
 
 import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building } from "lucide-react"
-import { useState, memo } from "react"
+import { useState, useEffect, memo } from "react"
+import { CoursesService } from "@/lib/api/services"
 import { useRouter } from "next/navigation" // Added router import for navigation
 
 interface Teacher {
@@ -70,6 +71,7 @@ function getTeacherColor(teacherId: number): string {
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
+  const [studentCount, setStudentCount] = useState<number>(course.students ?? 0)
   const router = useRouter() // Added router instance
 
   const handleInfoClick = () => {
@@ -83,6 +85,18 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
   const handleGradesClick = () => {
     router.push(`/cursos/${course.id}?tab=calificaciones`)
   }
+  // Actualizar cantidad de alumnos desde el roster
+  useEffect(() => {
+    let isMounted = true
+    CoursesService.getCourseRoster(course.id)
+      .then((resp) => {
+        if (isMounted && resp.success) {
+          setStudentCount(Array.isArray(resp.data) ? resp.data.length : 0)
+        }
+      })
+      .catch(() => {})
+    return () => { isMounted = false }
+  }, [course.id])
 
   const handleStudentsClick = () => {
     router.push(`/cursos/${course.id}?tab=alumnos`)
@@ -119,7 +133,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
           </div>
           <div className="flex items-center space-x-1">
             <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-            <span className="whitespace-nowrap">{course.students} alumnos</span>
+            <span className="whitespace-nowrap">{studentCount} alumnos</span>
           </div>
           <div className="flex items-center space-x-1">
             <Building className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />

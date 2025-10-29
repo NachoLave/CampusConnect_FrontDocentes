@@ -20,6 +20,22 @@ export class CoursesService {
     return apiClient.get<Course[]>(API_CONFIG.ENDPOINTS.COURSES)
   }
 
+  // Obtener listado de alumnos de un curso (roster)
+  static async getCourseRoster(courseId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await fetch(`/api/courses/${courseId}/roster`, { method: 'GET' })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      // El backend puede devolver { value: [...], Count: n }
+      const list = Array.isArray(data?.value) ? data.value : Array.isArray(data) ? data : []
+      return { data: list, success: true, message: 'Roster obtenido' }
+    } catch (error) {
+      return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener curso por ID
   static async getCourseById(id: number): Promise<ApiResponse<Course>> {
     if (USE_MOCK_DATA) {
