@@ -60,14 +60,19 @@ export function useCourseFilters(selectedPeriod?: string) {
       
       if (coursesResponse.success && coursesResponse.data) {
         // Extraer días únicos de los cursos del usuario
-        const dayOrder = {
-          'LUNES': 1, 'MARTES': 2, 'MIÉRCOLES': 3, 'JUEVES': 4, 
-          'VIERNES': 5, 'SÁBADO': 6, 'DOMINGO': 7
+        const dayOrder: Record<string, number> = {
+          'LUNES': 1, 'Lunes': 1,
+          'MARTES': 2, 'Martes': 2,
+          'MIÉRCOLES': 3, 'MIERCOLES': 3, 'Miércoles': 3,
+          'JUEVES': 4, 'Jueves': 4,
+          'VIERNES': 5, 'Viernes': 5,
+          'SÁBADO': 6, 'SABADO': 6, 'Sábado': 6,
+          'DOMINGO': 7, 'Domingo': 7
         }
         const uniqueDays = [...new Set(coursesResponse.data.map(course => course.day).filter(Boolean))]
-          .sort((a, b) => dayOrder[a as keyof typeof dayOrder] - dayOrder[b as keyof typeof dayOrder])
+          .sort((a, b) => (dayOrder[a] || 0) - (dayOrder[b] || 0))
         
-        console.log('📅 Días únicos del usuario (todos los períodos):', uniqueDays)
+        console.log('📅 Días únicos del usuario ordenados:', uniqueDays)
         setDays(uniqueDays)
       } else {
         setDaysLoading({

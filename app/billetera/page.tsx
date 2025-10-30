@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useBalance } from "@/lib/hooks/useWallet"
 import { GraduationCap, DollarSign, UtensilsCrossed } from "lucide-react"
+import { InlineBalanceSkeleton } from "@/components/ui/loaders"
 
 export default function BilleteraPage() {
   const [showBalance, setShowBalance] = useState(true)
@@ -202,7 +203,7 @@ export default function BilleteraPage() {
             </div>
             <div className="text-2xl md:text-4xl font-bold text-gray-900">
               {isLoading ? (
-                <div className="animate-pulse bg-gray-200 h-8 w-32 rounded"></div>
+                <InlineBalanceSkeleton />
               ) : error ? (
                 <span className="text-red-600">No se pudo obtener el saldo</span>
               ) : showBalance ? (

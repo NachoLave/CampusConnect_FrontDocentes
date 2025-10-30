@@ -1,9 +1,8 @@
 "use client"
 
 import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building } from "lucide-react"
-import { useState, useEffect, memo } from "react"
-import { CoursesService } from "@/lib/api/services"
-import { useRouter } from "next/navigation" // Added router import for navigation
+import { useState, memo } from "react"
+import { useRouter } from "next/navigation"
 
 interface Teacher {
   id: number
@@ -55,24 +54,42 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
+
+// Colores para turnos
+function getShiftColor(shift: string): string {
+  const shiftUpper = shift.toUpperCase()
+  if (shiftUpper.includes('TM') || shiftUpper.includes('MAÑANA') || shiftUpper.includes('MANIANA')) {
+    return 'bg-amber-500' // Amarillo/naranja para mañana
+  }
+  if (shiftUpper.includes('TT') || shiftUpper.includes('TARDE')) {
+    return 'bg-sky-500' // Azul cielo para tarde
+  }
+  if (shiftUpper.includes('TN') || shiftUpper.includes('NOCHE')) {
+    return 'bg-indigo-600' // Índigo oscuro para noche
+  }
+  return 'bg-blue-500' // Default
+}
+
+// Paleta estandarizada de colores para avatares de docentes
 function getTeacherColor(teacherId: number): string {
   const colors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-orange-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-    "bg-teal-500",
+    'bg-rose-500',      // Rosa
+    'bg-blue-500',      // Azul
+    'bg-emerald-500',   // Verde esmeralda
+    'bg-violet-500',    // Violeta
+    'bg-amber-500',     // Ámbar
+    'bg-pink-500',      // Rosa fucsia
+    'bg-cyan-500',      // Cian
+    'bg-teal-500',      // Verde azulado
+    'bg-orange-500',    // Naranja
+    'bg-purple-500',    // Púrpura
   ]
   return colors[teacherId % colors.length]
 }
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
-  const [studentCount, setStudentCount] = useState<number>(course.students ?? 0)
-  const router = useRouter() // Added router instance
+  const router = useRouter()
 
   const handleInfoClick = () => {
     router.push(`/cursos/${course.id}`)
@@ -85,18 +102,6 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
   const handleGradesClick = () => {
     router.push(`/cursos/${course.id}?tab=calificaciones`)
   }
-  // Actualizar cantidad de alumnos desde el roster
-  useEffect(() => {
-    let isMounted = true
-    CoursesService.getCourseRoster(course.id)
-      .then((resp) => {
-        if (isMounted && resp.success) {
-          setStudentCount(Array.isArray(resp.data) ? resp.data.length : 0)
-        }
-      })
-      .catch(() => {})
-    return () => { isMounted = false }
-  }, [course.id])
 
   const handleStudentsClick = () => {
     router.push(`/cursos/${course.id}?tab=alumnos`)
@@ -133,7 +138,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
           </div>
           <div className="flex items-center space-x-1">
             <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-            <span className="whitespace-nowrap">{studentCount} alumnos</span>
+            <span className="whitespace-nowrap">{course.students} alumnos</span>
           </div>
           <div className="flex items-center space-x-1">
             <Building className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
@@ -162,10 +167,10 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         </div>
 
         {/* Schedule and Location */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
           <div className="flex items-center flex-wrap gap-2 lg:gap-3">
-            {/* Turno con abreviación automática */}
-            <div className={`${course.shiftColor || 'bg-blue-500'} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
+            {/* Turno con color según horario */}
+            <div className={`${getShiftColor(course.shift)} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
               {course.turnoAbreviacion || course.shift}
             </div>
             
