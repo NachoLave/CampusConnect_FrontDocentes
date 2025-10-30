@@ -1,8 +1,10 @@
 import { WalletInfo, Transaction, ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
+import { APP_CONFIG } from '@/lib/config/app'
 import walletData from '@/lib/data/wallet.json'
 import { GraduationCap, DollarSign, UtensilsCrossed } from 'lucide-react'
+import { postmanProxy } from '@/lib/utils/postmanProxy'
 
 // Mapeo de iconos para los datos mock
 const iconMap = {
@@ -12,37 +14,74 @@ const iconMap = {
 }
 
 export class WalletService {
+  // Variable para almacenar el balance actualizado manualmente
+  private static currentBalance: number | null = null
+
+  // Método para actualizar el balance manualmente (desde Postman)
+  static updateBalanceFromPostman(newBalance: number) {
+    this.currentBalance = newBalance
+    console.log(`💰 Balance actualizado desde Postman: $${newBalance}`)
+  }
   // Obtener información de la billetera
   static async getWalletInfo(): Promise<ApiResponse<WalletInfo>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 400))
+    try {
+      // Obtener balance real del backend
+      const balanceResponse = await this.getBalance()
+
+      if (balanceResponse.success && balanceResponse.data !== null) {
+        // Combinar balance real con información mock para el resto
+        const walletInfo: WalletInfo = {
+          ...walletData.walletInfo,
+          balance: balanceResponse.data // Usar el balance real del backend
+        }
+
+        return {
+          data: walletInfo,
+          success: true,
+          message: 'Información de billetera obtenida correctamente desde el backend'
+        }
+      } else {
+        throw new Error('No se pudo obtener el balance del backend')
+      }
+    } catch (error) {
+      console.error('Error obteniendo información de billetera real:', error)
+      // Retornar error para que el usuario sepa que hay un problema
       return {
-        data: walletData.walletInfo as WalletInfo,
-        success: true,
-        message: 'Información de billetera obtenida correctamente'
+        data: null as any,
+        success: false,
+        message: 'No se pudo obtener la información de la billetera'
       }
     }
-
-    return apiClient.get<WalletInfo>(API_CONFIG.ENDPOINTS.WALLET)
   }
 
   // Obtener saldo actual
   static async getBalance(): Promise<ApiResponse<number>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 300))
+    try {
+      // Usar el proxy de Postman para obtener el balance real
+      const balance = await postmanProxy.getBalance()
+      
       return {
-        data: walletData.walletInfo.balance,
+        data: balance,
         success: true,
-        message: 'Saldo obtenido correctamente'
+        message: 'Saldo obtenido desde el backend'
+      }
+    } catch (error) {
+      console.error('Error obteniendo saldo real:', error)
+      
+      // Fallback a datos mock si el backend no está disponible
+      const mockBalance = walletData.walletInfo.balance
+      
+      return {
+        data: mockBalance,
+        success: true,
+        message: 'Saldo obtenido desde datos mock (backend no disponible)'
       }
     }
-
-    return apiClient.get<number>(API_CONFIG.ENDPOINTS.WALLET_BALANCE)
   }
 
   // Obtener transacciones
   static async getTransactions(): Promise<ApiResponse<Transaction[]>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
       
       // Convertir los datos JSON a objetos Transaction con iconos
@@ -68,7 +107,7 @@ export class WalletService {
     page: number
     totalPages: number
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 400))
       
       const allTransactions = walletData.transactions.map(transaction => ({
@@ -108,7 +147,7 @@ export class WalletService {
     newBalance: number
     transactionId: string
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 1500)) // Simular proceso de pago
       
       const newBalance = walletData.walletInfo.balance + amount
@@ -135,7 +174,7 @@ export class WalletService {
     newBalance: number
     transactionId: string
   }>> {
-    if (USE_MOCK_DATA) {
+    if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 1000))
       
       const newBalance = walletData.walletInfo.balance - amount
@@ -163,5 +202,75 @@ export class WalletService {
       newBalance: number
       transactionId: string
     }>(`${API_CONFIG.ENDPOINTS.WALLET}/payment`, { amount, description, category })
+  }
+
+  // Acreditar saldo usando tarjeta de crédito
+  static async creditBalance(amount: number, teacherId: number = 1010): Promise<ApiResponse<{
+    newBalance: number
+    transactionId: string
+  }>> {
+    try {
+      // Validar que el monto sea mayor a 0
+      if (amount <= 0) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'El monto debe ser mayor a 0'
+        }
+      }
+
+      console.log('💰 Intentando acreditar saldo:', { amount, teacherId })
+
+      // Usar los mismos headers que postmanProxy para autenticación mock
+      const headers = {
+        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
+        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
+        'Accept': '*/*',
+        'User-Agent': 'PostmanRuntime/7.49.0',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Content-Type': 'application/json'
+      }
+
+      console.log('🔑 Headers de autenticación:', headers)
+
+      // Usar fetch directamente con los mismos headers que postmanProxy
+      const response = await fetch('https://modulodocentefinal-production.up.railway.app/teachers/me/account/balance', {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify({
+          id: teacherId,
+          amount: amount
+        })
+      })
+
+      console.log('📡 Status de respuesta:', response.status)
+      console.log('📡 Headers de respuesta:', response.headers)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Error del servidor:', errorText)
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log('📡 Datos de respuesta:', data)
+
+      return {
+        data: {
+          newBalance: data.balance || amount,
+          transactionId: `CREDIT-${Date.now()}`
+        },
+        success: true,
+        message: 'Saldo acreditado correctamente'
+      }
+    } catch (error) {
+      console.error('❌ Error acreditando saldo:', error)
+      return {
+        data: null as any,
+        success: false,
+        error: `Error al acreditar saldo: ${error instanceof Error ? error.message : 'Error desconocido'}`
+      }
+    }
   }
 }

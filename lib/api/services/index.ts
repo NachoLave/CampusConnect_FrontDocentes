@@ -3,6 +3,10 @@ export { CoursesService } from './courses'
 export { CalendarService } from './calendar'
 export { WalletService } from './wallet'
 export { DashboardService } from './dashboard'
+export { NotificationsService } from './notifications'
+export { StoreService } from './store'
+export { CanteenService } from './canteen'
+export { authService } from './auth'
 
 // Re-exportar tipos para conveniencia
 export type {
@@ -14,5 +18,11 @@ export type {
   WalletInfo,
   CarouselImage,
   ApiResponse,
-  LoadingState
+  LoadingState,
+  AuthUser,
+  LoginCredentials,
+  AuthResponse,
+  StoreOrder,
+  StoreOrderItem,
+  StoreOrderSummary
 } from '@/lib/types'

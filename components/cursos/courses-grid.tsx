@@ -3,7 +3,8 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Filter, Building, Calendar, X, ChevronDown, RotateCcw } from "lucide-react"
 import { CourseCard } from "./course-card"
-// Importamos los datos directamente por ahora
+import { useCoursesByPeriod } from "@/lib/hooks/useCourses"
+import { useCourseFilters } from "@/lib/hooks/useCourseFilters"
 import coursesData from "@/lib/data/courses.json"
 
 const dayOrder = {
@@ -28,31 +29,84 @@ type CoursesGridProps = {
   externalSelectedDays?: string[]
   onChangeSedes?: (sedes: string[]) => void
   onChangeDays?: (days: string[]) => void
+  onAvailableSedesChange?: (sedes: string[]) => void
+  onAvailableDaysChange?: (days: string[]) => void
 }
 
-export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays, onChangeSedes, onChangeDays }: CoursesGridProps) {
+export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays, onChangeSedes, onChangeDays, onAvailableSedesChange, onAvailableDaysChange }: CoursesGridProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [showSedeDropdown, setShowSedeDropdown] = useState(false)
   const [showDayDropdown, setShowDayDropdown] = useState(false)
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false)
 
-  // Usar los datos importados directamente
-  const allCourses = coursesData
-  
   // Usar directamente los valores externos en lugar de estado interno
   const selectedPeriod = externalSelectedPeriod ?? "Todos"
   const selectedSedes = externalSelectedSedes ?? []
   const selectedDays = externalSelectedDays ?? []
-  
-  const sedes = useMemo(() => {
-    const uniqueSedes = [...new Set(allCourses.map((course) => course.sede))]
-    return uniqueSedes.sort()
-  }, [allCourses])
 
-  const days = useMemo(() => {
-    const uniqueDays = [...new Set(allCourses.map((course) => course.day))]
-    return uniqueDays.sort((a, b) => dayOrder[a as keyof typeof dayOrder] - dayOrder[b as keyof typeof dayOrder])
-  }, [allCourses])
+  // Obtener filtros dinámicos del backend basados en el período seleccionado
+  const { sedes: availableSedes, days: availableDays } = useCourseFilters(selectedPeriod)
+  
+  // Convertir período seleccionado a formato del backend
+  const getBackendTerm = (period: string): string => {
+    if (period === "Todos") return "2025Q2" // Por defecto
+    if (period.includes("1er")) {
+      const year = period.match(/\d{4}/)?.[0] || "2025"
+      return `${year}Q1`
+    }
+    if (period.includes("2do")) {
+      const year = period.match(/\d{4}/)?.[0] || "2025"
+      return `${year}Q2`
+    }
+    return "2025Q2" // Por defecto
+  }
+
+  // Determinar si incluir períodos anteriores (solo en "Todos")
+  const includePrevious = selectedPeriod === "Todos"
+  
+  // Usar el hook para obtener cursos del backend
+  const { courses: backendCourses, isLoading, error } = useCoursesByPeriod(
+    getBackendTerm(selectedPeriod), 
+    includePrevious
+  )
+
+  // Usar cursos del backend o fallback a datos mock
+  // Si hay error pero tenemos datos mock, usar los mock sin mostrar error
+  const allCourses = backendCourses.length > 0 ? backendCourses : coursesData
+  const shouldShowError = error && backendCourses.length === 0
+  
+  // Debug logs
+  console.log('🔍 CoursesGrid Debug:', {
+    selectedPeriod,
+    backendCourses: backendCourses.length,
+    allCourses: allCourses.length,
+    isLoading,
+    error,
+    shouldShowError,
+    includePrevious
+  })
+  
+  // Usar sedes y días dinámicos del backend
+  const sedes = availableSedes
+  const days = availableDays
+  
+  console.log('🔍 CoursesGrid - Filtros disponibles:', {
+    selectedPeriod,
+    availableSedes,
+    availableDays,
+    sedes,
+    days
+  })
+
+  // Pasar datos dinámicos al componente padre
+  useEffect(() => {
+    if (onAvailableSedesChange) {
+      onAvailableSedesChange(availableSedes)
+    }
+    if (onAvailableDaysChange) {
+      onAvailableDaysChange(availableDays)
+    }
+  }, [availableSedes, availableDays, onAvailableSedesChange, onAvailableDaysChange])
 
   const periods = useMemo(() => {
     const uniquePeriods = [...new Set(allCourses.map((course) => course.period))]
@@ -81,6 +135,14 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   }, [allCourses, selectedPeriod])
 
   const filteredAndSortedCourses = useMemo(() => {
+    console.log('🔍 Filtering courses:', {
+      totalCourses: allCourses.length,
+      searchTerm,
+      selectedSedes,
+      selectedDays,
+      selectedPeriod
+    })
+    
     const filtered = allCourses.filter((course) => {
       const matchesSearch =
         searchTerm === "" ||
@@ -88,11 +150,44 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
         course.code.includes(searchTerm)
 
       const matchesSede = selectedSedes.length === 0 || selectedSedes.includes(course.sede)
-      const matchesDay = selectedDays.length === 0 || selectedDays.includes(course.day)
+      
+      // Normalizar días para comparación (convertir a mayúsculas)
+      const courseDayNormalized = course.day.toUpperCase()
+      const selectedDaysNormalized = selectedDays.map(day => day.toUpperCase())
+      const matchesDay = selectedDays.length === 0 || selectedDaysNormalized.includes(courseDayNormalized)
+      
       const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
+      
+      console.log('🔍 Course filter check:', {
+        title: course.title,
+        courseDay: course.day,
+        courseDayNormalized,
+        selectedDays,
+        selectedDaysNormalized,
+        matchesDay,
+        courseSede: course.sede,
+        selectedSedes,
+        matchesSede
+      })
 
-      return matchesSearch && matchesSede && matchesDay && matchesPeriod
+      const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod
+      
+      if (!matches) {
+        console.log('❌ Course filtered out:', {
+          title: course.title,
+          period: course.period,
+          selectedPeriod,
+          matchesPeriod,
+          matchesSede,
+          matchesDay,
+          matchesSearch
+        })
+      }
+
+      return matches
     })
+
+    console.log('✅ Filtered courses:', filtered.length)
 
     // Sort by day and then by shift
     return filtered.sort((a, b) => {
@@ -190,14 +285,67 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
         </div>
       )}
 
-      {/* Courses Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-        {filteredAndSortedCourses.map((course) => (
-          <CourseCard key={course.id} course={course} />
-        ))}
-      </div>
 
-      {filteredAndSortedCourses.length === 0 && (
+      {/* Loading State */}
+      {isLoading && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Image Skeleton */}
+              <div className="relative overflow-hidden h-32 lg:h-40 bg-gray-200">
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+              
+              {/* Content Skeleton */}
+              <div className="p-4 space-y-3">
+                <div className="relative overflow-hidden h-6 w-3/4 bg-gray-200 rounded">
+                  <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                  <div className="relative overflow-hidden h-4 w-24 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="relative overflow-hidden h-4 w-16 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error State */}
+      {shouldShowError && !isLoading && (
+        <div className="text-center py-8 lg:py-12">
+          <div className="text-red-400 mb-2">
+            <Filter className="h-10 w-10 lg:h-12 lg:w-12 mx-auto" />
+          </div>
+          <h3 className="text-base lg:text-lg font-medium text-gray-900 mb-1">Error al cargar cursos</h3>
+          <p className="text-sm lg:text-base text-gray-500">{error}</p>
+          <p className="text-xs text-gray-400 mt-2">No se pudieron cargar los datos del servidor</p>
+        </div>
+      )}
+
+      {/* Courses Grid */}
+      {!isLoading && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {filteredAndSortedCourses.map((course) => (
+            <CourseCard key={course.id} course={course} />
+          ))}
+        </div>
+      )}
+
+      {/* No Courses Found */}
+      {!isLoading && filteredAndSortedCourses.length === 0 && (
         <div className="text-center py-8 lg:py-12">
           <div className="text-gray-400 mb-2">
             <Filter className="h-10 w-10 lg:h-12 lg:w-12 mx-auto" />

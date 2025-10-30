@@ -2,7 +2,7 @@
 
 import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building } from "lucide-react"
 import { useState, memo } from "react"
-import { useRouter } from "next/navigation" // Added router import for navigation
+import { useRouter } from "next/navigation"
 
 interface Teacher {
   id: number
@@ -14,18 +14,31 @@ interface Course {
   id: number
   title: string
   day: string
-  dayColor: string
+  dayColor?: string
   code: string
   students: number
   teachers: Teacher[]
   shift: string
-  shiftColor: string
+  shiftColor?: string
   schedule: string
-  dates: string
-  location: string
-  sede: string // Added sede property to interface
-  isVirtual: boolean
-  image: string
+  dates?: string
+  location?: string
+  sede: string
+  isVirtual?: boolean
+  image?: string
+  // Campos adicionales del backend
+  modality?: string
+  classroom?: string
+  professor?: string
+  credits?: number
+  description?: string
+  status?: string
+  // Información automática agregada por el frontend
+  horarioInicio?: string
+  horarioFin?: string
+  turnoAbreviacion?: string
+  fechaInicio?: string
+  fechaFin?: string
 }
 
 interface CourseCardProps {
@@ -41,23 +54,42 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
+
+// Colores para turnos
+function getShiftColor(shift: string): string {
+  const shiftUpper = shift.toUpperCase()
+  if (shiftUpper.includes('TM') || shiftUpper.includes('MAÑANA') || shiftUpper.includes('MANIANA')) {
+    return 'bg-amber-500' // Amarillo/naranja para mañana
+  }
+  if (shiftUpper.includes('TT') || shiftUpper.includes('TARDE')) {
+    return 'bg-sky-500' // Azul cielo para tarde
+  }
+  if (shiftUpper.includes('TN') || shiftUpper.includes('NOCHE')) {
+    return 'bg-indigo-600' // Índigo oscuro para noche
+  }
+  return 'bg-blue-500' // Default
+}
+
+// Paleta estandarizada de colores para avatares de docentes
 function getTeacherColor(teacherId: number): string {
   const colors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-orange-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-    "bg-teal-500",
+    'bg-rose-500',      // Rosa
+    'bg-blue-500',      // Azul
+    'bg-emerald-500',   // Verde esmeralda
+    'bg-violet-500',    // Violeta
+    'bg-amber-500',     // Ámbar
+    'bg-pink-500',      // Rosa fucsia
+    'bg-cyan-500',      // Cian
+    'bg-teal-500',      // Verde azulado
+    'bg-orange-500',    // Naranja
+    'bg-purple-500',    // Púrpura
   ]
   return colors[teacherId % colors.length]
 }
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
-  const router = useRouter() // Added router instance
+  const router = useRouter()
 
   const handleInfoClick = () => {
     router.push(`/cursos/${course.id}`)
@@ -87,7 +119,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         onClick={handleInfoClick}
       >
         <img
-          src={course.image || "/placeholder.svg"}
+          src={course.image || "/images/course-background.png"}
           alt={course.title}
           className="w-full h-full object-cover opacity-30"
         />
@@ -112,6 +144,13 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
             <Building className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
             <span className="truncate">{course.sede}</span>
           </div>
+          {/* Modalidad */}
+          {course.modality && (
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="truncate">{course.modality}</span>
+            </div>
+          )}
           <div className="flex items-center space-x-1">
             <div className="flex -space-x-1">
               {course.teachers.map((teacher) => (
@@ -128,14 +167,36 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         </div>
 
         {/* Schedule and Location */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
           <div className="flex items-center flex-wrap gap-2 lg:gap-3">
-            <div className={`${course.shiftColor} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
-              {course.shift}
+            {/* Turno con color según horario */}
+            <div className={`${getShiftColor(course.shift)} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
+              {course.turnoAbreviacion || course.shift}
             </div>
+            
+            {/* Horario automático */}
+            {course.horarioInicio && course.horarioFin && (
+              <span className="text-xs lg:text-sm font-medium whitespace-nowrap bg-gray-100 px-2 py-1 rounded">
+                {course.horarioInicio} - {course.horarioFin}
+              </span>
+            )}
+            
+            {/* Schedule original como fallback */}
             <span className="text-xs lg:text-sm font-medium whitespace-nowrap">{course.schedule}</span>
-            <span className="text-xs lg:text-sm text-gray-500 truncate">{course.dates}</span>
+            
+            {/* Fechas automáticas */}
+            {course.fechaInicio && course.fechaFin && (
+              <span className="text-xs lg:text-sm text-gray-500 truncate bg-gray-50 px-2 py-1 rounded">
+                {course.fechaInicio} - {course.fechaFin}
+              </span>
+            )}
+            
+            {/* Fechas originales como fallback */}
+            {course.dates && (
+              <span className="text-xs lg:text-sm text-gray-500 truncate">{course.dates}</span>
+            )}
           </div>
+          
           <div className="flex items-center space-x-1 text-xs lg:text-sm text-gray-600">
             {course.isVirtual ? (
               <>
@@ -145,7 +206,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
             ) : (
               <>
                 <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-                <span className="truncate">{course.location}</span>
+                <span className="truncate">{course.classroom || course.location || course.sede}</span>
               </>
             )}
           </div>

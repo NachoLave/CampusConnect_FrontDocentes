@@ -6,7 +6,9 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
-import courses from "@/lib/data/courses.json"
+import { useWeeklyCalendar, useNextClass } from "@/lib/hooks/useCalendar"
+import { useBalance } from "@/lib/hooks/useWallet"
+import { EventSkeleton, InlineNextClassSkeleton, InlineBalanceSkeleton } from "@/components/ui/loaders"
 
 const carouselImages = [
   {
@@ -37,22 +39,49 @@ type EventType = {
 
 export default function DashboardPage() {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [selectedDate, setSelectedDate] = useState(() => new Date().getDate())
-  const [currentWeek, setCurrentWeek] = useState(0)
+  const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    // Obtener el lunes de la semana actual
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Si es domingo (0), retroceder 6 días
+    const monday = new Date(today)
+    monday.setDate(today.getDate() + diff)
+    monday.setHours(0, 0, 0, 0)
+    return monday
+  })
   const autoTransitionRef = useRef<NodeJS.Timeout | null>(null)
 
   const [isDragging, setIsDragging] = useState(false)
-  const [walletBalance, setWalletBalance] = useState<number | null>(null)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("wallet_balance")
-      if (raw != null) setWalletBalance(Number(raw))
-    } catch {}
-  }, [])
   const [dragStart, setDragStart] = useState(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const carouselRef = useRef<HTMLDivElement>(null)
+
+  // Usar hooks del backend para obtener datos reales
+  const { balance, isLoading: balanceLoading } = useBalance()
+  const { nextClass, isLoading: nextClassLoading } = useNextClass()
+
+  // Calcular rango de semana para eventos
+  const getWeekRange = () => {
+    const start = new Date(currentWeekStart)
+    const end = new Date(currentWeekStart)
+    end.setDate(end.getDate() + 6)
+    
+    const formatDate = (date: Date) => date.toISOString().split('T')[0]
+    
+    return {
+      start: formatDate(start),
+      end: formatDate(end)
+    }
+  }
+
+  const weekRange = getWeekRange()
+  const { events: weeklyEvents, isLoading: eventsLoading } = useWeeklyCalendar(weekRange.start, weekRange.end)
+
+  // Debug: Log de eventos recibidos
+  console.log('🔍 Dashboard - Eventos semanales recibidos:', weeklyEvents)
+  console.log('📅 Dashboard - Rango de semana:', weekRange)
 
 
   const startAutoTransition = () => {
@@ -143,127 +172,112 @@ export default function DashboardPage() {
   const getNextSlide = () => (currentSlide + 1) % carouselImages.length
 
   const getCurrentWeekDays = () => {
+    const days = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
     const today = new Date()
-    const currentDayOfWeek = today.getDay() // 0 = Sunday, 1 = Monday, etc.
-    const mondayOffset = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek // Calculate Monday of current week
+    today.setHours(0, 0, 0, 0)
     
-    const monday = new Date(today)
-    monday.setDate(today.getDate() + mondayOffset + (currentWeek * 7))
+    const weekDays = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentWeekStart)
+      date.setDate(date.getDate() + i)
+      
+      weekDays.push({
+        day: days[i],
+        date: date.getDate(),
+        fullDate: date,
+        month: date.getMonth(),
+        year: date.getFullYear(),
+        isToday: date.toDateString() === today.toDateString(),
+      })
+    }
+    
+    return weekDays
+  }
 
-    const weekDays = [
-      { day: "LUN", dayIndex: 1 },
-      { day: "MAR", dayIndex: 2 },
-      { day: "MIÉ", dayIndex: 3 },
-      { day: "JUE", dayIndex: 4 },
-      { day: "VIE", dayIndex: 5 },
-      { day: "SÁB", dayIndex: 6 },
-      { day: "DOM", dayIndex: 0 },
-    ]
-
-    return weekDays.map((item, index) => {
-      const dayDate = new Date(monday)
-      dayDate.setDate(monday.getDate() + index)
-      return {
-        ...item,
-        date: dayDate.getDate(),
-        fullDate: dayDate,
-        isToday: dayDate.toDateString() === today.toDateString(),
-      }
-    })
+  // Obtener mes y año para mostrar
+  const getMonthYear = () => {
+    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    
+    // Obtener el mes del día del medio de la semana para mejor representación
+    const midWeek = new Date(currentWeekStart)
+    midWeek.setDate(midWeek.getDate() + 3)
+    
+    return `${months[midWeek.getMonth()]} ${midWeek.getFullYear()}`
   }
 
   const nextWeek = () => {
-    setCurrentWeek((prev) => prev + 1)
+    const newWeekStart = new Date(currentWeekStart)
+    newWeekStart.setDate(newWeekStart.getDate() + 7)
+    setCurrentWeekStart(newWeekStart)
   }
 
   const prevWeek = () => {
-    setCurrentWeek((prev) => prev - 1)
+    const newWeekStart = new Date(currentWeekStart)
+    newWeekStart.setDate(newWeekStart.getDate() - 7)
+    setCurrentWeekStart(newWeekStart)
   }
 
   const goToToday = () => {
-    setCurrentWeek(0)
     const today = new Date()
-    setSelectedDate(today.getDate())
+    const dayOfWeek = today.getDay()
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const monday = new Date(today)
+    monday.setDate(today.getDate() + diff)
+    monday.setHours(0, 0, 0, 0)
+    
+    setCurrentWeekStart(monday)
+    setSelectedDate(today)
   }
 
   const weekDays = getCurrentWeekDays()
+  const monthYear = getMonthYear()
 
-  const parseDdMmYyyy = (str: string) => {
-    const [dd, mm, yyyy] = str.split("/").map((s) => parseInt(s, 10))
-    return new Date(yyyy, mm - 1, dd)
-  }
+  // Mantener el día actual seleccionado cuando se carga o cambia de semana
+  useEffect(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    // Verificar si el día actual está en la semana mostrada
+    const todayInWeek = weekDays.find(d => d.isToday)
+    
+    if (todayInWeek) {
+      // Si el día actual está en esta semana, seleccionarlo
+      setSelectedDate(todayInWeek.fullDate)
+    } else {
+      // Si no, seleccionar el primer día de la semana
+      setSelectedDate(weekDays[0]?.fullDate || today)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWeekStart]) // Cuando cambia la semana
 
-  const spanishDayToIndex: Record<string, number> = {
-    LUNES: 1,
-    MARTES: 2,
-    MIÉRCOLES: 3,
-    JUEVES: 4,
-    VIERNES: 5,
-    SÁBADO: 6,
-    DOMINGO: 0,
-  }
-
-  const getNextClassDate = (course: any, fromDate: Date) => {
-    const [startStr, endStr] = (course.dates as string).split(" - ")
-    const start = parseDdMmYyyy(startStr)
-    const end = parseDdMmYyyy(endStr)
-    const targetDow = spanishDayToIndex[course.day]
-    if (isNaN(targetDow)) return null
-
-    // base date cannot be before start
-    const base = new Date(Math.max(fromDate.getTime(), start.getTime()))
-
-    // move to next occurrence of course weekday
-    const delta = (targetDow - base.getDay() + 7) % 7
-    const next = new Date(base)
-    next.setDate(base.getDate() + delta)
-
-    if (next > end) return null
-    return next
-  }
-
-  const today = new Date()
-  const nextClasses = (courses as any[])
-    .map((c) => ({ course: c, date: getNextClassDate(c, today) }))
-    .filter((x) => x.date) as { course: any; date: Date }[]
-  nextClasses.sort((a, b) => a.date.getTime() - b.date.getTime())
-  const upcoming = nextClasses[0] || null
-
-  // Eventos del día seleccionado
-  const selectedFullDate = weekDays.find((d) => d.date === selectedDate)?.fullDate
-  const selectedEvents: EventType[] = selectedFullDate
-    ? (courses as any[])
-        .filter((c) => {
-          const [startStr, endStr] = (c.dates as string).split(" - ")
-          const start = parseDdMmYyyy(startStr)
-          const end = parseDdMmYyyy(endStr)
-          const dow = spanishDayToIndex[c.day]
-          return (
-            selectedFullDate >= start &&
-            selectedFullDate <= end &&
-            selectedFullDate.getDay() === dow
-          )
-        })
-        .map((c) => ({
-          time: (c.schedule as string).split("-")[0].trim(),
-          title: c.title as string,
-          type: "class" as const,
-        }))
-    : []
+  // Eventos del día seleccionado usando datos del backend
+  const selectedDateStr = selectedDate.toISOString().split('T')[0]
+  const selectedEvents: EventType[] = weeklyEvents
+    .filter((event) => event.date === selectedDateStr)
+    .map((event) => ({
+      time: event.time,
+      title: event.title,
+      type: event.type as "class" | "meeting" | "exam",
+    }))
 
   // Tipos de eventos por día de la semana (para los puntitos)
   const getEventTypesForDate = (date: Date): Set<string> => {
     const types = new Set<string>()
-    ;(courses as any[]).forEach((c) => {
-      const [startStr, endStr] = (c.dates as string).split(" - ")
-      const start = parseDdMmYyyy(startStr)
-      const end = parseDdMmYyyy(endStr)
-      const dow = spanishDayToIndex[c.day]
-      if (date >= start && date <= end && date.getDay() === dow) {
-        types.add("class")
+    const dateStr = date.toISOString().split('T')[0]
+    weeklyEvents.forEach((event) => {
+      if (event.date === dateStr) {
+        types.add(event.type)
       }
     })
     return types
+  }
+  
+  // Comparar fechas correctamente
+  const isSameDay = (date1: Date, date2: Date) => {
+    return date1.getDate() === date2.getDate() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getFullYear() === date2.getFullYear()
   }
 
   return (
@@ -456,7 +470,10 @@ export default function DashboardPage() {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg p-6 border border-gray-200 h-full">
               <div className="flex items-center justify-between mb-4 md:mb-6">
-                <h2 className="text-lg md:text-xl font-semibold text-slate-700">Calendario semanal</h2>
+                <div>
+                  <h2 className="text-lg md:text-xl font-semibold text-slate-700">Calendario semanal</h2>
+                  <p className="text-sm text-gray-500 mt-1">{monthYear}</p>
+                </div>
                 <div className="flex items-center gap-1 md:gap-2">
                   <button onClick={prevWeek} className="p-1 hover:bg-gray-100 rounded">
                     <ChevronLeft className="h-3 w-3 md:h-4 md:w-4 text-slate-600" />
@@ -465,10 +482,9 @@ export default function DashboardPage() {
                     onClick={goToToday}
                     className="px-2 md:px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-md transition-colors flex items-center gap-1"
                   >
-                    <span className="hidden md:inline">Hoy ({new Date().getDate()})</span>
-                    <span className="md:hidden">{new Date().getDate()}</span>
+                    <span className="hidden md:inline">Hoy</span>
+                    <Calendar className="h-4 w-4 md:h-5 md:w-5" />
                   </button>
-                  <Calendar className="h-4 w-4 md:h-5 md:w-5 text-slate-600" />
                   <button onClick={nextWeek} className="p-1 hover:bg-gray-100 rounded">
                     <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-slate-600" />
                   </button>
@@ -476,8 +492,8 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-7 gap-2 md:gap-4 mb-6">
-                {weekDays.map((item) => (
-                  <div key={item.day} className="text-center">
+                {weekDays.map((item, idx) => (
+                  <div key={idx} className="text-center">
                     <div
                       className={`text-xs md:text-sm font-medium mb-1 md:mb-2 ${
                         item.day === "SÁB" || item.day === "DOM" ? "text-gray-400" : "text-slate-600"
@@ -486,20 +502,20 @@ export default function DashboardPage() {
                       {item.day}
                     </div>
                     <button
-                      onClick={() => setSelectedDate(item.date)}
+                      onClick={() => setSelectedDate(item.fullDate)}
                       className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-xs md:text-sm font-medium mx-auto transition-all duration-300 relative ${
-                        selectedDate === item.date
+                        isSameDay(selectedDate, item.fullDate)
                           ? "border-2 border-slate-600 text-slate-600 bg-slate-50 shadow-md"
                           : item.isToday
-                            ? "bg-blue-500 text-white hover:bg-blue-600 shadow-lg animate-pulse"
+                            ? "bg-blue-500 text-white hover:bg-blue-600 shadow-lg"
                             : item.day === "SÁB" || item.day === "DOM"
                               ? "text-gray-400 hover:bg-gray-50"
                               : "text-slate-700 hover:bg-slate-50 hover:shadow-sm"
                       }`}
                     >
                       {item.date}
-                      {item.isToday && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full animate-ping"></div>
+                      {item.isToday && !isSameDay(selectedDate, item.fullDate) && (
+                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full"></div>
                       )}
                     </button>
                     {/* dots under day if events exist */}
@@ -508,7 +524,6 @@ export default function DashboardPage() {
                       return (
                         <div className="flex items-center justify-center gap-1 mt-1 h-1.5">
                           {types.has("class") && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                          {/* place for more types if added later */}
                         </div>
                       )
                     })()}
@@ -517,7 +532,9 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3 mb-6">
-                {selectedEvents.length > 0 ? (
+                {eventsLoading ? (
+                  <EventSkeleton />
+                ) : selectedEvents.length > 0 ? (
                   selectedEvents.map((event: EventType, index: number) => (
                     <div
                       key={index}
@@ -574,32 +591,36 @@ export default function DashboardPage() {
               </div>
 
               <div className="border-l-4 border-slate-600 pl-4">
-                {upcoming ? (
+                {nextClassLoading ? (
+                  <InlineNextClassSkeleton />
+                ) : nextClass ? (
                   <>
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-4 w-4 text-slate-600" />
-                      <h3 className="font-semibold text-lg text-slate-800">{upcoming.course.title}</h3>
+                      <h3 className="font-semibold text-lg text-slate-800">{nextClass.title}</h3>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                      <span>{upcoming.course.code}</span>
+                      <span>{nextClass.courseTitle}</span>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                        <span className="text-xs text-gray-500 uppercase tracking-wide">{upcoming.course.location}</span>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">{nextClass.classroom} - {nextClass.sede}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
                       <Calendar className="h-4 w-4 text-gray-500" />
                       <span className="font-medium text-slate-700">
-                        {upcoming.date.toDateString() === today.toDateString()
+                        {nextClass.daysUntil === 0 
                           ? "Hoy"
-                          : upcoming.date.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
+                          : nextClass.daysUntil === 1
+                            ? "Mañana"
+                            : `En ${nextClass.daysUntil} días`}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Clock className="h-4 w-4 text-gray-500" />
-                      <span>{upcoming.course.schedule}</span>
+                      <span>{nextClass.time}</span>
                     </div>
                   </>
                 ) : (
@@ -613,12 +634,16 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
+                {balanceLoading ? (
+                  <InlineBalanceSkeleton />
+                ) : (
                 <AnimatedBalance 
-                  amount={walletBalance ?? 0} 
+                    amount={balance ?? 0} 
                   className="text-2xl md:text-4xl font-bold text-gray-900"
                   animated={false}
                   neutral={true}
                 />
+                )}
               </div>
 
               <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">

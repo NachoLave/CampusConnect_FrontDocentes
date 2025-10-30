@@ -4,11 +4,16 @@ import { useEffect, useState } from "react"
 import { Eye, EyeOff, RefreshCw, CreditCard, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { useBalance } from "@/lib/hooks/useWallet"
 import { GraduationCap, DollarSign, UtensilsCrossed } from "lucide-react"
+import { InlineBalanceSkeleton } from "@/components/ui/loaders"
 
 export default function BilleteraPage() {
   const [showBalance, setShowBalance] = useState(true)
   const [lastUpdated, setLastUpdated] = useState("")
+  
+  // Usar el hook de balance para obtener datos reales
+  const { balance, isLoading, error, refetch } = useBalance()
 
   useEffect(() => {
     const now = new Date()
@@ -152,7 +157,8 @@ export default function BilleteraPage() {
     return amount >= 0 ? `$${formatted}` : `-$${formatted}`
   }
 
-  const totalBalance = transactions.reduce((sum, t) => sum + t.amount, 0)
+  // Usar el balance real del hook en lugar de calcularlo
+  const totalBalance = balance
 
   useEffect(() => {
     try {
@@ -185,11 +191,27 @@ export default function BilleteraPage() {
                 </button>
               </div>
               <div className="flex items-center text-xs md:text-sm text-gray-500">
-                <RefreshCw className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+                <button 
+                  onClick={refetch}
+                  disabled={isLoading}
+                  className="hover:text-gray-700 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 md:h-4 md:w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
                 Actualizado: {lastUpdated}
               </div>
             </div>
-            <div className="text-2xl md:text-4xl font-bold text-gray-900">{showBalance ? formatBalance(totalBalance) : "••••••"}</div>
+            <div className="text-2xl md:text-4xl font-bold text-gray-900">
+              {isLoading ? (
+                <InlineBalanceSkeleton />
+              ) : error ? (
+                <span className="text-red-600">No se pudo obtener el saldo</span>
+              ) : showBalance ? (
+                formatBalance(totalBalance)
+              ) : (
+                "••••••"
+              )}
+            </div>
           </div>
 
           {/* Recent Movements */}

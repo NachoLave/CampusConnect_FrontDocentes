@@ -145,6 +145,62 @@ export function useCourse(id: number) {
   }
 }
 
+export function useCoursesByPeriod(term: string, includePrevious: boolean = false) {
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    isLoading: true,
+    error: null
+  })
+
+  const fetchCoursesByPeriod = useCallback(async () => {
+    console.log('🔄 useCoursesByPeriod - Iniciando carga:', { term, includePrevious })
+    setLoadingState({ isLoading: true, error: null })
+    
+    try {
+      const response = await CoursesService.getCoursesByPeriod(term, includePrevious)
+      
+      console.log('📊 useCoursesByPeriod - Respuesta recibida:', {
+        success: response.success,
+        dataLength: response.data?.length || 0,
+        error: response.error,
+        message: response.message
+      })
+      
+      if (response.success) {
+        setCourses(response.data)
+        console.log('✅ useCoursesByPeriod - Cursos establecidos:', response.data.length)
+      } else {
+        console.log('❌ useCoursesByPeriod - Error en respuesta:', response.error)
+        setLoadingState({ 
+          isLoading: false, 
+          error: response.error || 'Error al cargar cursos del período' 
+        })
+        return
+      }
+    } catch (error) {
+      console.log('💥 useCoursesByPeriod - Error capturado:', error)
+      setLoadingState({ 
+        isLoading: false, 
+        error: 'Error inesperado al cargar cursos del período' 
+      })
+      return
+    }
+
+    setLoadingState({ isLoading: false, error: null })
+  }, [term, includePrevious])
+
+  useEffect(() => {
+    fetchCoursesByPeriod()
+  }, [fetchCoursesByPeriod])
+
+  return {
+    courses,
+    isLoading: loadingState.isLoading,
+    error: loadingState.error,
+    refetch: fetchCoursesByPeriod
+  }
+}
+
 export function useCourseOptions() {
   const [sedes, setSedes] = useState<string[]>([])
   const [days, setDays] = useState<string[]>([])

@@ -11,7 +11,23 @@ class ApiClient {
 
   constructor() {
     this.baseURL = API_CONFIG.BASE_URL
-    this.headers = DEFAULT_HEADERS
+    this.headers = { ...DEFAULT_HEADERS }
+  }
+
+  // Método para establecer el token de autenticación
+  setAuthToken(token: string) {
+    this.headers['Authorization'] = `Bearer ${token}`
+  }
+
+  // Método para limpiar el token de autenticación
+  clearAuthToken() {
+    delete this.headers['Authorization']
+  }
+
+  // Método para establecer headers de desarrollo (mock mode)
+  setMockHeaders(teacherId: string, roles: string) {
+    this.headers['X-Teacher-Id'] = teacherId
+    this.headers['X-Teacher-Roles'] = roles
   }
 
   // Método para hacer requests GET

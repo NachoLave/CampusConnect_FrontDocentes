@@ -9,15 +9,14 @@ type CoursesHeaderProps = {
   onChangeSedes: (sedes: string[]) => void
   selectedDays: string[]
   onChangeDays: (days: string[]) => void
+  availableSedes: string[]
+  availableDays: string[]
 }
 
-export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, onChangeSedes, selectedDays, onChangeDays }: CoursesHeaderProps) {
+export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, onChangeSedes, selectedDays, onChangeDays, availableSedes, availableDays }: CoursesHeaderProps) {
   const [showSedesDropdown, setShowSedesDropdown] = useState(false)
   const [showDaysDropdown, setShowDaysDropdown] = useState(false)
   
-  // Valores de ejemplo de sedes y días. En un futuro pueden venir de un hook o props si se requiere dinamismo.
-  const availableSedes = ["Virtual", "Monserrat", "Belgrano", "Recoleta", "Campus Costa Pinamar"]
-  const availableDays = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
   const toggleSede = (sede: string) => {
     if (selectedSedes.includes(sede)) {

@@ -7,6 +7,7 @@ import "./globals.css"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Suspense } from "react"
 import { ScrollToTop } from "@/components/scroll-to-top"
+import { MockAuthProvider } from "@/components/auth/MockAuthProvider"
 
 export const metadata: Metadata = {
   title: "CampusConnect | Portal del Docente",
@@ -27,10 +28,12 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}>
       <body className="font-sans">
-        <ScrollToTop />
-        <Suspense fallback={<div>Loading...</div>}>
-          <MainLayout>{children}</MainLayout>
-        </Suspense>
+        <MockAuthProvider>
+          <ScrollToTop />
+          <Suspense fallback={<div>Loading...</div>}>
+            <MainLayout>{children}</MainLayout>
+          </Suspense>
+        </MockAuthProvider>
         <Analytics />
       </body>
     </html>
