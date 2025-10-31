@@ -22,14 +22,20 @@ export class CoursesService {
 
   // Obtener listado de alumnos de un curso (roster)
   static async getCourseRoster(courseId: number): Promise<ApiResponse<any[]>> {
+    // Prefer using the shared apiClient and configured endpoint
     try {
-      const response = await fetch(`/api/courses/${courseId}/roster`, { method: 'GET' })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ROSTER === 'function'
+        ? API_CONFIG.ENDPOINTS.COURSE_ROSTER(courseId)
+        : `/teaching/courses/${courseId}/roster`
+
+      const resp = await apiClient.get<any[]>(endpoint)
+      if (!resp || !resp.success) {
+        return { data: [], success: false, error: resp?.error || 'Error obteniendo roster' }
       }
-      const data = await response.json()
-      // El backend puede devolver { value: [...], Count: n }
-      const list = Array.isArray(data?.value) ? data.value : Array.isArray(data) ? data : []
+
+      // Response may be { value: [...] } or array directly
+  const dataAny: any = resp.data
+  const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
       return { data: list, success: true, message: 'Roster obtenido' }
     } catch (error) {
       return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
@@ -55,7 +61,59 @@ export class CoursesService {
       }
     }
 
-    return apiClient.get<Course>(API_CONFIG.ENDPOINTS.COURSE_BY_ID(id))
+    return apiClient.get<Course>(API_CONFIG.ENDPOINTS.COURSE_DETAIL(id))
+  }
+
+  // Obtener both teachers and students in one call (helpful convenience)
+  static async getCourseParticipants(courseId: number): Promise<ApiResponse<{ teachers: any[]; students: any[]; course?: any }>> {
+    try {
+      const [courseResp, rosterResp] = await Promise.all([
+        this.getCourseById(courseId),
+        this.getCourseRoster(courseId),
+      ])
+
+      if (!courseResp.success) return { data: null as any, success: false, error: courseResp.error }
+      if (!rosterResp.success) return { data: null as any, success: false, error: rosterResp.error }
+
+      const backendCourse: any = courseResp.data
+      const roster = rosterResp.data || []
+
+      // Normalize teachers: support `teachers` or `titulares` + `auxiliares`
+      let teachersFromBackend: any[] = []
+      if (Array.isArray(backendCourse.teachers) && backendCourse.teachers.length > 0) {
+        teachersFromBackend = backendCourse.teachers.map((t: any) => ({
+          id: Number(t.id ?? t.teacherId ?? 0),
+          name: t.name || t.fullName || '',
+          email: t.email || '',
+          legajo: t.legajo?.toString?.() || '',
+          role: t.role || '',
+        }))
+      } else {
+        const titulares = Array.isArray(backendCourse.titulares) ? backendCourse.titulares : []
+        const auxiliares = Array.isArray(backendCourse.auxiliares) ? backendCourse.auxiliares : []
+        const combined = [...titulares, ...auxiliares]
+        teachersFromBackend = combined.map((t: any) => ({
+          id: Number(t.teacherId ?? t.id ?? 0),
+          name: t.name || t.fullName || '',
+          email: t.email || '',
+          legajo: t.legajo?.toString?.() || '',
+          role: t.role || (titulares.includes(t) ? 'Titular' : 'Auxiliar'),
+        }))
+      }
+
+      // Map roster to students shape
+      const students = (Array.isArray(roster) ? roster : []).map((s: any, idx: number) => ({
+        id: Number(s.studentId ?? s.id ?? idx + 1),
+        name: s.studentName || s.name || s.fullName || 'Alumno',
+        legajo: s.legajo?.toString?.() || '',
+        email: s.email || '',
+        condition: s.status || s.condition || '',
+      }))
+
+  return { data: { teachers: teachersFromBackend, students, course: backendCourse }, success: true, message: 'Participants obtained' }
+    } catch (err) {
+      return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+    }
   }
 
   // Obtener cursos con filtros

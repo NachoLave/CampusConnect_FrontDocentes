@@ -614,6 +614,25 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null)
   const students = course.studentsData || []
 
+  // Helper to normalize condition/status values (function declaration so it's available to earlier code)
+  function formatConditionKey(raw?: string | null): string {
+    if (!raw) return ''
+    const s = String(raw).trim().toUpperCase()
+    if (!s) return ''
+    if (s.includes('ACT')) return 'ACTIVA'
+    if (s.includes('REG')) return 'REGULAR'
+    if (s.includes('ADEUDA')) return 'ADEUDA FINAL'
+    if (s.includes('PRESENTE')) return 'ACTIVA'
+    return s
+  }
+
+  function getConditionBadgeClasses(condKey: string) {
+    if (!condKey) return 'bg-orange-100 text-orange-800'
+    if (condKey === 'ACTIVA') return 'bg-green-100 text-green-800'
+    if (condKey === 'REGULAR') return 'bg-yellow-100 text-yellow-800'
+    return 'bg-orange-100 text-orange-800'
+  }
+
   // Fetch real course data + roster from backend and merge into the same shape
   useEffect(() => {
     let mounted = true
@@ -624,43 +643,34 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           // Ensure apiClient includes mock headers when running without auth
           apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
 
-          // 1) Get detailed course converted to frontend shape
-          const courseResp = await CoursesService.getCourseById(Number(courseId))
+          // Get course + participants (teachers + students) using the service helper
+          const partsResp = await CoursesService.getCourseParticipants(Number(courseId))
           if (!mounted) return
 
-          if (courseResp && courseResp.success && courseResp.data) {
-            const backendCourse: any = courseResp.data
+          if (partsResp && partsResp.success && partsResp.data) {
+            const backendCourse: any = partsResp.data.course || {}
+            const rawStudents: any[] = Array.isArray(partsResp.data.students) ? partsResp.data.students : []
+            const studentsData: any[] = rawStudents.map((s: any, idx: number) => ({
+              id: Number(s.studentId ?? s.id ?? idx + 1),
+              name: s.studentName || s.name || s.fullName || 'Alumno',
+              legajo: s.legajo?.toString?.() || '',
+              email: s.email || '',
+              condition: formatConditionKey(s.status ?? s.condition ?? ''),
+              attendance: s.attendance || ''
+            }))
+            const teachersFromBackend: any[] = Array.isArray(partsResp.data.teachers) ? partsResp.data.teachers : []
 
-            // 2) Try to load roster (students) from backend
-            const rosterEndpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ROSTER === 'function'
-              ? API_CONFIG.ENDPOINTS.COURSE_ROSTER(Number(courseId))
-              : `/teaching/courses/${courseId}/roster`
-
-            const rosterResp = await apiClient.get<any[]>(rosterEndpoint)
-
-            // Build studentsData from roster (the backend roster uses studentId/studentName/status)
-            let studentsData: any[] = []
-            if (rosterResp && rosterResp.success && Array.isArray(rosterResp.data)) {
-              studentsData = rosterResp.data.map((s: any, idx: number) => ({
-                id: Number(s.studentId ?? s.id ?? idx + 1),
-                name: s.studentName || s.name || s.fullName || 'Alumno',
-                legajo: s.legajo?.toString?.() || '',
-                email: s.email || '',
-                condition: s.status || s.condition || '',
-                attendance: s.attendance || ''
-              }))
-            }
-
-            // Build a safe dates string: prefer `dates`, fallback to fechaInicio/fechaFin, else placeholder
             const datesStr = backendCourse.dates || (backendCourse.fechaInicio && backendCourse.fechaFin ? `${backendCourse.fechaInicio} - ${backendCourse.fechaFin}` : placeholderCourse.dates)
 
-            // Merge students into the converted course object and update counts
             const merged = {
               ...backendCourse,
+              teachers: teachersFromBackend.length > 0 ? teachersFromBackend : placeholderCourse.teachers,
               studentsData,
               students: studentsData.length || backendCourse.students || 0,
               stats: backendCourse.stats || placeholderCourse.stats,
               dates: datesStr,
+              day: backendCourse.diaSemana || backendCourse.day || placeholderCourse.day,
+              shift: backendCourse.turno || backendCourse.shift || placeholderCourse.shift,
             }
 
             setCourse(merged)
@@ -743,9 +753,20 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return Math.round((sum / count) * 100) / 100
   }
 
+  
+
   const timeProgress = computeTimeProgress(course.dates)
   const averageAttendance = computeAverageAttendance()
   const averageGrade = computeAverageGrade()
+
+  const studentConditionOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(course.studentsData || []).forEach((s: any) => {
+      const k = formatConditionKey(s.condition)
+      if (k) set.add(k)
+    })
+    return Array.from(set)
+  }, [course.studentsData])
 
   // Detect missing fields for debugging: useful to know what backend omitted
   const requiredFieldsForUI = ["title", "code", "dates", "teachers"]
@@ -1774,7 +1795,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          {["Regular", "Adeuda final"].map((condition) => (
+                          {studentConditionOptions.map((condition) => (
                             <label key={condition} className="flex items-center space-x-2 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -1795,13 +1816,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               {studentsFilterConditions.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {studentsFilterConditions.map((condition) => {
-                    const colors = condition === "Regular" 
-                      ? "bg-green-100 text-green-800 hover:bg-green-200"
-                      : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                    const badge = getConditionBadgeClasses(condition)
                     return (
                       <span
                         key={condition}
-                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${colors}`}
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${badge}`}
                       >
                         {condition}
                         <button
@@ -1848,15 +1867,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
                       <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
                       <td className="py-2 lg:py-3 px-3 lg:px-4">
-                        <span
-                          className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${
-                            student.condition === "Adeuda final"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-orange-100 text-orange-800"
-                          }`}
-                        >
-                          {student.condition}
-                        </span>
+                          <span className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${getConditionBadgeClasses(student.condition)}`}>
+                            {student.condition}
+                          </span>
                       </td>
                     </tr>
                   ))}
