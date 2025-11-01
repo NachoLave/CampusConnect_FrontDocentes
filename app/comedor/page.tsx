@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { ExternalLink, X, Filter, ChevronDown } from "lucide-react"
+import { ExternalLink, X, Filter, ChevronDown, ShoppingBag } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-range-picker"
 import { useCanteenReservations } from '@/lib/hooks'
 import { format } from 'date-fns'
@@ -60,23 +60,19 @@ export default function ComedorPage() {
   }
 
   const filteredReservations = useMemo(() => {
-    return reservations.filter((reservation) => {
+    return (reservations || []).filter((reservation: any) => {
       const reservationDate = convertDateForComparison(formatDate(reservation.date))
 
       // Date filtering - Desde (mayor o igual)
       if (fromDate) {
         const fromDateStr = fromDate.toISOString().split('T')[0]
-        if (reservationDate < fromDateStr) {
-          return false
-        }
+        if (reservationDate < fromDateStr) return false
       }
 
       // Date filtering - Hasta (menor o igual)
       if (toDate) {
         const toDateStr = toDate.toISOString().split('T')[0]
-        if (reservationDate > toDateStr) {
-          return false
-        }
+        if (reservationDate > toDateStr) return false
       }
 
       // Type filtering
@@ -174,37 +170,33 @@ export default function ComedorPage() {
           )}
         </div>
         
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Filtros de fecha */}
-          <div className="flex flex-col sm:flex-row gap-4 lg:flex-1">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
-              <DatePicker
-                selectedDate={fromDate}
-                onChange={(date) => setFromDate(date)}
-                placeholder="Seleccionar fecha"
-                maxDate={toDate}
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
-              <DatePicker
-                selectedDate={toDate}
-                onChange={(date) => setToDate(date)}
-                placeholder="Seleccionar fecha"
-                minDate={fromDate}
-              />
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Desde</label>
+            <DatePicker
+              selectedDate={fromDate}
+              onChange={(date) => setFromDate(date)}
+              placeholder="Seleccionar fecha"
+              maxDate={toDate}
+            />
           </div>
 
-          {/* Filtros con dropdowns */}
-          <div className="flex flex-col sm:flex-row gap-4 lg:w-auto">
-            {/* Filtro Tipo */}
-            <div className="relative flex-shrink-0">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Hasta</label>
+            <DatePicker
+              selectedDate={toDate}
+              onChange={(date) => setToDate(date)}
+              placeholder="Seleccionar fecha"
+              minDate={fromDate}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Tipo</label>
+            <div className="relative">
               <button
                 onClick={() => setShowTipoFilter(!showTipoFilter)}
-                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto min-w-[160px]"
+                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
                 aria-label="Filtrar por tipo"
                 aria-expanded={showTipoFilter}
               >
@@ -263,13 +255,14 @@ export default function ComedorPage() {
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Filtro Estado */}
-            <div className="relative flex-shrink-0">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Estado</label>
+            <div className="relative">
               <button
                 onClick={() => setShowEstadoFilter(!showEstadoFilter)}
-                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto min-w-[160px]"
+                className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
                 aria-label="Filtrar por estado"
                 aria-expanded={showEstadoFilter}
               >
@@ -331,68 +324,7 @@ export default function ComedorPage() {
           </div>
         </div>
 
-        {/* Active Filters Tags */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-gray-200">
-            {fromDate && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                Desde: {formatDateForTag(fromDate)}
-                <button
-                  onClick={() => setFromDate(null)}
-                  className="rounded-full p-0.5 hover:opacity-80"
-                  aria-label="Remover filtro desde"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {toDate && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                Hasta: {formatDateForTag(toDate)}
-                <button
-                  onClick={() => setToDate(null)}
-                  className="rounded-full p-0.5 hover:opacity-80"
-                  aria-label="Remover filtro hasta"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {tipos.map((tipo) => (
-              <span key={tipo} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                {tipo}
-                <button
-                  onClick={() => toggleTipo(tipo)}
-                  className="rounded-full p-0.5 hover:opacity-80"
-                  aria-label={`Remover filtro ${tipo}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-            {estados.map((estado) => (
-              <span 
-                key={estado}
-                className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${
-                  estado === "Finalizado" 
-                    ? "bg-green-100 text-green-800"
-                    : estado === "Cancelado"
-                      ? "bg-orange-100 text-orange-800"
-                      : "bg-blue-100 text-blue-800"
-                }`}
-              >
-                {estado}
-                <button
-                  onClick={() => toggleEstado(estado)}
-                  className="rounded-full p-0.5 hover:opacity-80"
-                  aria-label={`Remover filtro ${estado}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Active filters removed per request */}
       </div>
 
       {/* Table Section */}
@@ -449,24 +381,20 @@ export default function ComedorPage() {
               ) : filteredReservations.length === 0 && reservations.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    <div className="space-y-2">
-                      <p>No hay reservas disponibles.</p>
-                      <p className="text-sm">Las reservas aparecerán aquí una vez que hagas alguna.</p>
+                    <div className="flex flex-col items-center">
+                      <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No hay reservas</h3>
+                      <p className="text-gray-600">Aún no hay reservas en el comedor.</p>
                     </div>
                   </td>
                 </tr>
               ) : filteredReservations.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    <div className="space-y-2">
-                      <p>No se encontraron reservas que coincidan con los filtros aplicados.</p>
-                      <p className="text-sm">Total de reservas: {reservations.length}</p>
-                      <button 
-                        onClick={clearFilters}
-                        className="text-blue-600 hover:text-blue-800 underline"
-                      >
-                        Limpiar filtros
-                      </button>
+                    <div className="flex flex-col items-center">
+                      <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron reservas</h3>
+                      <p className="text-gray-600">Ninguna reserva coincide con los filtros aplicados.</p>
                     </div>
                   </td>
                 </tr>
