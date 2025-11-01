@@ -288,12 +288,38 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
 
       {/* Loading State */}
       {isLoading && (
-        <div className="text-center py-8 lg:py-12">
-          <div className="text-gray-400 mb-2">
-            <div className="animate-spin h-10 w-10 lg:h-12 lg:w-12 mx-auto border-4 border-gray-300 border-t-blue-600 rounded-full"></div>
-          </div>
-          <h3 className="text-base lg:text-lg font-medium text-gray-900 mb-1">Cargando cursos...</h3>
-          <p className="text-sm lg:text-base text-gray-500">Obteniendo datos del backend</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Image Skeleton */}
+              <div className="relative overflow-hidden h-32 lg:h-40 bg-gray-200">
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+              
+              {/* Content Skeleton */}
+              <div className="p-4 space-y-3">
+                <div className="relative overflow-hidden h-6 w-3/4 bg-gray-200 rounded">
+                  <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                  <div className="relative overflow-hidden h-4 w-24 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="relative overflow-hidden h-4 w-16 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -421,14 +421,17 @@ export default function ComedorPage() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                      <span>Cargando reservas...</span>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      <td colSpan={6} className="px-6 py-4">
+                        <div className="relative overflow-hidden h-12 bg-gray-100 rounded">
+                          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </>
               ) : error ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-red-500">
