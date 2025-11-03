@@ -586,6 +586,66 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     } catch {}
   }, [gradesData])
 
+  // Load grades from backend when Calificaciones tab is opened
+  useEffect(() => {
+    let mounted = true
+    const loadGrades = async () => {
+      if (activeTab !== 'Calificaciones') return
+      try {
+        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        const resp = await CoursesService.getCourseGrades(Number(courseId))
+        if (!mounted) return
+        if (resp && resp.success && Array.isArray(resp.data)) {
+          const assessments: any[] = resp.data
+          const updated: Record<string, Record<string, string>> = {}
+
+          // Map assessment types to internal grade keys
+          const mapTipoToKey = (tipo: string) => {
+            const t = String(tipo || '').toUpperCase()
+            if (t.includes('PARCIAL') && t.includes('1')) return '1P'
+            if (t.includes('PARCIAL') && t.includes('2')) return '2P'
+            if (t.includes('PARCIAL') && !t.includes('1') && !t.includes('2')) return '1P'
+            if (t.includes('RECUP') || t.includes('RECUPERATORIO') || t.includes('REC')) return 'REC'
+            if (t.includes('FINAL')) return 'FINAL'
+            return ''
+          }
+
+          for (const ass of assessments) {
+            const key = mapTipoToKey(ass.tipo)
+            if (!key) continue
+            const gradesArr = Array.isArray(ass.grades) ? ass.grades : []
+            for (const g of gradesArr) {
+              const sid = String(g.studentId ?? g.studentId)
+              if (!updated[sid]) updated[sid] = {}
+              updated[sid][key] = String(g.grade ?? '')
+            }
+          }
+
+          // Ensure all students exist in the map (even if empty)
+          for (const s of students) {
+            const sid = String(s.id)
+            if (!updated[sid]) updated[sid] = {}
+          }
+
+          // Calculate final condition for each student
+          Object.keys(updated).forEach((sid) => {
+            updated[sid]["CONDICIÓN FINAL"] = calculateFinalCondition(updated[sid])
+          })
+
+          setGradesData(updated)
+        } else {
+          // no data or error - keep existing gradesData
+          console.warn('No grades data returned', resp?.error)
+        }
+      } catch (err) {
+        console.warn('Error loading grades:', err)
+      }
+    }
+
+    loadGrades()
+    return () => { mounted = false }
+  }, [activeTab, courseId])
+
   // Start with a minimal placeholder (do NOT show full mock data)
   const placeholderCourse = {
     id: Number(courseId),

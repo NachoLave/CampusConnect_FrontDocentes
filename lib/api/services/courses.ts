@@ -179,6 +179,27 @@ export class CoursesService {
     return apiClient.get<string[]>(`${API_CONFIG.ENDPOINTS.COURSES}/sedes`)
   }
 
+  // Obtener calificaciones de un curso (todas las evaluaciones y notas)
+  static async getCourseGrades(courseId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_GRADES === 'function'
+        ? API_CONFIG.ENDPOINTS.COURSE_GRADES(courseId)
+        : `/teaching/courses/${courseId}/grades`
+
+      const resp = await apiClient.get<any[]>(endpoint)
+      if (!resp || !resp.success) {
+        return { data: [], success: false, error: resp?.error || 'Error obteniendo calificaciones' }
+      }
+
+      // The backend may return the array directly or wrapped in { value: [...] }
+      const dataAny: any = resp.data
+      const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
+      return { data: list, success: true, message: 'Calificaciones obtenidas' }
+    } catch (error) {
+      return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener días únicos
   static async getAvailableDays(): Promise<ApiResponse<string[]>> {
     if (USE_MOCK_DATA) {
