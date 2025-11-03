@@ -20,7 +20,7 @@ import {
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
-import { CoursesService } from '@/lib/api/services/courses'
+import { CoursesService, mapBackendCourseToFrontend } from '@/lib/api/services/courses'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
@@ -521,6 +521,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
   const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
   const [gradesAlertMessage, setGradesAlertMessage] = useState("")
+  const [savingGrades, setSavingGrades] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
   const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
@@ -570,7 +571,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           // Normalizar condición calculada
           const normalized: Record<string, Record<string, string>> = {}
           Object.entries(parsed).forEach(([sid, grades]) => {
-            const g = { ...grades }
+            const g: Record<string, string> = {}
+            // Sanitize each grade value using validateAndRoundGrade
+            Object.entries(grades || {}).forEach(([k, v]) => {
+              if (k === 'CONDICIÓN FINAL') return
+              g[k] = validateAndRoundGrade(String(v ?? ''))
+            })
+            // Recompute condition
             g["CONDICIÓN FINAL"] = calculateFinalCondition(g)
             normalized[sid] = g
           })
@@ -615,9 +622,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             if (!key) continue
             const gradesArr = Array.isArray(ass.grades) ? ass.grades : []
             for (const g of gradesArr) {
-              const sid = String(g.studentId ?? g.studentId)
-              if (!updated[sid]) updated[sid] = {}
-              updated[sid][key] = String(g.grade ?? '')
+          const sid = String(g.studentId ?? g.studentId)
+          if (!updated[sid]) updated[sid] = {}
+          // Sanitize backend values to ensure only numeric grades (rounded to 0.5) are stored
+          const sanitized = validateAndRoundGrade(String(g.grade ?? ''))
+          updated[sid][key] = sanitized
             }
           }
 
@@ -709,6 +718,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
           if (partsResp && partsResp.success && partsResp.data) {
             const backendCourse: any = partsResp.data.course || {}
+              // Debug: log raw backend response to help diagnose missing fields (remove in production)
+              try {
+                // eslint-disable-next-line no-console
+                console.debug('[CourseInfo] getCourseParticipants response', partsResp)
+                // eslint-disable-next-line no-console
+                console.debug('[CourseInfo] backendCourse raw', backendCourse)
+              } catch {}
             const rawStudents: any[] = Array.isArray(partsResp.data.students) ? partsResp.data.students : []
             const studentsData: any[] = rawStudents.map((s: any, idx: number) => ({
               id: Number(s.studentId ?? s.id ?? idx + 1),
@@ -720,17 +736,64 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             }))
             const teachersFromBackend: any[] = Array.isArray(partsResp.data.teachers) ? partsResp.data.teachers : []
 
+            // Normalize backend course fields to the shape used by the header and cards
+            const rawDay = String(backendCourse.diaSemana || backendCourse.day || '').toUpperCase()
+            const dayLabel = rawDay ? (rawDay[0] + rawDay.slice(1).toLowerCase()) : placeholderCourse.day
+
+            const turno = String(backendCourse.turno || backendCourse.shift || '').toUpperCase()
+            const shiftMap: Record<string, string> = { 'MANIANA': 'TM', 'MAÑANA': 'TM', 'TARDE': 'TT', 'NOCHE': 'TN', 'TN': 'TN', 'TT': 'TT', 'TM': 'TM' }
+            const shiftAbbr = shiftMap[turno] || (turno || placeholderCourse.shift)
+
+            const schedule = backendCourse.horario || backendCourse.schedule || backendCourse.horarioAgenda || backendCourse.scheduleRange || placeholderCourse.schedule
+
             const datesStr = backendCourse.dates || (backendCourse.fechaInicio && backendCourse.fechaFin ? `${backendCourse.fechaInicio} - ${backendCourse.fechaFin}` : placeholderCourse.dates)
 
+            const location = backendCourse.aula || backendCourse.location || backendCourse.sede || backendCourse.campus || placeholderCourse.location
+            const isVirtual = (String(backendCourse.modalidad || backendCourse.isVirtual || '') || '').toUpperCase().includes('VIRTUAL') || Boolean(backendCourse.isVirtual)
+
+            // Prefer using the shared mapping used by course cards when possible
+            const mapped = mapBackendCourseToFrontend(backendCourse)
+            try {
+              // eslint-disable-next-line no-console
+              console.debug('[CourseInfo] mapped course (from mapBackendCourseToFrontend)', mapped)
+            } catch {}
+            // Determine final dates and horario using the mapped result first, then fallback to backend raw values
+            const finalDates = (mapped as any).dates || datesStr || placeholderCourse.dates
+            let fechaInicio: string | undefined = undefined
+            let fechaFin: string | undefined = undefined
+            if (finalDates && typeof finalDates === 'string' && finalDates.includes('-')) {
+              const parts = finalDates.split('-').map((p: string) => p.trim())
+              if (parts.length >= 2) {
+                fechaInicio = parts[0]
+                fechaFin = parts[1]
+              }
+            }
+
+            const finalSchedule = (mapped as any).schedule || schedule || placeholderCourse.schedule
+            let horarioInicio: string | undefined = undefined
+            let horarioFin: string | undefined = undefined
+            if (finalSchedule && typeof finalSchedule === 'string' && finalSchedule.includes('-')) {
+              const hp = finalSchedule.split('-').map((h: string) => h.trim())
+              if (hp.length >= 2) {
+                horarioInicio = hp[0]
+                horarioFin = hp[1]
+              }
+            }
+
+            // Ensure mapped course includes derived dates/horario fields and updated teachers/students
             const merged = {
-              ...backendCourse,
-              teachers: teachersFromBackend.length > 0 ? teachersFromBackend : placeholderCourse.teachers,
+              ...placeholderCourse,
+              ...mapped,
+              title: String(mapped.title || placeholderCourse.title),
+              teachers: teachersFromBackend.length > 0 ? teachersFromBackend : mapped.teachers || placeholderCourse.teachers,
               studentsData,
-              students: studentsData.length || backendCourse.students || 0,
-              stats: backendCourse.stats || placeholderCourse.stats,
-              dates: datesStr,
-              day: backendCourse.diaSemana || backendCourse.day || placeholderCourse.day,
-              shift: backendCourse.turno || backendCourse.shift || placeholderCourse.shift,
+              students: studentsData.length || (mapped as any).students || 0,
+              dates: finalDates,
+              fechaInicio,
+              fechaFin,
+              horarioInicio,
+              horarioFin,
+              stats: (mapped as any).stats || placeholderCourse.stats,
             }
 
             setCourse(merged)
@@ -1495,10 +1558,70 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const confirmSaveGrades = () => {
-    setIsEditingGrades(false)
+    // Close confirmation modal and start saving
     setShowGradesSaveModal(false)
-    // Here you would save to backend
-    console.log("Saving grades:", gradesData)
+    const doSave = async () => {
+      try {
+        setSavingGrades(true)
+        // Build payload: array of assessments with grades per student
+        const keys = ["1P", "2P", "REC", "FINAL"]
+        const mapKeyToTipo = (k: string) => {
+          if (k === '1P') return 'Parcial 1'
+          if (k === '2P') return 'Parcial 2'
+          if (k === 'REC') return 'Recuperatorio'
+          if (k === 'FINAL') return 'Final'
+          return k
+        }
+
+        const assessments: any[] = []
+        const today = new Date().toISOString()
+
+        for (const k of keys) {
+          const gradesArr: any[] = []
+          for (const s of students) {
+            const sid = String(s.id)
+            const val = gradesData[sid]?.[k]
+            if (val !== undefined && val !== null && String(val).trim() !== "") {
+              const parsed = Number.parseFloat(String(val))
+              if (Number.isFinite(parsed)) {
+                gradesArr.push({ studentId: Number(s.id), grade: parsed, published: false })
+              }
+            }
+          }
+
+          if (gradesArr.length > 0) {
+            assessments.push({ assessmentId: null, tipo: mapKeyToTipo(k), fecha: today, grades: gradesArr })
+          }
+        }
+
+        if (assessments.length === 0) {
+          setGradesAlertMessage('No hay calificaciones para guardar')
+          setShowGradesAlertModal(true)
+          setSavingGrades(false)
+          return
+        }
+
+        // Ensure mock headers for dev env
+        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        const resp = await CoursesService.saveCourseGrades(Number(courseId), assessments)
+        setSavingGrades(false)
+        if (resp && resp.success) {
+          // On success, stop editing and optionally refresh grades from backend
+          setIsEditingGrades(false)
+          setGradesAlertMessage('Calificaciones guardadas correctamente')
+          setShowGradesAlertModal(true)
+        } else {
+          setGradesAlertMessage(resp?.error || 'Error guardando calificaciones')
+          setShowGradesAlertModal(true)
+        }
+      } catch (err) {
+        setSavingGrades(false)
+        setGradesAlertMessage(err instanceof Error ? err.message : 'Error desconocido al guardar')
+        setShowGradesAlertModal(true)
+      }
+    }
+
+    void doSave()
   }
 
   const generateActaFilename = () => {

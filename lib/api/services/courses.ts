@@ -200,6 +200,74 @@ export class CoursesService {
     }
   }
 
+  // Guardar/actualizar calificaciones de un curso
+  static async saveCourseGrades(courseId: number, assessments: any[]): Promise<ApiResponse<any>> {
+    try {
+      const results: any[] = []
+
+      for (const ass of assessments) {
+        // Normalize grades array for sending
+        const gradesPayload = Array.isArray(ass.grades)
+          ? ass.grades.map((g: any) => ({ studentId: Number(g.studentId), grade: String(g.grade) }))
+          : []
+
+        // If assessmentId provided -> update grades via PUT to /teaching/assessments/{id}/grades
+        const aid = Number(ass.assessmentId || ass.assessmentId === 0 ? ass.assessmentId : NaN)
+        if (Number.isFinite(aid)) {
+          const endpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
+            ? API_CONFIG.ENDPOINTS.GRADES(aid)
+            : `/teaching/assessments/${aid}/grades`
+
+          const body = { courseId, grades: gradesPayload }
+          const resp = await apiClient.put<any>(endpoint, body)
+          if (!resp || !resp.success) {
+            return { data: null as any, success: false, error: resp?.error || `Error actualizando calificaciones para assessment ${aid}` }
+          }
+          results.push(resp.data)
+        } else {
+          // No assessmentId -> create a new assessment for this course
+          const endpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
+            ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
+            : `/teaching/courses/${courseId}/assessments`
+
+          // Send tipo/fecha and grades
+          const body = { tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
+
+          try {
+            const resp = await apiClient.post<any>(endpoint, body)
+            if (!resp || !resp.success) {
+              // Try alternative create endpoint if backend expects assessments to be created at /teaching/assessments
+              const altBody = { courseId, tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
+              const altResp = await apiClient.post<any>('/teaching/assessments', altBody)
+              if (!altResp || !altResp.success) {
+                return { data: null as any, success: false, error: altResp?.error || resp?.error || 'Error creando nueva evaluación' }
+              }
+              results.push(altResp.data)
+            } else {
+              results.push(resp.data)
+            }
+          } catch (err) {
+            // If the first attempt threw (500), try the alternative path used by some backends
+            try {
+              const altBody = { courseId, tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
+              const altResp = await apiClient.post<any>('/teaching/assessments', altBody)
+              if (!altResp || !altResp.success) {
+                return { data: null as any, success: false, error: altResp?.error || 'Error creando nueva evaluación (fallback)' }
+              }
+              results.push(altResp.data)
+            } catch (err2) {
+              return { data: null as any, success: false, error: err2 instanceof Error ? err2.message : 'Error desconocido creando evaluación' }
+            }
+          }
+        }
+      }
+
+      return { data: results, success: true, message: 'Operación de calificaciones completada' }
+    } catch (error) {
+      return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener días únicos
   static async getAvailableDays(): Promise<ApiResponse<string[]>> {
     if (USE_MOCK_DATA) {
@@ -338,29 +406,42 @@ function datesForTerm(term: string): string | undefined {
   return undefined
 }
 
-function mapBackendCourseToFrontend(c: any): Course {
+export function mapBackendCourseToFrontend(c: any): Course {
   const dayUpper = String(c.diaSemana || '').toUpperCase()
   const turnoUpper = String(c.turno || '').toUpperCase()
   const shiftAbbr = shiftToAbbr[turnoUpper] || 'TM'
   const schedule = shiftToSchedule[turnoUpper] || '8:00 - 12:00'
-  const periodLabel = convertTermToFrontendPeriod(String(c.periodo || ''))
+  // Accept multiple field names for the term/period (term is used by backend sample)
+  const rawTerm = String(c.periodo || c.term || c.termId || '')
+  const periodLabel = convertTermToFrontendPeriod(rawTerm)
 
   return {
-    id: Number(c.courseId) || 0,
-    title: String(c.materia || 'Curso'),
+    id: Number(c.courseId ?? c.id ?? 0) || 0,
+    // Title may be provided under several names
+    title: String(c.subjectName || c.materia || c.nombre || c.title || c.name || 'Curso'),
     day: dayMap[dayUpper] || 'Lunes',
-    code: String(c.comision || c.courseId || ''),
-    students: Number(c.studentCount ?? 0),
-    teachers: Array.isArray(c.orDefault)
-      ? c.orDefault.map((t: any) => ({ id: Number(t.teacherId) || 0, name: String(t.nombre || ''), avatar: '/placeholder-user.jpg' }))
-      : [],
+    code: String(c.comision || c.code || c.courseCode || c.courseId || ''),
+    students: Number(c.studentCount ?? c.students ?? 0),
+    // Normalize teachers: support titulares/auxiliares or orDefault
+    teachers: ((): any[] => {
+      if (Array.isArray(c.titulares) || Array.isArray(c.auxiliares)) {
+        const titulares = Array.isArray(c.titulares) ? c.titulares : []
+        const auxiliares = Array.isArray(c.auxiliares) ? c.auxiliares : []
+        return [...titulares, ...auxiliares].map((t: any) => ({ id: Number(t.teacherId ?? t.id ?? 0), name: String(t.name || t.nombre || t.fullName || ''), avatar: '/placeholder-user.jpg' }))
+      }
+      if (Array.isArray(c.orDefault)) {
+        return c.orDefault.map((t: any) => ({ id: Number(t.teacherId) || 0, name: String(t.nombre || t.name || ''), avatar: '/placeholder-user.jpg' }))
+      }
+      return []
+    })(),
     shift: shiftAbbr,
     schedule,
-    dates: datesForTerm(String(c.periodo || '')),
+    // Derive dates from term if backend returns a term like 2025Q2
+    dates: datesForTerm(rawTerm),
     period: periodLabel,
-    location: c.aula ? String(c.aula) : undefined,
-    sede: String(c.campus || 'Virtual'),
-    isVirtual: String(c.modalidad || '').toUpperCase() === 'VIRTUAL',
+    location: String(c.classroom ?? c.aula ?? c.location ?? '' ) || undefined,
+    sede: String(c.campus ?? c.sede ?? 'Virtual'),
+    isVirtual: String(c.modalidad || c.mode || '').toUpperCase() === 'VIRTUAL',
     image: '/images/course-background.png'
   }
 }
