@@ -1,12 +1,13 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import coursesData from "@/lib/data/courses.json"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MapPin, Clock, ChevronLeft, ChevronRight } from "lucide-react"
 import { es } from "date-fns/locale/es"
+import { CalendarService, CalendarEvent as BackendCalendarEvent } from '@/lib/api/services/calendar'
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -244,6 +245,9 @@ const getCourseEventsForDate = (date: Date) => {
 export default function CalendarioPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [backendEvents, setBackendEvents] = useState<BackendCalendarEvent[]>([])
+  const [loadingEvents, setLoadingEvents] = useState(false)
+  const [eventsError, setEventsError] = useState<string | null>(null)
   const [filters, setFilters] = useState({
     clases: true,
     examenes: true,
@@ -306,34 +310,91 @@ export default function CalendarioPage() {
     return true
   }
 
-  // Función para obtener tipos de eventos por fecha (igual que en el home)
+  // Helper: format YYYY-MM-DD to dd/MM/yyyy
+  const formatIsoToDdMmYyyy = (iso: string) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  // Map backend event.type to page types
+  const mapBackendType = (t: BackendCalendarEvent['type']): string => {
+    if (t === 'class') return 'clase'
+    if (t === 'exam') return 'examen'
+    if (t === 'meeting') return 'evento'
+    return 'evento'
+  }
+
+  // Función para obtener tipos de eventos por fecha (usa backend events when available)
   const getEventTypesForDate = (date: Date): Set<string> => {
     const types = new Set<string>()
     const label = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    
-    // Agregar eventos mock
-    mockEvents.forEach((event) => {
-      if (event.date === label && isEventVisible(event)) {
-        types.add(event.type)
-      }
+
+    // Use only backend events
+    backendEvents.forEach((evt) => {
+      const key = formatIsoToDdMmYyyy(evt.date)
+      const mappedType = mapBackendType(evt.type)
+      if (key === label && isEventVisible({ type: mappedType })) types.add(mappedType)
     })
-    
-    // Agregar eventos de cursos
-    getCourseEventsForDate(date).forEach((event) => {
-      if (isEventVisible(event)) {
-        types.add(event.type)
-      }
-    })
-    
+
     return types
   }
 
   const eventsOfSelected = useMemo(() => {
     const label = selectedLabel
-    const selected = selectedDate || new Date()
-    const courseEvents = getCourseEventsForDate(selected)
-    return [...mockEvents, ...courseEvents].filter((e) => e.date === label && isEventVisible(e))
-  }, [selectedLabel, selectedDate, filters])
+    // Prefer backend events
+    const fromBackend = backendEvents.map((e) => ({
+      id: e.id,
+      type: mapBackendType(e.type),
+      title: e.title,
+      date: formatIsoToDdMmYyyy(e.date),
+      // build time range from start (time) and duration
+      time: (() => {
+        const start = e.time // HH:MM
+        const [hh, mm] = start.split(':').map((n) => parseInt(n, 10))
+        const startDt = new Date(e.date + 'T' + start + ':00')
+        const endDt = new Date(startDt.getTime() + (e.duration || 60) * 60000)
+        const pad = (n: number) => n.toString().padStart(2, '0')
+        return `${pad(startDt.getHours())}:${pad(startDt.getMinutes())} - ${pad(endDt.getHours())}:${pad(endDt.getMinutes())}`
+      })(),
+      location: e.classroom || '',
+      section: e.sede || '',
+      color: e.type === 'class' ? 'bg-blue-100 border-blue-200 text-blue-800' : e.type === 'exam' ? 'bg-orange-100 border-orange-200 text-orange-800' : 'bg-green-100 border-green-200 text-green-800'
+    })).filter((ev) => ev.date === label && isEventVisible(ev))
+
+    // Return backend-derived events (may be empty)
+    return fromBackend
+  }, [selectedLabel, selectedDate, filters, backendEvents])
+
+  // Fetch backend events for the two-month window (currentMonth and next month)
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setLoadingEvents(true)
+      setEventsError(null)
+      try {
+        const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+        const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
+        const fromIso = from.toISOString().split('T')[0]
+        const toIso = to.toISOString().split('T')[0]
+        console.log('📡 Fetching calendar backend events from', fromIso, 'to', toIso)
+        const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
+        if (res.success && Array.isArray(res.data)) {
+          setBackendEvents(res.data)
+        } else {
+          setBackendEvents([])
+          setEventsError(res.message || 'No events')
+        }
+      } catch (err: any) {
+        console.error('Error fetching calendar events', err)
+        setBackendEvents([])
+        setEventsError(String(err?.message || err))
+      } finally {
+        setLoadingEvents(false)
+      }
+    }
+
+    fetchEvents()
+  }, [currentMonth])
 
   const upcoming = useMemo(() => {
     const today = new Date()
@@ -501,36 +562,36 @@ export default function CalendarioPage() {
                 locale={es}
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
-                  // construir mapa { dd/mm/yyyy: {clase:true,examen:true,...} }
                   const map: Record<string, any> = {}
-                  const add = (e: any) => {
-                    if (!isEventVisible(e)) return
-                    const d = e.date
-                    map[d] = map[d] || {}
-                    if (e.type) map[d][e.type] = true
-                    console.log(`📌 Agregando evento ${e.type} para ${d}`)
+                  backendEvents.forEach((e) => {
+                    const key = formatIsoToDdMmYyyy(e.date)
+                    const mappedType = mapBackendType(e.type)
+                    if (!isEventVisible({ type: mappedType })) return
+                    map[key] = map[key] || {}
+                    map[key][mappedType] = true
+                  })
+
+                  // If backend returned no events, keep previous mock/course-derived behavior as fallback
+                  if (backendEvents.length === 0) {
+                    const add = (ev: any) => {
+                      if (!isEventVisible(ev)) return
+                      const d = ev.date
+                      map[d] = map[d] || {}
+                      if (ev.type) map[d][ev.type] = true
+                    }
+                    mockEvents.forEach(add)
+                    const october2025 = new Date(2025, 9, 1)
+                    const november2025 = new Date(2025, 10, 1)
+                    for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
+                      getCourseEventsForDate(new Date(d)).forEach(add)
+                    }
+                    for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
+                      getCourseEventsForDate(new Date(d)).forEach(add)
+                    }
                   }
-                  
-                  // eventos mock
-                  mockEvents.forEach(add)
-                  
-                  // eventos de cursos - generar para octubre y noviembre 2025 específicamente
-                  const october2025 = new Date(2025, 9, 1) // octubre 2025
-                  const november2025 = new Date(2025, 10, 1) // noviembre 2025
-                  
-                  // Generar eventos para octubre 2025
-                  for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
-                    getCourseEventsForDate(new Date(d)).forEach(add)
-                  }
-                  
-                  // Generar eventos para noviembre 2025
-                  for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
-                    getCourseEventsForDate(new Date(d)).forEach(add)
-                  }
-                  
-                  console.log('🗓️ Mapa final de eventos:', map)
+
                   return map
-                }, [currentMonth, filters])}
+                }, [currentMonth, filters, backendEvents])}
               />
               <Calendar
                 mode="single"
@@ -541,32 +602,34 @@ export default function CalendarioPage() {
                 className="hidden md:block w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
-                  const add = (e: any) => {
-                    if (!isEventVisible(e)) return
-                    const d = e.date
-                    map[d] = map[d] || {}
-                    if (e.type) map[d][e.type] = true
+                  backendEvents.forEach((e) => {
+                    const key = formatIsoToDdMmYyyy(e.date)
+                    const mappedType = mapBackendType(e.type)
+                    if (!isEventVisible({ type: mappedType })) return
+                    map[key] = map[key] || {}
+                    map[key][mappedType] = true
+                  })
+
+                  if (backendEvents.length === 0) {
+                    const add = (ev: any) => {
+                      if (!isEventVisible(ev)) return
+                      const d = ev.date
+                      map[d] = map[d] || {}
+                      if (ev.type) map[d][ev.type] = true
+                    }
+                    mockEvents.forEach(add)
+                    const october2025 = new Date(2025, 9, 1)
+                    const november2025 = new Date(2025, 10, 1)
+                    for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
+                      getCourseEventsForDate(new Date(d)).forEach(add)
+                    }
+                    for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
+                      getCourseEventsForDate(new Date(d)).forEach(add)
+                    }
                   }
-                  
-                  // eventos mock
-                  mockEvents.forEach(add)
-                  
-                  // eventos de cursos - generar para octubre y noviembre 2025 específicamente
-                  const october2025 = new Date(2025, 9, 1) // octubre 2025
-                  const november2025 = new Date(2025, 10, 1) // noviembre 2025
-                  
-                  // Generar eventos para octubre 2025
-                  for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
-                    getCourseEventsForDate(new Date(d)).forEach(add)
-                  }
-                  
-                  // Generar eventos para noviembre 2025
-                  for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
-                    getCourseEventsForDate(new Date(d)).forEach(add)
-                  }
-                  
+
                   return map
-                }, [currentMonth, filters])}
+                }, [currentMonth, filters, backendEvents])}
               />
             </div>
           </div>
@@ -598,7 +661,7 @@ export default function CalendarioPage() {
                           </span>
                         </div>
                       </div>
-                      {'description' in event && event.description && <p className="text-xs md:text-sm text-gray-700 mb-3">{event.description}</p>}
+                      { (event as any).description ? <p className="text-xs md:text-sm text-gray-700 mb-3">{(event as any).description}</p> : null }
                     </div>
                     <Button variant="outline" size="sm" className="md:ml-4 bg-transparent w-full md:w-auto text-xs md:text-sm">
                       VER MAS

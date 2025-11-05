@@ -73,49 +73,62 @@ export class CalendarService {
 
     try {
       console.log('🌐 Intentando obtener eventos del calendario del backend...')
-      
-      // Obtener cursos del período actual
-      const currentDate = new Date()
-      const year = currentDate.getFullYear()
-      const month = currentDate.getMonth() + 1
-      
-      let term = '2025Q2' // Por defecto
-      if (month >= 3 && month <= 7) {
-        term = `${year}Q1`
-      } else if (month >= 8 && month <= 12) {
-        term = `${year}Q2`
-      }
-      
-      console.log('📅 Período calculado para calendario:', {
-        fechaActual: currentDate.toISOString().split('T')[0],
-        mes: month,
-        año: year,
-        terminoCalculado: term
-      })
-      
-      const coursesUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=${term}&includePrevious=false`
+
+      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_CALENDAR}?from=${startDate}&to=${endDate}`
       const headers = {
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
         'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
       }
-      
-      console.log(`📡 Llamando al backend real: ${coursesUrl}`)
-      const response = await fetch(coursesUrl, { method: 'GET', headers: headers })
-      
+
+      console.log(`📡 Llamando al backend real: ${url}`)
+      const response = await fetch(url, { method: 'GET', headers })
+
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`)
       }
-      
-      const courses = await response.json()
-      console.log('✅ Cursos obtenidos del backend:', courses)
-      
-      // Convertir cursos a eventos del calendario
-      const events = this.convertCoursesToEvents(courses, startDate, endDate)
-      
+
+      const data = (await response.json()) as Array<{
+        source?: string
+        title?: string
+        start?: string
+        end?: string
+        link?: string | null
+        campus?: string | null
+      }>
+
+      console.log('✅ Calendario backend:', data)
+
+      const events: CalendarEvent[] = data.map((item, idx) => {
+        const startIso = item.start || ''
+        const endIso = item.end || ''
+        const startDateObj = startIso ? new Date(startIso) : new Date()
+        const endDateObj = endIso ? new Date(endIso) : new Date(startDateObj.getTime() + 60 * 60 * 1000)
+
+        const date = startDateObj.toISOString().split('T')[0]
+        const time = startDateObj.toTimeString().slice(0,5)
+        const duration = Math.max(0, Math.round((endDateObj.getTime() - startDateObj.getTime()) / 60000))
+
+        // Mapear source a tipo interno
+        let type: CalendarEvent['type'] = 'meeting'
+        if (item.source === 'CLASE') type = 'class'
+        if (item.source === 'EXAMEN' || item.source === 'EXAMENES') type = 'exam'
+
+        return {
+          id: `${idx}-${date}-${time}`,
+          title: item.title || 'Evento',
+          courseId: 0,
+          courseTitle: item.title || 'Evento',
+          date,
+          time,
+          duration,
+          classroom: item.link || '',
+          sede: item.campus || '',
+          type
+        }
+      })
+
       return {
         data: events,
         success: true,
@@ -123,28 +136,12 @@ export class CalendarService {
       }
     } catch (error) {
       console.error('❌ Error obteniendo eventos del calendario:', error)
-      console.log('🔄 Usando eventos de fallback')
-      
-      // Fallback a datos mock
-      const mockEvents: CalendarEvent[] = [
-        {
-          id: '1',
-          title: 'Clase de Bases de Datos',
-          courseId: 2002,
-          courseTitle: 'Bases de Datos',
-          date: '2025-01-18',
-          time: '18:30',
-          duration: 240,
-          classroom: 'B-202',
-          sede: 'MDP',
-          type: 'class'
-        }
-      ]
-      
+      console.log('🔄 No se encontraron eventos del backend y APP_CONFIG.USE_MOCK_DATA=false — devolviendo lista vacía')
+
       return {
-        data: mockEvents,
-        success: true,
-        message: 'Eventos obtenidos (modo fallback)'
+        data: [],
+        success: false,
+        message: 'No se pudieron obtener eventos del backend'
       }
     }
   }
@@ -259,15 +256,18 @@ export class CalendarService {
         'DOMINGO': ['2025-01-12', '2025-01-19', '2025-01-26']
       }
       
-      const courseDates = january2025Dates[course.diaSemana] || []
-      
+      // Normalizar la clave del día de la semana y usar un índice seguro
+      const dayKey = String(course.diaSemana || '').toUpperCase()
+      const januaryMap = january2025Dates as Record<string, string[]>
+      const courseDates = januaryMap[dayKey] || []
+
       console.log('🔄 Conversión:', {
         diaSemanaOriginal: course.diaSemana,
         fechasDisponibles: courseDates,
         time: time
       })
-      
-      courseDates.forEach((eventDate) => {
+
+      courseDates.forEach((eventDate: string) => {
         // Verificar si la fecha está en el rango solicitado
         if (eventDate >= startDate && eventDate <= endDate) {
           console.log('✅ Creando evento:', {
