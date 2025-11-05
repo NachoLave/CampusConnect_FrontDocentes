@@ -33,60 +33,7 @@ function Calendar({
   console.log('📅 Calendar recibiendo eventsByDay:', eventsByDay)
   console.log('🚨 CALENDAR COMPONENT EJECUTÁNDOSE - CalendarDayButton configurado:', CalendarDayButton)
   console.log('🎨 CSS GLOBAL APLICADO - Puntos para días específicos')
-
-  // Función para agregar puntos solo a días específicos
-  React.useEffect(() => {
-    const addSpecificEventDots = () => {
-      // Limpiar puntos existentes
-      document.querySelectorAll('.calendar button .event-dot').forEach(dot => dot.remove())
-      
-      // Días específicos que tienen eventos
-      const specificDays = [
-        { day: 1, type: 'clase', color: '#3b82f6', borderColor: '#2563eb' },
-        { day: 2, type: 'clase', color: '#3b82f6', borderColor: '#2563eb' },
-        { day: 3, type: 'clase', color: '#3b82f6', borderColor: '#2563eb' },
-        { day: 15, type: 'clase', color: '#3b82f6', borderColor: '#2563eb' },
-        { day: 18, type: 'examen', color: '#f97316', borderColor: '#ea580c' },
-        { day: 22, type: 'evento', color: '#22c55e', borderColor: '#16a34a' },
-        { day: 25, type: 'comedor', color: '#eab308', borderColor: '#ca8a04' }
-      ]
-      
-      // Buscar todos los botones del calendario
-      const calendarButtons = document.querySelectorAll('.calendar button')
-      
-      calendarButtons.forEach((button) => {
-        const dayText = button.textContent?.trim()
-        if (!dayText || isNaN(Number(dayText))) return
-        
-        const dayNumber = Number(dayText)
-        
-        // Verificar si este día está en nuestra lista específica
-        const dayInfo = specificDays.find(d => d.day === dayNumber)
-        
-        if (dayInfo) {
-          // Crear punto para este día específico
-          const dot = document.createElement('div')
-          dot.className = `event-dot ${dayInfo.type}`
-          dot.style.cssText = `
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background-color: ${dayInfo.color};
-            border: 1px solid ${dayInfo.borderColor};
-            position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-          `
-          button.appendChild(dot)
-        }
-      })
-    }
-    
-    // Ejecutar después de que el DOM se actualice
-    setTimeout(addSpecificEventDots, 100)
-  }, [])
+  // No DOM-injected fake dots: dots are rendered from eventsByDay passed into the component
 
 
   return (
@@ -126,19 +73,13 @@ function Calendar({
           buttonVariants({ variant: buttonVariant }),
           'size-(--cell-size) aria-disabled:opacity-50 p-0 select-none'
         ),
-        month_caption: cn(
-          'flex items-center justify-center h-(--cell-size) w-full px-(--cell-size)'        ),
-        dropdowns: cn(
-          'w-full flex items-center text-sm font-medium justify-center h-(--cell-size) gap-1.5'        ),
-        dropdown_root: cn(
-          'relative has-focus:border-ring border border-input shadow-xs has-focus:ring-ring/50 has-focus:ring-[3px] rounded-md'        ),
-        dropdown: cn(
-          'absolute bg-popover inset-0 opacity-0'        ),
-        caption_label: cn(
-          'select-none font-medium',
-          captionLayout === 'label'
-            ? 'text-sm'
-            : 'rounded-md pl-2 pr-1 flex items-center gap-1 text-sm h-8 [&>svg]:text-muted-foreground [&>svg]:size-3.5'        ),
+        // Hide the per-month caption since we already show a main header above the calendars
+        // Hide per-month caption and related dropdown labels; we keep the main header nav above
+        month_caption: cn('hidden'),
+        dropdowns: cn('hidden'),
+        dropdown_root: cn('hidden'),
+        dropdown: cn('hidden'),
+        caption_label: cn('hidden'),
         table: 'w-full border-collapse',
         weekdays: cn('flex'),
         weekday: cn(
@@ -278,21 +219,12 @@ function CalendarDayButton({
       )}>
         {(props as any).children}
       </span>
-      <div className="flex items-center justify-center gap-0.5 mt-1 min-h-[30px] bg-yellow-200 border-2 border-red-500">
-        {/* PRUEBA MUY OBVIA - TEXTO GIGANTE CON FONDO */}
-        {key === "01/10/2025" && <div className="text-red-600 font-bold text-2xl bg-white p-2 border-2 border-red-500">TEST</div>}
-        {key === "02/10/2025" && <div className="text-purple-600 font-bold text-2xl bg-white p-2 border-2 border-purple-500">TEST</div>}
-        {key === "03/10/2025" && <div className="text-pink-600 font-bold text-2xl bg-white p-2 border-2 border-pink-500">TEST</div>}
-        {key === "15/10/2025" && <div className="text-blue-600 font-bold text-2xl bg-white p-2 border-2 border-blue-500">TEST</div>}
-        {key === "18/10/2025" && <div className="text-orange-600 font-bold text-2xl bg-white p-2 border-2 border-orange-500">TEST</div>}
-        {key === "22/10/2025" && <div className="text-green-600 font-bold text-2xl bg-white p-2 border-2 border-green-500">TEST</div>}
-        {key === "25/10/2025" && <div className="text-yellow-600 font-bold text-2xl bg-white p-2 border-2 border-yellow-500">TEST</div>}
-        
-        {/* Puntos originales */}
-        {meta.clase ? <span className="w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-700 shadow-lg" title="Clase" /> : null}
-        {meta.examen ? <span className="w-4 h-4 rounded-full bg-orange-500 border-2 border-orange-700 shadow-lg" title="Examen" /> : null}
-        {meta.evento ? <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-green-700 shadow-lg" title="Evento" /> : null}
-        {meta.comedor ? <span className="w-4 h-4 rounded-full bg-yellow-500 border-2 border-yellow-700 shadow-lg" title="Comedor" /> : null}
+      <div className="flex items-center justify-center gap-0.5 mt-1 min-h-[30px]">
+        {/* Render event dots only when there is real data (provided via EventsContext/eventsByDay) */}
+        {meta.clase ? <span className="w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-700" title="Clase" /> : null}
+        {meta.examen ? <span className="w-3 h-3 rounded-full bg-orange-500 border-2 border-orange-700" title="Examen" /> : null}
+        {meta.evento ? <span className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" title="Evento" /> : null}
+        {meta.comedor ? <span className="w-3 h-3 rounded-full bg-yellow-500 border-2 border-yellow-700" title="Comedor" /> : null}
       </div>
     </Button>
   )
