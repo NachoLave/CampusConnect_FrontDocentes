@@ -18,23 +18,25 @@ export function useStoreOrders() {
       const response = await StoreService.getOrders()
       
       if (response.success) {
-        setOrders(response.data)
+        setOrders(response.data || [])
+        setLoadingState({ isLoading: false, error: null })
       } else {
         setLoadingState({ 
           isLoading: false, 
           error: response.error || 'Error al cargar órdenes de tienda' 
         })
-        return
       }
     } catch (error) {
+      console.error('Error en fetchOrders:', error)
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error inesperado al cargar órdenes de tienda'
+      
       setLoadingState({ 
         isLoading: false, 
-        error: 'Error inesperado al cargar órdenes de tienda' 
+        error: errorMessage
       })
-      return
     }
-
-    setLoadingState({ isLoading: false, error: null })
   }, [])
 
   useEffect(() => {

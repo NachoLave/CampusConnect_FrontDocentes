@@ -52,6 +52,27 @@ const PRODUCT_NAMES: { [key: string]: string } = {
   '15': 'Smoothie Frutal'
 }
 
+// Helper para crear un fetch con timeout
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number = 15000): Promise<Response> => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+    return response
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('La solicitud tardó demasiado tiempo. Por favor, verifica tu conexión.')
+    }
+    throw error
+  }
+}
+
 export class StoreService {
   // Obtener historial de órdenes de tienda
   static async getOrders(): Promise<ApiResponse<StoreOrder[]>> {
@@ -62,25 +83,41 @@ export class StoreService {
       
       const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STORE_ORDERS}`
       
-      const headers = {
+      // Headers simplificados para mejor compatibilidad móvil
+      const headers: Record<string, string> = {
         ...DEFAULT_HEADERS,
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
         'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+        'Accept': 'application/json',
+      }
+
+      // En móviles, evitar headers problemáticos
+      if (typeof window !== 'undefined' && window.navigator) {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        if (!isMobile) {
+          headers['User-Agent'] = 'PostmanRuntime/7.49.0'
+        }
       }
 
       console.log(`📡 Llamando al backend real: ${url}`)
       
-      const response = await fetch(url, {
+      // Usar fetch con timeout para evitar que se quede colgado en móviles
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
         headers: headers
-      })
+      }, 15000) // 15 segundos de timeout
 
       if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
+        const errorText = await response.text().catch(() => 'Error desconocido')
+        throw new Error(`Error del servidor: ${response.status} - ${errorText}`)
+      }
+
+      // Validar que el content-type sea JSON antes de parsear
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.warn('⚠️ Respuesta no es JSON:', text.substring(0, 100))
+        throw new Error('Respuesta del servidor no es válida')
       }
 
       const data = await response.json()
@@ -120,10 +157,26 @@ export class StoreService {
       }
     } catch (error) {
       console.error('❌ Error obteniendo órdenes:', error)
+      
+      // Mensaje de error más específico según el tipo de error
+      let errorMessage = 'No se pudo obtener el historial de órdenes'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('tardó demasiado')) {
+          errorMessage = 'La solicitud tardó demasiado. Por favor, verifica tu conexión a internet.'
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = 'Error de conexión. Verifica tu conexión a internet e intenta nuevamente.'
+        } else if (error.message.includes('AbortError') || error.message.includes('aborted')) {
+          errorMessage = 'La solicitud fue cancelada. Por favor, intenta nuevamente.'
+        } else {
+          errorMessage = error.message || errorMessage
+        }
+      }
+      
       return {
         data: null as any,
         success: false,
-        error: 'No se pudo obtener el historial de órdenes'
+        error: errorMessage
       }
     }
   }
