@@ -156,6 +156,38 @@ class ApiClient {
       }
     }
   }
+
+  // Método para hacer requests PATCH
+  async patch<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        await mockDelay()
+      }
+
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'PATCH',
+        headers: this.headers,
+        body: JSON.stringify(body)
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      return {
+        data,
+        success: true,
+        message: 'Datos actualizados correctamente'
+      }
+    } catch (error) {
+      return {
+        data: null as T,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
+    }
+  }
 }
 
 export const apiClient = new ApiClient()

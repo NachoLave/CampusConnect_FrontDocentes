@@ -6,6 +6,8 @@ export { DashboardService } from './dashboard'
 export { NotificationsService } from './notifications'
 export { StoreService } from './store'
 export { CanteenService } from './canteen'
+export { TeacherService } from './teacher'
+export { SubjectsService } from './subjects'
 export { authService } from './auth'
 
 // Re-exportar tipos para conveniencia
@@ -22,6 +24,12 @@ export type {
   AuthUser,
   LoginCredentials,
   AuthResponse,
+  TeacherProfile,
+  Proposal,
+  CreateProposalRequest,
+  AvailabilityBlock,
+  UpdateAvailabilityRequest,
+  Subject,
   StoreOrder,
   StoreOrderItem,
   StoreOrderSummary
