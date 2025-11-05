@@ -42,7 +42,10 @@ export const API_CONFIG = {
     // Actas
     COURSE_ACTS: (courseId: number) => `/teaching/courses/${courseId}/acts`,
     ACTS_PREVIEW: '/teaching/acts:preview',
-    ACTS_CONFIRM: '/teaching/acts:confirm'
+    ACTS_CONFIRM: '/teaching/acts:confirm',
+    
+    // Admin - Materias
+    ADMIN_SUBJECTS: '/admin/subjects'
   }
 }
 

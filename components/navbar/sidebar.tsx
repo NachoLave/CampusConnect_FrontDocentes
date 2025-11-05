@@ -48,13 +48,17 @@ export function Sidebar({ currentPage = "Inicio", isOpen = false, onClose }: Sid
         </button>
 
         <div className="p-4 lg:p-6 border-b border-slate-700 flex-shrink-0">
-          <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity" onClick={onClose}>
-            <div className="w-9 h-9 lg:w-10 lg:h-10 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <GraduationCap className="h-5 w-5 lg:h-6 lg:w-6 text-slate-200" />
+          <Link 
+            href="/" 
+            className="flex items-center space-x-3 group transition-all duration-300 hover:scale-105" 
+            onClick={onClose}
+          >
+            <div className="w-9 h-9 lg:w-10 lg:h-10 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-slate-500 group-hover:shadow-lg group-hover:shadow-slate-900/50 transition-all duration-300">
+              <GraduationCap className="h-5 w-5 lg:h-6 lg:w-6 text-slate-200 group-hover:text-white group-hover:scale-110 transition-all duration-300" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-white font-semibold text-base lg:text-lg truncate">CampusConnect</h2>
-              <p className="text-slate-400 text-xs lg:text-sm truncate">Portal del Docente</p>
+              <h2 className="text-white font-semibold text-base lg:text-lg truncate group-hover:text-slate-100 transition-colors duration-300">CampusConnect</h2>
+              <p className="text-slate-400 text-xs lg:text-sm truncate group-hover:text-slate-300 transition-colors duration-300">Portal del Docente</p>
             </div>
           </Link>
         </div>

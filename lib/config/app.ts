@@ -15,8 +15,8 @@ export const APP_CONFIG = {
   // Nombre del docente para modo mock
   MOCK_TEACHER_NAME: 'Docente Test',
   
-  // Roles del docente para modo mock
-  MOCK_TEACHER_ROLES: 'TITULAR,AUXILIAR'
+  // Roles del docente para modo mock (incluye ADMIN para acceso a endpoints administrativos)
+  MOCK_TEACHER_ROLES: 'TITULAR,AUXILIAR,ADMIN'
 }
 
 // Función helper para verificar si debemos usar datos mock

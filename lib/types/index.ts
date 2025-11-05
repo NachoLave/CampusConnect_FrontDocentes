@@ -126,6 +126,53 @@ export interface AuthResponse {
   refreshToken?: string
 }
 
+// Tipo para perfil del docente (desde backend)
+export interface TeacherProfile {
+  teacherId: number
+  email: string
+  name: string
+  activo: boolean
+  role: string // TITULAR | ADJUNTO | JTP | AYUDANTE | ADMIN
+  legajo: string
+  cantidadCursosDictados: number
+}
+
+// Tipos para Propuestas de Materias
+export interface Proposal {
+  proposalId: number
+  subjectId: number
+  subjectName: string
+  status: 'PENDIENTE' | 'APROBADA' | 'RECHAZADA'
+  createdAt: string
+  decidedAt: string | null
+  active: boolean
+}
+
+export interface CreateProposalRequest {
+  subjectId: number
+}
+
+// Tipos para Disponibilidad Horaria
+export interface AvailabilityBlock {
+  dayOfWeek: string // LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO
+  shift: 'MANANA' | 'TARDE' | 'NOCHE'
+  modality: 'PRESENCIAL' | 'VIRTUAL' | 'HIBRIDA'
+  campuses: string[]
+}
+
+export interface UpdateAvailabilityRequest {
+  blocks: AvailabilityBlock[]
+}
+
+// Tipos para Materias (Admin)
+export interface Subject {
+  subjectId: number
+  subjectName: string
+  careerId: number
+  careerName: string
+  careerCode: string
+}
+
 // Tipos para tienda
 export interface StoreOrder {
   id: string

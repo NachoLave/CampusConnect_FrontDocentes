@@ -5,18 +5,25 @@ import Link from "next/link"
 import { NotificationsDropdown } from "./notifications-dropdown"
 import { UserDropdown } from "./user-dropdown"
 import { useNotifications } from "@/lib/hooks/useNotifications"
-
-// Mock data - in a real app, this would come from your API/state management
-const mockUser = {
-  name: "Juan Sánchez",
-  id: "11223344",
-  email: "juan.sanchez@campusconnect.com.ar",
-  avatar: "/placeholder-user.jpg",
-}
+import { useTeacherProfile } from "@/lib/hooks"
 
 interface HeaderProps {
   currentPage: string
   onMenuClick?: () => void
+}
+
+// Componente de shimmer para el usuario
+function UserSkeleton() {
+  return (
+    <div className="flex items-center space-x-2 px-2 py-1.5">
+      <div className="relative overflow-hidden w-7 h-7 lg:w-8 lg:h-8 bg-gray-300 rounded-full">
+        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+      </div>
+      <div className="hidden md:block relative overflow-hidden h-5 w-32 bg-gray-200 rounded">
+        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+      </div>
+    </div>
+  )
 }
 
 export function Header({ currentPage, onMenuClick }: HeaderProps) {
@@ -27,6 +34,9 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
     markAsRead, 
     markAllAsRead 
   } = useNotifications()
+
+  // Usar el hook real del perfil del docente
+  const { profile, isLoading, error } = useTeacherProfile()
 
   // Breadcrumb logic
   const getBreadcrumb = () => {
@@ -83,7 +93,7 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
         </div>
 
         {/* Right Section - Notifications & User */}
-        <div className="flex items-center space-x-2 lg:space-x-4">
+        <div className="flex items-center space-x-4 lg:space-x-6">
           <NotificationsDropdown
             notifications={notifications}
             unreadCount={unreadCount}
@@ -91,7 +101,20 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
             onMarkAsRead={markAsRead}
           />
 
-          <UserDropdown user={mockUser} />
+          {isLoading ? (
+            <UserSkeleton />
+          ) : error ? (
+            <div className="text-red-600 text-xs">Error</div>
+          ) : profile ? (
+            <UserDropdown 
+              user={{
+                name: profile.name,
+                id: profile.legajo,
+                email: profile.email,
+                teacherId: profile.teacherId
+              }} 
+            />
+          ) : null}
         </div>
       </div>
     </header>

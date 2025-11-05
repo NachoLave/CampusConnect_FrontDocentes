@@ -52,10 +52,10 @@ export function NotificationsDropdown({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0">
+        <button className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0 flex items-center justify-center">
           <Bell className="h-6 w-6 text-gray-600" />
           {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 text-white text-xs flex items-center justify-center">
+            <Badge className="absolute -top-0.5 -right-0.5 h-5 w-5 p-0 bg-red-500 text-white text-[11px] flex items-center justify-center">
               {unreadCount}
             </Badge>
           )}
