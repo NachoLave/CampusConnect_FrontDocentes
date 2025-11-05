@@ -397,57 +397,33 @@ export default function CalendarioPage() {
   }, [currentMonth])
 
   const upcoming = useMemo(() => {
+    // Show backend events for the current day only (no mocks)
     const today = new Date()
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    // Generar eventos mockeados a partir de los cursos en cursada
-    const weekdayMap: Record<string, number> = {
-      'DOMINGO': 0, 'LUNES': 1, 'MARTES': 2, 'MIÉRCOLES': 3, 'MIERCOLES': 3, 'JUEVES': 4, 'VIERNES': 5, 'SÁBADO': 6, 'SABADO': 6,
-    }
-    const toDdMmYyyy = (d: Date) => d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const courseEvents = (coursesData as any[])
-      .filter((c) => c.dates)
-      .flatMap((c) => {
-        // convertir rango
-        const [startStr, endStr] = String(c.dates).split('-').map((s) => s.trim())
-        const [sd, sm, sy] = startStr.split('/').map((n: string) => parseInt(n, 10))
-        const [ed, em, ey] = endStr.split('/').map((n: string) => parseInt(n, 10))
-        const start = new Date(sy, sm - 1, sd)
-        const end = new Date(ey, em - 1, ed)
-        const targetWeekday = weekdayMap[(c.day || '').toUpperCase()] ?? -1
-        const events: any[] = []
-        for (let d = new Date(todayStart); d <= end; d.setDate(d.getDate() + 1)) {
-          if (d >= start && d.getDay() === targetWeekday) {
-            events.push({
-              id: `course-${c.id}-${toDdMmYyyy(new Date(d))}`,
-              type: 'clase',
-              title: `Clase: ${c.title}`,
-              date: toDdMmYyyy(new Date(d)),
-              time: c.schedule || '00:00 - 00:00',
-              location: c.location,
-              color: 'bg-blue-100 border-blue-200 text-blue-800',
-            })
-          }
-        }
-        return events
-      })
+    const todayLabel = today.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-    const enriched = [...mockEvents, ...courseEvents].map((e) => {
-      const d = parseDate(e.date)
-      const { hh, mi } = parseStartTime(e.time)
-      d.setHours(hh, mi, 0, 0)
-      return { ...e, dt: d }
-    })
-    .filter((e) => e.dt >= todayStart && isEventVisible(e))
-    .sort((a, b) => a.dt.getTime() - b.dt.getTime())
-    .slice(0, 5)
-    return enriched.map((e) => ({
-      id: e.id,
-      title: e.title,
-      location: e.location,
-      color: e.type === 'clase' ? 'border-l-blue-500' : e.type === 'examen' ? 'border-l-orange-500' : 'border-l-green-500',
-      time: `${e.dt.toLocaleDateString('es-ES', { day: '2-digit', month: 'short'})} • ${e.time}`,
-    }))
-  }, [])
+    const todays = backendEvents
+      .map((e) => ({
+        id: e.id,
+        type: mapBackendType(e.type),
+        title: e.title,
+        date: formatIsoToDdMmYyyy(e.date),
+        time: (() => {
+          const start = e.time // HH:MM
+          const [hh, mm] = start.split(':').map((n) => parseInt(n, 10))
+          const startDt = new Date(e.date + 'T' + start + ':00')
+          const endDt = new Date(startDt.getTime() + (e.duration || 60) * 60000)
+          const pad = (n: number) => n.toString().padStart(2, '0')
+          return `${pad(startDt.getHours())}:${pad(startDt.getMinutes())} - ${pad(endDt.getHours())}:${pad(endDt.getMinutes())}`
+        })(),
+        location: e.classroom || '',
+        color: e.type === 'class' ? 'border-l-blue-500' : e.type === 'exam' ? 'border-l-orange-500' : 'border-l-green-500',
+        dt: new Date((e.date || '') + 'T' + (e.time || '00:00') + ':00')
+      }))
+      .filter((ev) => ev.date === todayLabel && isEventVisible(ev))
+      .sort((a, b) => a.dt.getTime() - b.dt.getTime())
+
+    return todays.map((e) => ({ id: e.id, title: e.title, location: e.location, color: e.color, time: `${todayLabel} • ${e.time}` }))
+  }, [backendEvents, filters])
 
   return (
     <div className="max-w-7xl mx-auto">
