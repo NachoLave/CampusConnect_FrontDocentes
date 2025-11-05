@@ -5,6 +5,7 @@ import { Search, Filter, Building, Calendar, X, ChevronDown, RotateCcw } from "l
 import { CourseCard } from "./course-card"
 import { useCoursesByPeriod } from "@/lib/hooks/useCourses"
 import { useCourseFilters } from "@/lib/hooks/useCourseFilters"
+import { CoursesGridSkeleton } from "@/components/ui/loaders/course-card-skeleton"
 import coursesData from "@/lib/data/courses.json"
 
 const dayOrder = {
@@ -288,39 +289,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
 
       {/* Loading State */}
       {isLoading && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              {/* Image Skeleton */}
-              <div className="relative overflow-hidden h-32 lg:h-40 bg-gray-200">
-                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-              </div>
-              
-              {/* Content Skeleton */}
-              <div className="p-4 space-y-3">
-                <div className="relative overflow-hidden h-6 w-3/4 bg-gray-200 rounded">
-                  <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
-                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  </div>
-                  <div className="relative overflow-hidden h-4 w-24 bg-gray-100 rounded">
-                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="relative overflow-hidden h-4 w-16 bg-gray-100 rounded">
-                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  </div>
-                  <div className="relative overflow-hidden h-4 w-20 bg-gray-100 rounded">
-                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <CoursesGridSkeleton count={6} />
       )}
 
       {/* Error State */}
