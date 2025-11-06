@@ -525,8 +525,7 @@ export default function CalendarioPage() {
                 <h2 className="hidden md:block text-lg font-semibold text-gray-900">
                   {capitalizeFirst(getMonthName(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)))}
                 </h2>
-                {/* backend events count (debug) */}
-                <div className="ml-4 text-sm text-gray-500 hidden md:block">Eventos backend: {backendEvents.length}</div>
+                {/* spacer for header alignment */}
               </div>
 
               <button
@@ -546,6 +545,33 @@ export default function CalendarioPage() {
                 month={currentMonth}
                 onMonthChange={setCurrentMonth}
                 locale={es}
+                // Pass per-type modifiers computed from backendEvents so DayPicker
+                // marks days regardless of custom Day renderer.
+                modifiers={useMemo(() => {
+                  const clase: Date[] = []
+                  const examen: Date[] = []
+                  const evento: Date[] = []
+                  const comedor: Date[] = []
+                  backendEvents.forEach((e) => {
+                    const key = formatIsoToDdMmYyyy(e.date)
+                    // parse dd/mm/yyyy -> Date
+                    const parts = key.split('/')
+                    if (parts.length !== 3) return
+                    const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
+                    const t = mapBackendType(e.type)
+                    if (t === 'clase') clase.push(d)
+                    if (t === 'examen') examen.push(d)
+                    if (t === 'evento') evento.push(d)
+                    if (t === 'comedor') comedor.push(d)
+                  })
+                  return { clase, examen, evento, comedor }
+                }, [backendEvents])}
+                modifiersClassNames={useMemo(() => ({
+                  clase: 'cc-clase',
+                  examen: 'cc-examen',
+                  evento: 'cc-evento',
+                  comedor: 'cc-comedor'
+                }), [])}
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
@@ -606,6 +632,30 @@ export default function CalendarioPage() {
                 onSelect={setSelectedDate}
                 month={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)}
                 locale={es}
+                modifiers={useMemo(() => {
+                  const clase: Date[] = []
+                  const examen: Date[] = []
+                  const evento: Date[] = []
+                  const comedor: Date[] = []
+                  backendEvents.forEach((e) => {
+                    const key = formatIsoToDdMmYyyy(e.date)
+                    const parts = key.split('/')
+                    if (parts.length !== 3) return
+                    const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
+                    const t = mapBackendType(e.type)
+                    if (t === 'clase') clase.push(d)
+                    if (t === 'examen') examen.push(d)
+                    if (t === 'evento') evento.push(d)
+                    if (t === 'comedor') comedor.push(d)
+                  })
+                  return { clase, examen, evento, comedor }
+                }, [backendEvents])}
+                modifiersClassNames={useMemo(() => ({
+                  clase: 'cc-clase',
+                  examen: 'cc-examen',
+                  evento: 'cc-evento',
+                  comedor: 'cc-comedor'
+                }), [])}
                 className="hidden md:block w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
@@ -801,13 +851,17 @@ export default function CalendarioPage() {
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Próximos eventos</h3>
 
             <div className="space-y-4">
-              {upcoming.map((event) => (
-                <div key={event.id} className={`p-3 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
-                  <h4 className="font-medium text-gray-900 text-sm mb-1">{event.title}</h4>
-                  <p className="text-xs text-gray-600 mb-1">{event.time}</p>
-                  <p className="text-xs text-gray-500">{event.location}</p>
-                </div>
-              ))}
+              {upcoming.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay eventos hoy</p>
+              ) : (
+                upcoming.map((event) => (
+                  <div key={event.id} className={`p-3 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
+                    <h4 className="font-medium text-gray-900 text-sm mb-1">{event.title}</h4>
+                    <p className="text-xs text-gray-600 mb-1">{event.time}</p>
+                    <p className="text-xs text-gray-500">{event.location}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -818,13 +872,17 @@ export default function CalendarioPage() {
             <h3 className="text-base font-semibold text-gray-900 mb-4">Próximos eventos</h3>
 
             <div className="space-y-3">
-              {upcoming.map((event) => (
-                <div key={event.id} className={`p-2.5 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
-                  <h4 className="font-medium text-gray-900 text-xs mb-1">{event.title}</h4>
-                  <p className="text-xs text-gray-600 mb-0.5">{event.time}</p>
-                  <p className="text-xs text-gray-500">{event.location}</p>
-                </div>
-              ))}
+              {upcoming.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay eventos hoy</p>
+              ) : (
+                upcoming.map((event) => (
+                  <div key={event.id} className={`p-2.5 border-l-4 ${event.color} bg-gray-50 rounded-r-lg`}>
+                    <h4 className="font-medium text-gray-900 text-xs mb-1">{event.title}</h4>
+                    <p className="text-xs text-gray-600 mb-0.5">{event.time}</p>
+                    <p className="text-xs text-gray-500">{event.location}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
