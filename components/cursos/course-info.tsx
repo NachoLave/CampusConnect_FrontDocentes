@@ -518,6 +518,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [showActaModal, setShowActaModal] = useState(false)
   const [showActaPreviewModal, setShowActaPreviewModal] = useState(false)
   const [showActaConfirmModal, setShowActaConfirmModal] = useState(false)
+  const [generatingAct, setGeneratingAct] = useState(false)
+  const [isCourseLocked, setIsCourseLocked] = useState(false)
+  const [showActaGeneratedModal, setShowActaGeneratedModal] = useState(false)
+  const [showActaErrorModal, setShowActaErrorModal] = useState(false)
+  const [actaErrorMessage, setActaErrorMessage] = useState<string | null>(null)
   const [showAttendanceSavedModal, setShowAttendanceSavedModal] = useState(false)
   const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
   const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
@@ -2844,6 +2849,72 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         </div>
       )}
 
+      {/* Modal - Acta generada correctamente */}
+      {showActaGeneratedModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Icono de éxito */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">Acta generada correctamente</h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">Se generó el acta y se descargó una copia en tu dispositivo. El acta quedará registrada en el sistema.</p>
+
+              <button
+                onClick={() => setShowActaGeneratedModal(false)}
+                className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Error al generar acta */}
+      {showActaErrorModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 lg:p-8 transform transition-all duration-150"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            {/* Icono de error */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <X className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="text-center">
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">Error generando acta</h2>
+              <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">{actaErrorMessage || 'Ocurrió un error al generar el acta. Por favor intenta nuevamente.'}</p>
+
+              <button
+                onClick={() => setShowActaErrorModal(false)}
+                className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Previsualización del Acta */}
       {showActaPreviewModal && (
         <div 
@@ -3036,13 +3107,49 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => {
-                    downloadXlsxPreview()
-                    setShowActaConfirmModal(false)
+                  onClick={async () => {
+                    try {
+                      setGeneratingAct(true)
+                      // ensure mock headers if needed
+                      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+
+                      const resp = await CoursesService.confirmAct(Number(courseId))
+                      if (resp && resp.success) {
+                        // keep the preview download for offline copy
+                        try { await downloadXlsxPreview() } catch (err) { /* ignore */ }
+                        setShowActaConfirmModal(false)
+                        // update UI to reflect the locked/closed acta
+                        try {
+                          setIsCourseLocked(true)
+                          setCourse((c: any) => c ? ({ ...c, status: 'ACTA_GENERADA' }) : c)
+                        } catch {}
+                        // show in-app success modal
+                        setShowActaGeneratedModal(true)
+                      } else {
+                        // close the confirm modal so the error modal is visible
+                        setShowActaConfirmModal(false)
+                        // show in-app error modal with message; map known backend error codes to friendly text
+                        const backendCode = (resp && (resp as any).data && (resp as any).data.code) || null
+                        if (backendCode === 'ACTA_WINDOW_CLOSED') {
+                          setActaErrorMessage('El acta ya está cerrada')
+                        } else {
+                          setActaErrorMessage(resp?.error || resp?.message || 'Error desconocido')
+                        }
+                        setShowActaErrorModal(true)
+                      }
+                    } catch (err) {
+                      // ensure confirm modal is closed before showing error
+                      setShowActaConfirmModal(false)
+                      setActaErrorMessage(err instanceof Error ? err.message : String(err))
+                      setShowActaErrorModal(true)
+                    } finally {
+                      setGeneratingAct(false)
+                    }
                   }}
-                  className="flex-1 bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
+                  disabled={generatingAct}
+                  className={`flex-1 ${generatingAct ? 'opacity-70 cursor-wait' : 'bg-slate-700 hover:bg-slate-800 active:bg-slate-900'} text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150`}
                 >
-                  Confirmar y Generar
+                  {generatingAct ? 'Generando...' : 'Confirmar y Generar'}
                 </button>
               </div>
             </div>
