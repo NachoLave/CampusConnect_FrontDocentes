@@ -313,8 +313,14 @@ export default function CalendarioPage() {
   // Helper: format YYYY-MM-DD to dd/MM/yyyy
   const formatIsoToDdMmYyyy = (iso: string) => {
     if (!iso) return ''
-    const d = new Date(iso)
-    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    // If iso is in YYYY-MM-DD format (no timezone), parse components to avoid timezone shift
+    const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+    if (isoDateOnly) {
+      const [y, m, d] = iso.split('-').map((n) => parseInt(n, 10))
+      return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+    const dt = new Date(iso)
+    return dt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
   // Map backend event.type to page types
@@ -372,14 +378,16 @@ export default function CalendarioPage() {
       setLoadingEvents(true)
       setEventsError(null)
       try {
-        const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-        const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
+  // Fetch a slightly wider window (previous month -> next month) to avoid missing events
+  const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+  const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
         const fromIso = from.toISOString().split('T')[0]
         const toIso = to.toISOString().split('T')[0]
         console.log('📡 Fetching calendar backend events from', fromIso, 'to', toIso)
         const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
         if (res.success && Array.isArray(res.data)) {
-          setBackendEvents(res.data)
+            setBackendEvents(res.data)
+            console.log('📥 backendEvents set (sample 5):', res.data.slice(0,5))
         } else {
           setBackendEvents([])
           setEventsError(res.message || 'No events')
@@ -394,7 +402,7 @@ export default function CalendarioPage() {
     }
 
     fetchEvents()
-  }, [currentMonth])
+  }, [currentMonth, selectedDate])
 
   const upcoming = useMemo(() => {
     // Show backend events for the current day only (no mocks)
@@ -517,6 +525,8 @@ export default function CalendarioPage() {
                 <h2 className="hidden md:block text-lg font-semibold text-gray-900">
                   {capitalizeFirst(getMonthName(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)))}
                 </h2>
+                {/* backend events count (debug) */}
+                <div className="ml-4 text-sm text-gray-500 hidden md:block">Eventos backend: {backendEvents.length}</div>
               </div>
 
               <button
@@ -545,7 +555,28 @@ export default function CalendarioPage() {
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
+
+                    // Also add a secondary key using the event's local date components to avoid timezone mismatches
+                    try {
+                      const d = new Date(e.date)
+                      if (!isNaN(d.getTime())) {
+                        const dd = String(d.getDate()).padStart(2, '0')
+                        const mm = String(d.getMonth() + 1).padStart(2, '0')
+                        const yyyy = d.getFullYear()
+                        const altKey = `${dd}/${mm}/${yyyy}`
+                        if (altKey !== key) {
+                          map[altKey] = map[altKey] || {}
+                          map[altKey][mappedType] = true
+                        }
+                        console.log(`🔁 mapped backend event date ${e.date} -> keys:`, key, altKey)
+                      }
+                    } catch (err) {
+                      // ignore
+                    }
                   })
+
+                  // Diagnostic log to help debug missing dots
+                  console.log('🔎 eventsByDay keys generated:', Object.keys(map).slice(0, 50))
 
                   // If backend returned no events, keep previous mock/course-derived behavior as fallback
                   if (backendEvents.length === 0) {
@@ -584,6 +615,25 @@ export default function CalendarioPage() {
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
+
+                    // Also add a secondary key using the event's local date components to avoid timezone mismatches
+                    try {
+                      const d = new Date(e.date)
+                      if (!isNaN(d.getTime())) {
+                        const dd = String(d.getDate()).padStart(2, '0')
+                        const mm = String(d.getMonth() + 1).padStart(2, '0')
+                        const yyyy = d.getFullYear()
+                        const altKey = `${dd}/${mm}/${yyyy}`
+                        if (altKey !== key) {
+                          map[altKey] = map[altKey] || {}
+                          map[altKey][mappedType] = true
+                        }
+                        // diagnostic
+                        console.log(`🔁 mapped backend event date ${e.date} -> keys:`, key, altKey)
+                      }
+                    } catch (err) {
+                      // ignore
+                    }
                   })
 
                   if (backendEvents.length === 0) {
@@ -602,6 +652,12 @@ export default function CalendarioPage() {
                     for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
                       getCourseEventsForDate(new Date(d)).forEach(add)
                     }
+                  }
+
+                  try {
+                    console.log('🔎 eventsByDay (right calendar) keys generated:', Object.keys(map).slice(0, 50))
+                  } catch (err) {
+                    // ignore
                   }
 
                   return map

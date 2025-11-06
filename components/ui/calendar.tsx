@@ -29,8 +29,13 @@ function Calendar({
 }) {
   // Removed getDefaultClassNames as it's not available in this version
 
-  // Debug log
-  console.log('📅 Calendar recibiendo eventsByDay:', eventsByDay)
+  // Debug log - stringify snapshot so DevTools doesn't show a live object reference
+  try {
+    const snapshot = eventsByDay ? JSON.stringify(eventsByDay, Object.keys(eventsByDay || {}).slice(0, 200)) : '{}'
+    console.log('📅 Calendar eventsByDay snapshot:', snapshot)
+  } catch (err) {
+    console.log('📅 Calendar recibiendo eventsByDay (non-serializable):', eventsByDay)
+  }
   console.log('🚨 CALENDAR COMPONENT EJECUTÁNDOSE - CalendarDayButton configurado:', CalendarDayButton)
   console.log('🎨 CSS GLOBAL APLICADO - Puntos para días específicos')
   // No DOM-injected fake dots: dots are rendered from eventsByDay passed into the component
@@ -167,8 +172,9 @@ function CalendarDayButton({
   modifiers,
   ...props
 }: React.ComponentProps<typeof DayButton>) {
-  // LOG MUY OBVIO PARA VER SI SE EJECUTA
-  console.log(`🚨 CalendarDayButton EJECUTÁNDOSE para día:`, day.date.toLocaleDateString())
+  // LOG MUY OBVIO PARA VER SI SE EJECUTA - include the computed key used to lookup eventsByDay
+  const dayKey = day.date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  console.log(`🚨 CalendarDayButton EJECUTÁNDOSE para día: ${dayKey}`)
   
   // Removed getDefaultClassNames as it's not available in this version
   const events = React.useContext(EventsContext)
@@ -177,15 +183,16 @@ function CalendarDayButton({
   React.useEffect(() => {
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
-  const key = day.date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const key = dayKey
   const meta = events?.[key] || {}
 
-  // Debug más detallado
-  console.log(`🔍 Día ${key}:`, {
-    events: events,
-    meta: meta,
-    hasEvents: !!(meta.clase || meta.examen || meta.evento || meta.comedor)
-  })
+  // Debug más detallado - snapshot the event map keys and the resolved meta for this day
+  try {
+    const keys = events ? Object.keys(events).slice(0, 50) : []
+    console.log(`🔍 Día ${key}: eventsByDay keys (sample):`, keys, 'resolved meta:', JSON.stringify(meta))
+  } catch (err) {
+    console.log(`🔍 Día ${key}:`, { events, meta })
+  }
 
   if (meta.clase || meta.examen || meta.evento || meta.comedor) {
     console.log(`🎯 Día ${key} tiene eventos:`, meta)
