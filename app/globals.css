@@ -335,16 +335,101 @@
   border-color: #ca8a04;
 }
 
-/* Día actual con fondo azul */
-.calendar button[data-today="true"] {
-  background-color: #3b82f6 !important;
-  color: white !important;
-  font-weight: bold !important;
-  border-radius: 50% !important;
-  padding: 8px !important;
+/* Modifier-driven per-type dots
+   Support both placements:
+   - modifier class applied to the parent cell (e.g. <td class="cc-clase">)
+   - modifier class applied directly to the button (e.g. <button class="cc-clase">)
+   Some react-day-picker versions apply modifiers to the cell, others to the button.
+*/
+.cc-clase::after, .cc-clase > button::after,
+.cc-examen::after, .cc-examen > button::after,
+.cc-evento::after, .cc-evento > button::after,
+.cc-comedor::after, .cc-comedor > button::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 6px;
+  z-index: 10;
 }
+.cc-clase::after, .cc-clase > button::after { background: #3b82f6; border: 1px solid #2563eb }
+.cc-examen::after, .cc-examen > button::after { background: #fb923c; border: 1px solid #f97316 }
+.cc-evento::after, .cc-evento > button::after { background: #34d399; border: 1px solid #10b981 }
+.cc-comedor::after, .cc-comedor > button::after { background: #fbbf24; border: 1px solid #f59e0b }
 
-/* Asegurar que los días del calendario tengan posición relativa para los pseudo-elementos */
+/* Asegurar que todos los días del calendario tengan tamaño fijo y estilos consistentes */
 .calendar button {
   position: relative !important;
+  background-color: transparent !important;
+  box-sizing: border-box !important;
+  border-radius: 0.375rem !important; /* Bordes redondeados siempre presentes */
+  min-width: 48px !important;
+  min-height: 56px !important; /* Altura aumentada para más espacio vertical */
+  width: 48px !important;
+  height: 56px !important;
+  transition: background-color 0.2s ease !important; /* Transición suave para hover */
+  margin-top: 6px !important; /* Espacio adicional arriba */
+  margin-bottom: 6px !important; /* Espacio adicional abajo */
+}
+
+/* Hover para todos los días */
+.calendar button:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Separación vertical entre filas de días */
+.calendar .rdp-week {
+  margin-bottom: 4px !important; /* Espacio entre semanas/filas */
+}
+
+/* Días fuera del mes actual (outside days) - grisáceos */
+.calendar button.rdp-day_outside {
+  color: #9ca3af !important; /* text-gray-400 */
+  opacity: 0.5 !important;
+}
+
+/* Día actual (hoy) - SIN marcador visual, se comporta como cualquier otro día */
+.calendar button.rdp-day_today {
+  background-color: transparent !important;
+  font-weight: normal !important;
+  border-radius: 0.375rem !important;
+}
+
+/* Asegurar que días NO seleccionados no tengan borde */
+.calendar button:not(.rdp-day_selected):not([aria-selected="true"]) {
+  box-shadow: none !important;
+}
+
+/* Día seleccionado - Borde gris discreto (incluye si es hoy) */
+.calendar button.rdp-day_selected,
+.calendar button[aria-selected="true"] {
+  background-color: transparent !important;
+  box-shadow: inset 0 0 0 1px #94a3b8 !important; /* Borde interno gris discreto */
+  border-radius: 0.375rem !important; /* Borde redondeado más pequeño */
+  font-weight: normal !important;
+}
+
+/* Focus styling - discreto solo para días seleccionados */
+.calendar button.rdp-day_selected:focus,
+.calendar button[aria-selected="true"]:focus {
+  outline: none !important;
+  box-shadow: inset 0 0 0 1px #94a3b8, 0 0 0 2px rgba(148, 163, 184, 0.1) !important;
+  border-radius: 0.375rem !important;
+}
+
+/* Focus para días no seleccionados - sin borde */
+.calendar button:not(.rdp-day_selected):not([aria-selected="true"]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Modo oscuro */
+.dark .calendar button.rdp-day_selected,
+.dark .calendar button[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px #64748b !important;
+  border-radius: 0.375rem !important;
 }

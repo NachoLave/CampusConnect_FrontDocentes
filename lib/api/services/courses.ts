@@ -20,6 +20,42 @@ export class CoursesService {
     return apiClient.get<Course[]>(API_CONFIG.ENDPOINTS.COURSES)
   }
 
+  // Confirmar/Generar acta oficial para un curso
+  static async confirmAct(courseId: number): Promise<ApiResponse<any>> {
+    try {
+      // Build endpoint like /teaching/courses/{id}/acts:confirm
+      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
+        ? `${API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)}:confirm`
+        : `/teaching/courses/${courseId}/acts:confirm`
+
+      const url = `${API_CONFIG.BASE_URL}${endpoint}`
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
+        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES
+      }
+
+      const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) })
+      const text = await response.text()
+      let parsed: any = null
+      try { parsed = text ? JSON.parse(text) : null } catch (_) { parsed = null }
+
+      if (response.ok) {
+        return { data: parsed, success: true, message: 'Acta generada correctamente' }
+      }
+
+      // Handle specific 409 / ACTA_WINDOW_CLOSED case returning server message/code
+      if (response.status === 409 && parsed) {
+        return { data: parsed, success: false, error: parsed.message || 'Acta ya cerrada' }
+      }
+
+      return { data: parsed, success: false, error: parsed?.message || `HTTP error ${response.status}` }
+    } catch (error) {
+      return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener listado de alumnos de un curso (roster)
   static async getCourseRoster(courseId: number): Promise<ApiResponse<any[]>> {
     // Prefer using the shared apiClient and configured endpoint
