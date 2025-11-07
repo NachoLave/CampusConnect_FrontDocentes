@@ -55,6 +55,36 @@ function getInitials(name: string): string {
 }
 
 
+// Abreviaciones y colores para días de la semana
+function getDayInfo(day: string): { abbr: string; color: string } {
+  const dayUpper = day.toUpperCase().trim()
+  
+  if (dayUpper.includes('LUNES') || dayUpper.includes('LU')) {
+    return { abbr: 'LU', color: 'bg-blue-500' }
+  }
+  if (dayUpper.includes('MARTES') || dayUpper.includes('MA')) {
+    return { abbr: 'MA', color: 'bg-green-500' }
+  }
+  if (dayUpper.includes('MIERCOLES') || dayUpper.includes('MIÉRCOLES') || dayUpper.includes('MI')) {
+    return { abbr: 'MI', color: 'bg-purple-500' }
+  }
+  if (dayUpper.includes('JUEVES') || dayUpper.includes('JU')) {
+    return { abbr: 'JU', color: 'bg-orange-500' }
+  }
+  if (dayUpper.includes('VIERNES') || dayUpper.includes('VI')) {
+    return { abbr: 'VI', color: 'bg-cyan-500' }
+  }
+  if (dayUpper.includes('SABADO') || dayUpper.includes('SÁBADO') || dayUpper.includes('SA')) {
+    return { abbr: 'SA', color: 'bg-pink-500' }
+  }
+  if (dayUpper.includes('DOMINGO') || dayUpper.includes('DO')) {
+    return { abbr: 'DO', color: 'bg-red-500' }
+  }
+  
+  // Default: intentar extraer las primeras 2 letras
+  return { abbr: day.substring(0, 2).toUpperCase(), color: 'bg-gray-500' }
+}
+
 // Colores para turnos
 function getShiftColor(shift: string): string {
   const shiftUpper = shift.toUpperCase()
@@ -115,15 +145,26 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     >
       {/* Course Image with Day Badge overlay */}
       <div
-        className="relative h-32 lg:h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-90 transition-opacity"
+        className="relative h-32 lg:h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-95 transition-opacity overflow-hidden"
         onClick={handleInfoClick}
       >
-        <img
-          src={course.image || "/images/course-background.png"}
-          alt={course.title}
-          className="w-full h-full object-cover opacity-30"
-        />
-        <div className={`${course.dayColor} text-white text-xs font-semibold px-2 lg:px-3 py-1 inline-flex items-center gap-1 rounded-br-md absolute top-0 left-0 m-0`}>{course.day}</div>
+        {/* Imagen de fondo con blur */}
+        <div className="absolute inset-0">
+          <img
+            src="/courseimage.png"
+            alt={course.title}
+            className="w-full h-full object-cover blur-sm opacity-40"
+          />
+          {/* Overlay oscuro para mejor contraste */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-900/50 to-slate-800/50"></div>
+        </div>
+        
+        {/* Tag del día - estilo badge minimalista */}
+        <div className="absolute top-3 left-3">
+          <div className="bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-lg">
+            {course.day}
+          </div>
+        </div>
       </div>
 
       {/* Course Content */}
