@@ -512,36 +512,50 @@ export default function CalendarioPage() {
         <div className="lg:col-span-3">
           {/* Two Month Calendar View */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-4 md:mb-6 relative">
-            <div className="flex items-center justify-between mb-4 md:mb-6">
+            <div className="flex items-center justify-between mb-6 md:mb-8">
               <button
                 onClick={prevMonth}
-                className="p-2 md:p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
+                className="p-2.5 bg-white hover:bg-gray-50 rounded-lg transition-all border border-gray-300 shadow-sm hover:shadow-md hover:border-gray-400"
+                aria-label="Mes anterior"
               >
-                <ChevronLeft className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
+                <ChevronLeft className="h-5 w-5 text-gray-700" />
               </button>
 
-              <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-16">
-                <h2 className="text-sm md:text-lg font-semibold text-gray-900">{capitalizeFirst(getMonthName(currentMonth))}</h2>
-                <h2 className="hidden md:block text-lg font-semibold text-gray-900">
-                  {capitalizeFirst(getMonthName(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)))}
-                </h2>
-                {/* spacer for header alignment */}
-              </div>
+              <button
+                onClick={goToToday}
+                className="px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 rounded-lg transition-all border-2 border-gray-300 shadow-sm hover:shadow-md hover:border-gray-400"
+              >
+                Hoy
+              </button>
 
               <button
                 onClick={nextMonth}
-                className="p-2 md:p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-sm"
+                className="p-2.5 bg-white hover:bg-gray-50 rounded-lg transition-all border border-gray-300 shadow-sm hover:shadow-md hover:border-gray-400"
+                aria-label="Mes siguiente"
               >
-                <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
+                <ChevronRight className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-              {/* Spanish locale added to both Calendar components */}
-              <Calendar
-                mode="single"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
+              {/* Primer mes */}
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+                  {capitalizeFirst(getMonthName(currentMonth))}
+                </h2>
+                <Calendar
+                  mode="single"
                 selected={selectedDate}
-                onSelect={setSelectedDate}
+                onSelect={(date) => {
+                    // Si se deselecciona (date es undefined), ir al día actual
+                    if (!date) {
+                      const today = new Date()
+                      setSelectedDate(today)
+                      setCurrentMonth(today)
+                    } else {
+                      setSelectedDate(date)
+                    }
+                  }}
                 month={currentMonth}
                 onMonthChange={setCurrentMonth}
                 locale={es}
@@ -626,11 +640,27 @@ export default function CalendarioPage() {
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                month={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)}
+              </div>
+
+              {/* Segundo mes */}
+              <div className="hidden md:block">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+                  {capitalizeFirst(getMonthName(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)))}
+                </h2>
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    // Si se deselecciona (date es undefined), ir al día actual
+                    if (!date) {
+                      const today = new Date()
+                      setSelectedDate(today)
+                      setCurrentMonth(today)
+                    } else {
+                      setSelectedDate(date)
+                    }
+                  }}
+                  month={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)}
                 locale={es}
                 modifiers={useMemo(() => {
                   const clase: Date[] = []
@@ -656,7 +686,7 @@ export default function CalendarioPage() {
                   evento: 'cc-evento',
                   comedor: 'cc-comedor'
                 }), [])}
-                className="hidden md:block w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
+                className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
                   backendEvents.forEach((e) => {
@@ -713,6 +743,7 @@ export default function CalendarioPage() {
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />
+              </div>
             </div>
           </div>
 

@@ -361,30 +361,75 @@
 .cc-evento::after, .cc-evento > button::after { background: #34d399; border: 1px solid #10b981 }
 .cc-comedor::after, .cc-comedor > button::after { background: #fbbf24; border: 1px solid #f59e0b }
 
-/* Día actual con fondo azul */
-.calendar button[data-today="true"] {
-  background-color: #3b82f6 !important;
-  color: white !important;
-  font-weight: bold !important;
-  border-radius: 50% !important;
-  padding: 8px !important;
+/* Asegurar que todos los días del calendario tengan tamaño fijo y estilos consistentes */
+.calendar button {
+  position: relative !important;
+  background-color: transparent !important;
+  box-sizing: border-box !important;
+  border-radius: 0.375rem !important; /* Bordes redondeados siempre presentes */
+  min-width: 48px !important;
+  min-height: 56px !important; /* Altura aumentada para más espacio vertical */
+  width: 48px !important;
+  height: 56px !important;
+  transition: background-color 0.2s ease !important; /* Transición suave para hover */
+  margin-top: 6px !important; /* Espacio adicional arriba */
+  margin-bottom: 6px !important; /* Espacio adicional abajo */
 }
 
-.calendar button.rdp-day_selected,
-.calendar button[aria-selected="true"] {
+/* Hover para todos los días */
+.calendar button:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Separación vertical entre filas de días */
+.calendar .rdp-week {
+  margin-bottom: 4px !important; /* Espacio entre semanas/filas */
+}
+
+/* Días fuera del mes actual (outside days) - grisáceos */
+.calendar button.rdp-day_outside {
+  color: #9ca3af !important; /* text-gray-400 */
+  opacity: 0.5 !important;
+}
+
+/* Día actual (hoy) - SIN marcador visual, se comporta como cualquier otro día */
+.calendar button.rdp-day_today {
   background-color: transparent !important;
-  border: 1px solid rgba(15, 23, 42, 0.06) !important; /* subtle border */
-  border-radius: 0.5rem !important;
+  font-weight: normal !important;
+  border-radius: 0.375rem !important;
+}
+
+/* Asegurar que días NO seleccionados no tengan borde */
+.calendar button:not(.rdp-day_selected):not([aria-selected="true"]) {
   box-shadow: none !important;
 }
 
-/* Slightly stronger visible rectangle on focus/keyboard navigation */
+/* Día seleccionado - Borde gris discreto (incluye si es hoy) */
+.calendar button.rdp-day_selected,
+.calendar button[aria-selected="true"] {
+  background-color: transparent !important;
+  box-shadow: inset 0 0 0 1px #94a3b8 !important; /* Borde interno gris discreto */
+  border-radius: 0.375rem !important; /* Borde redondeado más pequeño */
+  font-weight: normal !important;
+}
+
+/* Focus styling - discreto solo para días seleccionados */
 .calendar button.rdp-day_selected:focus,
 .calendar button[aria-selected="true"]:focus {
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.08) !important;
   outline: none !important;
+  box-shadow: inset 0 0 0 1px #94a3b8, 0 0 0 2px rgba(148, 163, 184, 0.1) !important;
+  border-radius: 0.375rem !important;
 }
-/* Asegurar que los días del calendario tengan posición relativa para los pseudo-elementos */
-.calendar button {
-  position: relative !important;
+
+/* Focus para días no seleccionados - sin borde */
+.calendar button:not(.rdp-day_selected):not([aria-selected="true"]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Modo oscuro */
+.dark .calendar button.rdp-day_selected,
+.dark .calendar button[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px #64748b !important;
+  border-radius: 0.375rem !important;
 }
