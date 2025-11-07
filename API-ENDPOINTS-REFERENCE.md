@@ -411,6 +411,56 @@ X-Teacher-Roles: TITULAR
 
 ---
 
+## GET /teaching/courses/{courseId}/attendance/records
+
+Obtener todos los registros de asistencia del curso.
+
+**Request:**
+```http
+GET /teaching/courses/2000/attendance/records
+X-Teacher-Id: 1000
+X-Teacher-Roles: TITULAR
+```
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "courseId": 2000,
+    "date": "2025-10-15",
+    "items": [
+      {
+        "studentId": 3000,
+        "studentName": "María González",
+        "status": "PRESENTE"
+      }
+    ]
+  },
+  {
+    "courseId": 2000,
+    "date": "2025-10-22",
+    "items": [
+      {
+        "studentId": 3000,
+        "studentName": "María González",
+        "status": "AUSENTE"
+      }
+    ]
+  }
+]
+```
+
+**Campos:**
+- Array de `AttendanceRecordDto`
+  - `courseId` (Long)
+  - `date` (LocalDate)
+  - `items` (Array)
+    - `studentId` (Long)
+    - `studentName` (String)
+    - `status` (String): PRESENTE, AUSENTE, TARDE, JUSTIFICADO
+
+---
+
 # 3. Evaluaciones y Calificaciones
 
 ## GET /teaching/courses/{courseId}/assessments
@@ -1479,11 +1529,12 @@ X-Teacher-Roles: ADMIN
 
 ## 📊 Resumen de Endpoints
 
-**Total:** 40 endpoints
+**Total:** 39 endpoints
 
-- **Docente:** 26 endpoints
+- **Docente:** 27 endpoints
 - **Admin:** 4 endpoints
-- **Compartidos/Públicos:** 10 endpoints
+- **Recursos (Cuenta, Comedor, Tienda):** 6 endpoints
+- **Otros:** 2 endpoints
 
 ---
 
