@@ -68,19 +68,32 @@ export class CanteenService {
       const reservationsData = data.value || data
       console.log('📊 Datos de reservas extraídos:', reservationsData)
 
+       const deriveMealType = (d: Date) => {
+         const h = d.getHours()
+         if (h < 11) return 'Desayuno'
+         if (h >= 11 && h < 15) return 'Almuerzo'
+         if (h >= 15 && h < 18) return 'Merienda'
+         return 'Cena'
+       }
+
        const reservations: CanteenReservation[] = Array.isArray(reservationsData) ? reservationsData.map((r: any) => {
          // Extraer fecha y hora del scheduledAt
          const scheduledDate = r.scheduledAt ? new Date(r.scheduledAt) : new Date()
-         const dateStr = scheduledDate.toISOString().split('T')[0] // YYYY-MM-DD
+         // Keep the full ISO datetime (with timezone) so client-side formatting
+         // can compute the correct local date without UTC truncation issues.
+         const dateIso = scheduledDate.toISOString() // full ISO, e.g. 2025-11-09T15:50:59.261Z
          const timeStr = scheduledDate.toTimeString().split(' ')[0].substring(0, 5) // HH:MM
-         
+
+         // Derivar el tipo de reserva (Desayuno/Almuerzo/Merienda/Cena) si backend no lo provee
+         const derivedType = r.type || r.tipo || r.tipoReserva || deriveMealType(scheduledDate)
+
          const mapped = {
            id: String(r.reservationId ?? r.id ?? `${r.scheduledAt}-${r.menu ?? 'RESERVA'}`),
-           date: dateStr, // Usar solo la fecha
-           type: r.menu || r.type || r.tipo || r.tipoReserva || 'ALMUERZO',
+           date: dateIso, // ISO datetime - client will format to local date
+           type: derivedType,
            timeRange: timeStr || r.timeRange || r.horario || undefined, // Usar la hora del scheduledAt
            sede: r.campus || r.sede || undefined,
-           total: r.menu || r.type || 'Menu no especificado', // Mostrar el menu en lugar del total
+           total: r.menu || r.type || 'Menu no especificado', // Mostrar el menu en la columna 'Menú'
            status: mapStatus(r.status || r.estado || 'Pendiente')
          }
          console.log('🔄 Mapeando reserva:', { original: r, mapped })

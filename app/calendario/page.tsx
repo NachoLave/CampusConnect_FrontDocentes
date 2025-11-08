@@ -579,13 +579,15 @@ export default function CalendarioPage() {
                     if (parts.length !== 3) return
                     const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
                     const t = mapBackendType(e.type, e.id, e.title)
+                    // Respect active filters: only add modifiers for visible event types
+                    if (!isEventVisible({ type: t })) return
                     if (t === 'clase') clase.push(d)
                     if (t === 'examen') examen.push(d)
                     if (t === 'evento') evento.push(d)
                     if (t === 'comedor') comedor.push(d)
                   })
                   return { clase, examen, evento, comedor }
-                }, [backendEvents])}
+                }, [backendEvents, filters])}
                 modifiersClassNames={useMemo(() => ({
                   clase: 'cc-clase',
                   examen: 'cc-examen',
@@ -675,13 +677,15 @@ export default function CalendarioPage() {
                     if (parts.length !== 3) return
                     const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
                     const t = mapBackendType(e.type, e.id, e.title)
+                    // Respect active filters: only add modifiers for visible event types
+                    if (!isEventVisible({ type: t })) return
                     if (t === 'clase') clase.push(d)
                     if (t === 'examen') examen.push(d)
                     if (t === 'evento') evento.push(d)
                     if (t === 'comedor') comedor.push(d)
                   })
                   return { clase, examen, evento, comedor }
-                }, [backendEvents])}
+                }, [backendEvents, filters])}
                 modifiersClassNames={useMemo(() => ({
                   clase: 'cc-clase',
                   examen: 'cc-examen',

@@ -339,6 +339,31 @@
    Cada tipo de evento usa ::before o ::after según su prioridad
 */
 
+/* Prefer button-based pseudo-elements and suppress TD-based ones to avoid
+   duplicate dots and alignment differences across DayPicker versions. */
+.calendar td.cc-clase::before,
+.calendar td.cc-examen::before,
+.calendar td.cc-evento::after,
+.calendar td.cc-comedor::after {
+  display: none !important;
+}
+
+/* Button-targeted pseudo-elements (authoritative) */
+.calendar button.cc-clase::before,
+.calendar button.cc-examen::before,
+.calendar button.cc-evento::after,
+.calendar button.cc-comedor::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  position: absolute;
+  bottom: 6px;
+  z-index: 10;
+}
+
+
 /* Base para todos los puntos */
 .cc-clase::before, .cc-clase > button::before,
 .cc-examen::before, .cc-examen > button::before,
