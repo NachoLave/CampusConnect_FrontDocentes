@@ -108,7 +108,19 @@ class ApiClient {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Intentar leer el cuerpo de la respuesta de error
+        let errorDetail = `HTTP error! status: ${response.status}`
+        try {
+          const errorBody = await response.json()
+          errorDetail = errorBody.message || errorBody.error || JSON.stringify(errorBody)
+        } catch {
+          // Si no se puede parsear como JSON, intentar leer como texto
+          try {
+            const errorText = await response.text()
+            if (errorText) errorDetail += ` - ${errorText}`
+          } catch {}
+        }
+        throw new Error(errorDetail)
       }
 
       const data = await response.json()

@@ -17,6 +17,7 @@ export const API_CONFIG = {
     // Asistencia
     ATTENDANCE: (courseId: number, date: string) => `/teaching/courses/${courseId}/attendance/${date}`,
     ATTENDANCE_RANGE: (courseId: number) => `/teaching/courses/${courseId}/attendance`,
+    ATTENDANCE_RECORDS: (courseId: number) => `/teaching/courses/${courseId}/attendance/records`,
     
     // Evaluaciones y calificaciones
     ASSESSMENTS: (courseId: number) => `/teaching/courses/${courseId}/assessments`,
