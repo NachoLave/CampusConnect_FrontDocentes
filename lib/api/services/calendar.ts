@@ -272,16 +272,20 @@ export class CalendarService {
 
   // Convertir día de la semana a número
   private static getDayOfWeekNumber(day: string): number {
+    // Normalize day string: uppercase and remove diacritics so we accept
+    // both 'MIÉRCOLES' and 'MIERCOLES' (and other variants).
+    const normalized = String(day || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     const dayMap: { [key: string]: number } = {
       'LUNES': 1,
       'MARTES': 2,
-      'MIÉRCOLES': 3,
+      'MIERCOLES': 3,
       'JUEVES': 4,
       'VIERNES': 5,
-      'SÁBADO': 6,
+      'SABADO': 6,
       'DOMINGO': 0
     }
-    return dayMap[day] ?? 1
+
+    return dayMap[normalized] ?? 1
   }
 
   // Obtener hora según el turno
