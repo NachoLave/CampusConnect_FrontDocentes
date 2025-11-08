@@ -29,114 +29,50 @@ export interface NextClass {
 export class CalendarService {
   // Obtener eventos del calendario para una semana específica
   static async getWeeklyEvents(startDate: string, endDate: string): Promise<ApiResponse<CalendarEvent[]>> {
-    console.log('🔍 CalendarService.getWeeklyEvents() - USE_MOCK_DATA:', APP_CONFIG.USE_MOCK_DATA)
-    console.log('📅 Rango de fechas:', startDate, 'a', endDate)
-    
-    if (APP_CONFIG.USE_MOCK_DATA) {
-      console.log('📱 Usando datos mock para calendario')
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Datos mock para el calendario
-      const mockEvents: CalendarEvent[] = [
-        {
-          id: '1',
-          title: 'Clase de Bases de Datos',
-          courseId: 2002,
-          courseTitle: 'Bases de Datos',
-          date: '2025-01-18',
-          time: '18:30',
-          duration: 240, // 4 horas
-          classroom: 'B-202',
-          sede: 'MDP',
-          type: 'class'
-        },
-        {
-          id: '2',
-          title: 'Clase de Programación Avanzada',
-          courseId: 2000,
-          courseTitle: 'Programación Avanzada',
-          date: '2025-01-20',
-          time: '07:30',
-          duration: 240, // 4 horas
-          classroom: 'Aula 101',
-          sede: 'Campus Central',
-          type: 'class'
-        }
-      ]
-      
-      return {
-        data: mockEvents,
-        success: true,
-        message: 'Eventos del calendario obtenidos correctamente'
-      }
-    }
-
     try {
-      console.log('🌐 Intentando obtener eventos del calendario del backend...')
-
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_CALENDAR}?from=${startDate}&to=${endDate}`
       const headers = {
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
         'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Accept': 'application/json'
       }
 
-      console.log(`📡 Llamando al backend real: ${url}`)
-      const response = await fetch(url, { method: 'GET', headers })
+      // Obtener cursos del docente para ambos cuatrimestres
+      const coursesUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=2025Q2&includePrevious=true`
+      const coursesResponse = await fetch(coursesUrl, { method: 'GET', headers })
 
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
+      if (!coursesResponse.ok) {
+        throw new Error(`Error del servidor cursos: ${coursesResponse.status}`)
       }
 
-      const data = (await response.json()) as Array<{
-        source?: string
-        title?: string
-        start?: string
-        end?: string
-        link?: string | null
-        campus?: string | null
-      }>
+      const courses = await coursesResponse.json()
+      
+      // Convertir cursos a eventos del calendario
+      const classEvents = this.convertCoursesToEvents(courses, startDate, endDate)
 
-      console.log('✅ Calendario backend:', data)
-
-      const events: CalendarEvent[] = data.map((item, idx) => {
-        const startIso = item.start || ''
-        const endIso = item.end || ''
-        const startDateObj = startIso ? new Date(startIso) : new Date()
-        const endDateObj = endIso ? new Date(endIso) : new Date(startDateObj.getTime() + 60 * 60 * 1000)
-
-        const date = startDateObj.toISOString().split('T')[0]
-        const time = startDateObj.toTimeString().slice(0,5)
-        const duration = Math.max(0, Math.round((endDateObj.getTime() - startDateObj.getTime()) / 60000))
-
-        // Mapear source a tipo interno
-        let type: CalendarEvent['type'] = 'meeting'
-        if (item.source === 'CLASE') type = 'class'
-        if (item.source === 'EXAMEN' || item.source === 'EXAMENES') type = 'exam'
-
-        return {
-          id: `${idx}-${date}-${time}`,
-          title: item.title || 'Evento',
-          courseId: 0,
-          courseTitle: item.title || 'Evento',
-          date,
-          time,
-          duration,
-          classroom: item.link || '',
-          sede: item.campus || '',
-          type
+      // Obtener reservas de comedor
+      const canteenUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
+      let canteenEvents: CalendarEvent[] = []
+      
+      try {
+        const canteenResponse = await fetch(canteenUrl, { method: 'GET', headers })
+        if (canteenResponse.ok) {
+          const canteenData = await canteenResponse.json()
+          canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
         }
-      })
+      } catch (err) {
+        console.warn('Error obteniendo reservas de comedor:', err)
+      }
+
+      // Combinar eventos de clases y comedor
+      const allEvents = [...classEvents, ...canteenEvents]
 
       return {
-        data: events,
+        data: allEvents,
         success: true,
-        message: 'Eventos del calendario obtenidos del backend'
+        message: 'Eventos del calendario obtenidos correctamente'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo eventos del calendario:', error)
-      console.log('🔄 No se encontraron eventos del backend y APP_CONFIG.USE_MOCK_DATA=false — devolviendo lista vacía')
+      console.error('Error obteniendo eventos del calendario:', error)
 
       return {
         data: [],
@@ -148,33 +84,7 @@ export class CalendarService {
 
   // Obtener la próxima clase
   static async getNextClass(): Promise<ApiResponse<NextClass | null>> {
-    console.log('🔍 CalendarService.getNextClass() - USE_MOCK_DATA:', APP_CONFIG.USE_MOCK_DATA)
-    
-    if (APP_CONFIG.USE_MOCK_DATA) {
-      console.log('📱 Usando datos mock para próxima clase')
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      const mockNextClass: NextClass = {
-        id: '1',
-        title: 'Clase de Bases de Datos',
-        courseTitle: 'Bases de Datos',
-        date: '2025-01-20',
-        time: '18:30',
-        classroom: 'B-202',
-        sede: 'MDP',
-        daysUntil: 2
-      }
-
-      return {
-        data: mockNextClass,
-        success: true,
-        message: 'Próxima clase obtenida correctamente'
-      }
-    }
-
     try {
-      console.log('🌐 Intentando obtener próxima clase del backend...')
-      
       // Obtener cursos del período actual
       const currentDate = new Date()
       const year = currentDate.getFullYear()
@@ -191,20 +101,16 @@ export class CalendarService {
       const headers = {
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
         'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+        'Accept': 'application/json'
       }
       
-      const response = await fetch(coursesUrl, { method: 'GET', headers: headers })
+      const response = await fetch(coursesUrl, { method: 'GET', headers })
       
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`)
       }
       
       const courses = await response.json()
-      console.log('✅ Cursos obtenidos para próxima clase:', courses)
       
       // Encontrar la próxima clase
       const nextClass = this.findNextClass(courses)
@@ -215,82 +121,101 @@ export class CalendarService {
         message: nextClass ? 'Próxima clase encontrada' : 'No hay clases próximas'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo próxima clase:', error)
-      console.log('🔄 Usando próxima clase de fallback')
+      console.error('Error obteniendo próxima clase:', error)
 
       return {
         data: null,
         success: true,
-        message: 'No hay clases próximas (modo fallback)'
+        message: 'No hay clases próximas'
       }
     }
+  }
+
+  // Convertir reservas de comedor a eventos del calendario
+  private static convertCanteenToEvents(reservations: any[], startDate: string, endDate: string): CalendarEvent[] {
+    const events: CalendarEvent[] = []
+    
+    reservations.forEach((reservation: any) => {
+      // scheduledAt viene en formato ISO con timezone: "2025-11-09T12:59:09.816054401-03:00"
+      const scheduledAt = reservation.scheduledAt
+      if (!scheduledAt) return
+      
+      const dateObj = new Date(scheduledAt)
+      const dateStr = dateObj.toISOString().split('T')[0]
+      const time = dateObj.toTimeString().slice(0, 5)
+      
+      // Solo agregar si está en el rango solicitado
+      if (dateStr >= startDate && dateStr <= endDate) {
+        events.push({
+          id: `canteen-${reservation.reservationId}`,
+          title: `Comedor: ${reservation.menu || 'Reserva'}`,
+          courseId: 0,
+          courseTitle: reservation.menu || 'Reserva de comedor',
+          date: dateStr,
+          time: time,
+          duration: 60, // 1 hora por defecto
+          classroom: reservation.menu || '',
+          sede: reservation.campus || '',
+          type: 'meeting' // Usamos 'meeting' para comedor, se mapeará a 'comedor' en el frontend
+        })
+      }
+    })
+    
+    return events
   }
 
   // Convertir cursos del backend a eventos del calendario
   private static convertCoursesToEvents(courses: any[], startDate: string, endDate: string): CalendarEvent[] {
     const events: CalendarEvent[] = []
     
-    console.log('🔍 convertCoursesToEvents - Cursos recibidos:', courses)
-    console.log('📅 Rango de fechas:', startDate, 'a', endDate)
-    
     courses.forEach((course: any) => {
-      console.log('📚 Procesando curso:', {
-        materia: course.materia,
-        diaSemana: course.diaSemana,
-        turno: course.turno,
-        aula: course.aula,
-        campus: course.campus
-      })
+      // Determinar rango de fechas según el periodo (Q1 o Q2)
+      const periodo = String(course.periodo || '').toUpperCase()
+      let courseStart: Date
+      let courseEnd: Date
       
-      // Generar eventos para cada semana en el rango usando fechas reales de enero 2025
-      const time = this.getTimeFromShift(course.turno)
-      
-      // Usar fechas reales de enero 2025 para evitar problemas de zona horaria
-      const january2025Dates = {
-        'LUNES': ['2025-01-06', '2025-01-13', '2025-01-20', '2025-01-27'],
-        'MARTES': ['2025-01-07', '2025-01-14', '2025-01-21', '2025-01-28'],
-        'MIÉRCOLES': ['2025-01-08', '2025-01-15', '2025-01-22', '2025-01-29'],
-        'JUEVES': ['2025-01-09', '2025-01-16', '2025-01-23', '2025-01-30'],
-        'VIERNES': ['2025-01-10', '2025-01-17', '2025-01-24', '2025-01-31'],
-        'SÁBADO': ['2025-01-11', '2025-01-18', '2025-01-25'],
-        'DOMINGO': ['2025-01-12', '2025-01-19', '2025-01-26']
+      if (periodo === '2025Q1') {
+        // Q1: 01/03/2025 - 31/07/2025
+        courseStart = new Date(2025, 2, 1) // Marzo es mes 2 (0-indexed)
+        courseEnd = new Date(2025, 6, 31) // Julio es mes 6
+      } else if (periodo === '2025Q2') {
+        // Q2: 01/08/2025 - 23/12/2025
+        courseStart = new Date(2025, 7, 1) // Agosto es mes 7
+        courseEnd = new Date(2025, 11, 23) // Diciembre es mes 11
+      } else {
+        // Si no tiene periodo válido, saltar este curso
+        return
       }
       
-      // Normalizar la clave del día de la semana y usar un índice seguro
-      const dayKey = String(course.diaSemana || '').toUpperCase()
-      const januaryMap = january2025Dates as Record<string, string[]>
-      const courseDates = januaryMap[dayKey] || []
-
-      console.log('🔄 Conversión:', {
-        diaSemanaOriginal: course.diaSemana,
-        fechasDisponibles: courseDates,
-        time: time
-      })
-
-      courseDates.forEach((eventDate: string) => {
-        // Verificar si la fecha está en el rango solicitado
-        if (eventDate >= startDate && eventDate <= endDate) {
-          console.log('✅ Creando evento:', {
-            curso: course.materia,
-            diaSemanaOriginal: course.diaSemana,
-            fechaGenerada: eventDate,
-            time: time
-          })
+      // Obtener el día de la semana del curso
+      const dayOfWeek = this.getDayOfWeekNumber(course.diaSemana)
+      const time = this.getTimeFromShift(course.turno)
+      
+      // Generar todas las fechas del curso que coincidan con el día de la semana
+      const currentDate = new Date(courseStart)
+      while (currentDate <= courseEnd) {
+        if (currentDate.getDay() === dayOfWeek) {
+          const dateStr = currentDate.toISOString().split('T')[0]
           
-          events.push({
-            id: `${course.courseId}-${eventDate}`,
-            title: `Clase de ${course.materia}`,
-            courseId: course.courseId,
-            courseTitle: course.materia,
-            date: eventDate,
-            time: time,
-            duration: 240, // 4 horas por defecto
-            classroom: course.aula || 'XXX',
-            sede: course.campus || 'XXX',
-            type: 'class'
-          })
+          // Solo agregar si está en el rango solicitado
+          if (dateStr >= startDate && dateStr <= endDate) {
+            events.push({
+              id: `${course.courseId}-${dateStr}`,
+              title: `Clase de ${course.materia}`,
+              courseId: course.courseId,
+              courseTitle: course.materia,
+              date: dateStr,
+              time: time,
+              duration: 240, // 4 horas por defecto
+              classroom: course.aula || '',
+              sede: course.campus || '',
+              type: 'class'
+            })
+          }
         }
-      })
+        // Avanzar al siguiente día
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
     })
     
     return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())

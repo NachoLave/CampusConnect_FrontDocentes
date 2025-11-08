@@ -335,14 +335,13 @@
   border-color: #ca8a04;
 }
 
-/* Modifier-driven per-type dots
-   Support both placements:
-   - modifier class applied to the parent cell (e.g. <td class="cc-clase">)
-   - modifier class applied directly to the button (e.g. <button class="cc-clase">)
-   Some react-day-picker versions apply modifiers to the cell, others to the button.
+/* Modifier-driven per-type dots - soporte para múltiples puntos
+   Cada tipo de evento usa ::before o ::after según su prioridad
 */
-.cc-clase::after, .cc-clase > button::after,
-.cc-examen::after, .cc-examen > button::after,
+
+/* Base para todos los puntos */
+.cc-clase::before, .cc-clase > button::before,
+.cc-examen::before, .cc-examen > button::before,
 .cc-evento::after, .cc-evento > button::after,
 .cc-comedor::after, .cc-comedor > button::after {
   content: '';
@@ -351,15 +350,103 @@
   height: 6px;
   border-radius: 9999px;
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   bottom: 6px;
   z-index: 10;
 }
-.cc-clase::after, .cc-clase > button::after { background: #3b82f6; border: 1px solid #2563eb }
-.cc-examen::after, .cc-examen > button::after { background: #fb923c; border: 1px solid #f97316 }
-.cc-evento::after, .cc-evento > button::after { background: #34d399; border: 1px solid #10b981 }
-.cc-comedor::after, .cc-comedor > button::after { background: #fbbf24; border: 1px solid #f59e0b }
+
+/* Colores - clase (azul) usa ::before */
+.cc-clase::before, .cc-clase > button::before { 
+  background: #3b82f6; 
+  border: 1px solid #2563eb;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Colores - examen (naranja) usa ::before */
+.cc-examen::before, .cc-examen > button::before { 
+  background: #fb923c; 
+  border: 1px solid #f97316;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Colores - evento (verde) usa ::after */
+.cc-evento::after, .cc-evento > button::after { 
+  background: #34d399; 
+  border: 1px solid #10b981;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Colores - comedor (amarillo) usa ::after */
+.cc-comedor::after, .cc-comedor > button::after { 
+  background: #fbbf24; 
+  border: 1px solid #f59e0b;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Ajustes cuando hay 2 eventos: clase + examen */
+.cc-clase.cc-examen::before, .cc-clase.cc-examen > button::before {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-examen.cc-clase::before, .cc-examen.cc-clase > button::before {
+  left: calc(50% + 4px);
+  transform: none;
+}
+
+/* Ajustes cuando hay 2 eventos: clase + evento */
+.cc-clase.cc-evento::before, .cc-clase.cc-evento > button::before {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-evento.cc-clase::after, .cc-evento.cc-clase > button::after {
+  left: calc(50% + 4px);
+  transform: none;
+}
+
+/* Ajustes cuando hay 2 eventos: clase + comedor */
+.cc-clase.cc-comedor::before, .cc-clase.cc-comedor > button::before {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-comedor.cc-clase::after, .cc-comedor.cc-clase > button::after {
+  left: calc(50% + 4px);
+  transform: none;
+}
+
+/* Ajustes cuando hay 2 eventos: examen + evento */
+.cc-examen.cc-evento::before, .cc-examen.cc-evento > button::before {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-evento.cc-examen::after, .cc-evento.cc-examen > button::after {
+  left: calc(50% + 4px);
+  transform: none;
+}
+
+/* Ajustes cuando hay 2 eventos: examen + comedor */
+.cc-examen.cc-comedor::before, .cc-examen.cc-comedor > button::before {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-comedor.cc-examen::after, .cc-comedor.cc-examen > button::after {
+  left: calc(50% + 4px);
+  transform: none;
+}
+
+/* Ajustes cuando hay 2 eventos: evento + comedor */
+.cc-evento.cc-comedor:not(.cc-clase):not(.cc-examen)::after, 
+.cc-evento.cc-comedor:not(.cc-clase):not(.cc-examen) > button::after {
+  left: calc(50% - 4px);
+  transform: none;
+}
+.cc-comedor.cc-evento:not(.cc-clase):not(.cc-examen)::after, 
+.cc-comedor.cc-evento:not(.cc-clase):not(.cc-examen) > button::after {
+  left: calc(50% + 4px);
+  transform: none;
+}
 
 /* Asegurar que todos los días del calendario tengan tamaño fijo y estilos consistentes */
 .calendar button {

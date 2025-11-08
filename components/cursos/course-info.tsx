@@ -922,7 +922,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const monthIdx = monthToIndex[monthName]
     if (monthIdx === undefined) return false
     const date = new Date(courseStartDate.getFullYear(), monthIdx, day)
-    return date >= courseStartDate && date <= courseEndDate
+    // Verificar que esté en el rango Y que sea el día de cursada correcto
+    return date >= courseStartDate && date <= courseEndDate && date.getDay() === courseWeekday
   }
 
   // --- CSV Preview (export) helpers ---
@@ -1205,11 +1206,48 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   const months = useMemo(() => availableMonthsIdx.map((m) => monthNamesEs[m]), [availableMonthsIdx])
 
+  // Fechas reales de asistencia según backend (records), indexadas por mes -> días
+  const [attendanceRecordsByMonth, setAttendanceRecordsByMonth] = useState<Record<number, Set<number>>>({})
+
+  // Cargar los registros de asistencia para conocer fechas reales existentes
+  useEffect(() => {
+    let mounted = true
+    const loadRecords = async () => {
+      if (activeTab !== 'Asistencia') return
+      try {
+        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        const resp = await CoursesService.getAttendanceRecords(Number(courseId))
+        if (!mounted) return
+        if (resp && resp.success && Array.isArray(resp.data)) {
+          const map: Record<number, Set<number>> = {}
+          for (const rec of resp.data as any[]) {
+            const d = new Date(String(rec?.date || ''))
+            if (Number.isNaN(d.getTime())) continue
+            const m = d.getMonth()
+            const day = d.getDate()
+            if (!map[m]) map[m] = new Set<number>()
+            map[m].add(day)
+          }
+          setAttendanceRecordsByMonth(map)
+        } else {
+          setAttendanceRecordsByMonth({})
+        }
+      } catch (err) {
+        console.warn('Error cargando attendance records:', err)
+        setAttendanceRecordsByMonth({})
+      }
+    }
+
+    loadRecords()
+    return () => { mounted = false }
+  }, [activeTab, courseId])
+
   const getDatesForMonthIdx = (monthIdx: number): number[] => {
     const year = courseStartDate.getFullYear()
     const first = new Date(year, monthIdx, 1)
     const last = new Date(year, monthIdx + 1, 0)
     const days: number[] = []
+    // Solo mostrar días que coincidan con el día de cursada (ej: solo Lunes)
     for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
       if (d.getDay() === courseWeekday && d >= courseStartDate && d <= courseEndDate) {
         days.push(d.getDate())
@@ -1221,7 +1259,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const dates = useMemo(() => {
     const idx = monthToIndex[selectedMonth] ?? courseStartDate.getMonth()
     return getDatesForMonthIdx(idx)
-  }, [selectedMonth, courseStartDate, courseEndDate])
+  }, [selectedMonth, courseStartDate, courseEndDate, attendanceRecordsByMonth])
 
   // Seleccionabilidad: clases pasadas y la de esta semana
   const getThisWeekClassDate = (): Date => {
@@ -1237,11 +1275,69 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return target
   }
 
+  // Cargar asistencia de la fecha seleccionada cada vez que cambia la fecha
+  useEffect(() => {
+    let mounted = true
+    const loadByDate = async () => {
+      if (activeTab !== 'Asistencia') return
+      if (!selectedDateObj) return
+      
+      try {
+        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        const yyyy = selectedDateObj.getFullYear()
+        const mm = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
+        const dd = String(selectedDateObj.getDate()).padStart(2, '0')
+        const iso = `${yyyy}-${mm}-${dd}`
+        const resp = await CoursesService.getAttendanceByDate(Number(courseId), iso)
+        if (!mounted) return
+
+        const key = `${monthNamesEs[selectedDateObj.getMonth()]}-${selectedDateObj.getDate()}`
+
+        const normalize = (raw: any): "P" | "1/2" | "A" | null => {
+          if (raw === null || raw === undefined) return null
+          const s = String(raw).trim().toUpperCase()
+          if (s === 'P' || s === 'PRESENTE') return 'P'
+          if (s === 'A' || s === 'AUSENTE') return 'A'
+          if (s === 'M' || s === 'TARDE') return '1/2'
+          return null
+        }
+
+        const nextForDate: { [key: number]: "P" | "1/2" | "A" } = {}
+        if (resp && resp.success && resp.data) {
+          const payload = resp.data as any
+          const items: any[] = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload.flatMap((r: any) => r?.items || []) : []
+          for (const it of items) {
+            const mapped = normalize((it as any).status)
+            const sid = Number((it as any).studentId)
+            if (mapped && Number.isFinite(sid)) {
+              nextForDate[sid] = mapped
+            }
+          }
+        }
+
+        setAttendanceData((prev) => ({
+          ...prev,
+          [key]: nextForDate
+        }))
+        setHasUnsavedAttendance(false)
+      } catch (err) {
+        console.warn('Error cargando asistencia por fecha:', err)
+      }
+    }
+
+    loadByDate()
+    return () => { mounted = false }
+  }, [activeTab, selectedDateObj, courseId])
+
   const isDateSelectable = (monthName: string, day: number): boolean => {
     if (!isDateInCourseRange(monthName, day)) return false
     const year = courseStartDate.getFullYear()
     const d = new Date(year, monthToIndex[monthName] ?? 0, day)
     const limit = getThisWeekClassDate()
+    // Si la fecha existe en los registros del backend, permitir seleccionarla siempre
+    const monthIdx = monthToIndex[monthName] ?? d.getMonth()
+    const extra = attendanceRecordsByMonth[monthIdx]
+    if (extra && extra.has(day)) return true
     return d.getTime() <= limit.getTime()
   }
 
@@ -1325,20 +1421,52 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setHasUnsavedAttendance(true)
   }
 
-  const handleSaveAttendance = () => {
-    // TODO: Aquí irá la request al backend
-    // Ejemplo: await saveAttendanceToBackend(courseId, selectedMonth, selectedDate, attendanceData)
+  const handleSaveAttendance = async () => {
+    if (!selectedDateObj) return
     
-    console.log('Guardando asistencia:', {
-      courseId,
-      month: selectedMonth,
-      date: selectedDate,
-      attendanceData: attendanceData[`${selectedMonth}-${selectedDate}`]
-    })
+    const key = `${selectedMonth}-${selectedDate}`
+    const dataForDate = attendanceData[key] || {}
     
-    // Simular guardado exitoso
-    setHasUnsavedAttendance(false)
-    setShowAttendanceSavedModal(true)
+    // Construir fecha ISO (YYYY-MM-DD)
+    const year = courseStartDate.getFullYear()
+    const monthIdx = monthToIndex[selectedMonth] ?? 0
+    const dateIso = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(selectedDate).padStart(2, '0')}`
+    
+    // Mapear P/A/1/2 a los valores del backend: P -> "P", A -> "A", 1/2 -> "M"
+    // Solo enviar alumnos que tienen un estado marcado (el backend requiere status obligatorio)
+    const items = students
+      .map((student) => {
+        const uiStatus = dataForDate[student.id] || null
+        let backendStatus: string | null = null
+        if (uiStatus === 'P') backendStatus = 'P'
+        else if (uiStatus === 'A') backendStatus = 'A'
+        else if (uiStatus === '1/2') backendStatus = 'M'
+        
+        return {
+          studentId: student.id,
+          status: backendStatus
+        }
+      })
+      .filter((item) => item.status !== null) // Solo enviar los que tienen estado
+    
+    if (items.length === 0) {
+      alert('Debe marcar al menos un alumno antes de guardar')
+      return
+    }
+    
+    try {
+      apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+      const resp = await CoursesService.saveAttendanceByDate(Number(courseId), dateIso, items)
+      
+      if (resp && resp.success) {
+        setHasUnsavedAttendance(false)
+        setShowAttendanceSavedModal(true)
+      } else {
+        alert(`Error al guardar: ${resp?.error || resp?.message || 'Error desconocido'}`)
+      }
+    } catch (err) {
+      alert(`Error al guardar: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   const getAttendance = (studentId: number): "P" | "1/2" | "A" | null => {

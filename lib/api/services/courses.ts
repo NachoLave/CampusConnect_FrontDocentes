@@ -20,6 +20,39 @@ export class CoursesService {
     return apiClient.get<Course[]>(API_CONFIG.ENDPOINTS.COURSES)
   }
 
+  // Obtener todos los registros de asistencia del curso
+  static async getAttendanceRecords(courseId: number): Promise<ApiResponse<any[]>> {
+    try {
+      // Asegurar headers requeridos por backend (docente mock, roles)
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      return await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.ATTENDANCE_RECORDS(courseId))
+    } catch (err) {
+      return { data: [] as any[], success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+    }
+  }
+
+  // Obtener asistencia por fecha (YYYY-MM-DD)
+  static async getAttendanceByDate(courseId: number, dateIso: string): Promise<ApiResponse<any>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      return await apiClient.get<any>(API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso))
+    } catch (err) {
+      return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+    }
+  }
+
+  // Guardar asistencia para una fecha específica (PUT)
+  static async saveAttendanceByDate(courseId: number, dateIso: string, items: Array<{ studentId: number; status: string | null }>): Promise<ApiResponse<any>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
+      const body = { items }
+      return await apiClient.put<any>(endpoint, body)
+    } catch (err) {
+      return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+    }
+  }
+
   // Confirmar/Generar acta oficial para un curso
   static async confirmAct(courseId: number): Promise<ApiResponse<any>> {
     try {

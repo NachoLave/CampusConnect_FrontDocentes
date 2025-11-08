@@ -324,9 +324,11 @@ export default function CalendarioPage() {
   }
 
   // Map backend event.type to page types
-  const mapBackendType = (t: BackendCalendarEvent['type']): string => {
+  const mapBackendType = (t: BackendCalendarEvent['type'], eventId?: string, title?: string): string => {
     if (t === 'class') return 'clase'
     if (t === 'exam') return 'examen'
+    // Detectar eventos de comedor por el id o título
+    if (eventId?.startsWith('canteen-') || title?.toLowerCase().includes('comedor')) return 'comedor'
     if (t === 'meeting') return 'evento'
     return 'evento'
   }
@@ -339,7 +341,7 @@ export default function CalendarioPage() {
     // Use only backend events
     backendEvents.forEach((evt) => {
       const key = formatIsoToDdMmYyyy(evt.date)
-      const mappedType = mapBackendType(evt.type)
+      const mappedType = mapBackendType(evt.type, evt.id, evt.title)
       if (key === label && isEventVisible({ type: mappedType })) types.add(mappedType)
     })
 
@@ -349,24 +351,30 @@ export default function CalendarioPage() {
   const eventsOfSelected = useMemo(() => {
     const label = selectedLabel
     // Prefer backend events
-    const fromBackend = backendEvents.map((e) => ({
-      id: e.id,
-      type: mapBackendType(e.type),
-      title: e.title,
-      date: formatIsoToDdMmYyyy(e.date),
-      // build time range from start (time) and duration
-      time: (() => {
-        const start = e.time // HH:MM
-        const [hh, mm] = start.split(':').map((n) => parseInt(n, 10))
-        const startDt = new Date(e.date + 'T' + start + ':00')
-        const endDt = new Date(startDt.getTime() + (e.duration || 60) * 60000)
-        const pad = (n: number) => n.toString().padStart(2, '0')
-        return `${pad(startDt.getHours())}:${pad(startDt.getMinutes())} - ${pad(endDt.getHours())}:${pad(endDt.getMinutes())}`
-      })(),
-      location: e.classroom || '',
-      section: e.sede || '',
-      color: e.type === 'class' ? 'bg-blue-100 border-blue-200 text-blue-800' : e.type === 'exam' ? 'bg-orange-100 border-orange-200 text-orange-800' : 'bg-green-100 border-green-200 text-green-800'
-    })).filter((ev) => ev.date === label && isEventVisible(ev))
+    const fromBackend = backendEvents.map((e) => {
+      const mappedType = mapBackendType(e.type, e.id, e.title)
+      return {
+        id: e.id,
+        type: mappedType,
+        title: e.title,
+        date: formatIsoToDdMmYyyy(e.date),
+        // build time range from start (time) and duration
+        time: (() => {
+          const start = e.time // HH:MM
+          const [hh, mm] = start.split(':').map((n) => parseInt(n, 10))
+          const startDt = new Date(e.date + 'T' + start + ':00')
+          const endDt = new Date(startDt.getTime() + (e.duration || 60) * 60000)
+          const pad = (n: number) => n.toString().padStart(2, '0')
+          return `${pad(startDt.getHours())}:${pad(startDt.getMinutes())} - ${pad(endDt.getHours())}:${pad(endDt.getMinutes())}`
+        })(),
+        location: e.classroom || '',
+        section: e.sede || '',
+        color: mappedType === 'clase' ? 'bg-blue-100 border-blue-200 text-blue-800' : 
+               mappedType === 'examen' ? 'bg-orange-100 border-orange-200 text-orange-800' : 
+               mappedType === 'comedor' ? 'bg-yellow-100 border-yellow-200 text-yellow-800' :
+               'bg-green-100 border-green-200 text-green-800'
+      }
+    }).filter((ev) => ev.date === label && isEventVisible(ev))
 
     // Return backend-derived events (may be empty)
     return fromBackend
@@ -378,16 +386,14 @@ export default function CalendarioPage() {
       setLoadingEvents(true)
       setEventsError(null)
       try {
-  // Fetch a slightly wider window (previous month -> next month) to avoid missing events
-  const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-  const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
+        // Fetch a slightly wider window (previous month -> next month) to avoid missing events
+        const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+        const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
         const fromIso = from.toISOString().split('T')[0]
         const toIso = to.toISOString().split('T')[0]
-        console.log('📡 Fetching calendar backend events from', fromIso, 'to', toIso)
         const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
         if (res.success && Array.isArray(res.data)) {
-            setBackendEvents(res.data)
-            console.log('📥 backendEvents set (sample 5):', res.data.slice(0,5))
+          setBackendEvents(res.data)
         } else {
           setBackendEvents([])
           setEventsError(res.message || 'No events')
@@ -412,7 +418,7 @@ export default function CalendarioPage() {
     const todays = backendEvents
       .map((e) => ({
         id: e.id,
-        type: mapBackendType(e.type),
+        type: mapBackendType(e.type, e.id, e.title),
         title: e.title,
         date: formatIsoToDdMmYyyy(e.date),
         time: (() => {
@@ -572,7 +578,7 @@ export default function CalendarioPage() {
                     const parts = key.split('/')
                     if (parts.length !== 3) return
                     const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
-                    const t = mapBackendType(e.type)
+                    const t = mapBackendType(e.type, e.id, e.title)
                     if (t === 'clase') clase.push(d)
                     if (t === 'examen') examen.push(d)
                     if (t === 'evento') evento.push(d)
@@ -591,7 +597,7 @@ export default function CalendarioPage() {
                   const map: Record<string, any> = {}
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
-                    const mappedType = mapBackendType(e.type)
+                    const mappedType = mapBackendType(e.type, e.id, e.title)
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
@@ -608,15 +614,11 @@ export default function CalendarioPage() {
                           map[altKey] = map[altKey] || {}
                           map[altKey][mappedType] = true
                         }
-                        console.log(`🔁 mapped backend event date ${e.date} -> keys:`, key, altKey)
                       }
                     } catch (err) {
                       // ignore
                     }
                   })
-
-                  // Diagnostic log to help debug missing dots
-                  console.log('🔎 eventsByDay keys generated:', Object.keys(map).slice(0, 50))
 
                   // If backend returned no events, keep previous mock/course-derived behavior as fallback
                   if (backendEvents.length === 0) {
@@ -672,7 +674,7 @@ export default function CalendarioPage() {
                     const parts = key.split('/')
                     if (parts.length !== 3) return
                     const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
-                    const t = mapBackendType(e.type)
+                    const t = mapBackendType(e.type, e.id, e.title)
                     if (t === 'clase') clase.push(d)
                     if (t === 'examen') examen.push(d)
                     if (t === 'evento') evento.push(d)
@@ -691,7 +693,7 @@ export default function CalendarioPage() {
                   const map: Record<string, any> = {}
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
-                    const mappedType = mapBackendType(e.type)
+                    const mappedType = mapBackendType(e.type, e.id, e.title)
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
@@ -708,8 +710,6 @@ export default function CalendarioPage() {
                           map[altKey] = map[altKey] || {}
                           map[altKey][mappedType] = true
                         }
-                        // diagnostic
-                        console.log(`🔁 mapped backend event date ${e.date} -> keys:`, key, altKey)
                       }
                     } catch (err) {
                       // ignore
