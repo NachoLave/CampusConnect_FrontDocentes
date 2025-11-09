@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Loader2, Sun, Sunset, Moon, Monitor, Calendar, MapPin } from "lucide-react"
+import { Plus, Loader2, Sun, Sunset, Moon, Monitor, Calendar, MapPin, Building2, Shuffle } from "lucide-react"
 import { useCampuses } from "@/lib/hooks"
 
 interface AddAvailabilityModalProps {
@@ -63,9 +63,9 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
   ]
   
   const modalityOptions = [
-    { key: "Presencial", label: "Presencial", icon: "🏢" },
-    { key: "Virtual", label: "Virtual", icon: "💻" },
-    { key: "Ambas", label: "Ambas", icon: "🔀" }
+    { key: "Presencial", label: "Presencial", icon: Building2 },
+    { key: "Virtual", label: "Virtual", icon: Monitor },
+    { key: "Ambas", label: "Ambas", icon: Shuffle }
   ]
 
   // Lógica de modalidades
@@ -239,25 +239,30 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
               Modalidad <span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-3 gap-3">
-              {modalityOptions.map((modality) => (
-                <button
-                  key={modality.key}
-                  onClick={() => {
-                    setSelectedModality(modality.key)
-                    if (modality.key === "Virtual") {
-                      setLocations([])
-                    }
-                  }}
-                  className={`p-4 rounded-xl text-center transition-all border-2 ${
-                    selectedModality === modality.key
-                      ? 'bg-purple-100 text-purple-800 border-purple-300 shadow-sm'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">{modality.icon}</div>
-                  <div className="font-semibold text-sm">{modality.label}</div>
-                </button>
-              ))}
+              {modalityOptions.map((modality) => {
+                const Icon = modality.icon
+                return (
+                  <button
+                    key={modality.key}
+                    onClick={() => {
+                      setSelectedModality(modality.key)
+                      if (modality.key === "Virtual") {
+                        setLocations([])
+                      }
+                    }}
+                    className={`p-4 rounded-xl text-center transition-all border-2 ${
+                      selectedModality === modality.key
+                        ? 'bg-purple-100 text-purple-800 border-purple-300 shadow-sm'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex justify-center mb-2">
+                      <Icon className={`w-6 h-6 ${selectedModality === modality.key ? 'text-purple-700' : 'text-gray-500'}`} />
+                    </div>
+                    <div className="font-semibold text-sm">{modality.label}</div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 

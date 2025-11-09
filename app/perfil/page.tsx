@@ -1512,7 +1512,7 @@ export default function PerfilPage() {
                         {propuesta.status === "APROBADA" && !propuesta.active && (
                           <div className="mt-3 text-sm text-gray-900 font-medium flex items-start gap-1.5">
                             <HelpCircle className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                            <span>Propuesta actualmente inactiva - No serás considerado para nuevas asignaciones</span>
+                            <span>Inactivo - no se considerará para nuevas asignaciones</span>
                           </div>
                         )}
                         {propuesta.status === "APROBADA" && propuesta.active && propuesta.decidedAt && (
