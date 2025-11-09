@@ -335,11 +335,13 @@ export class CalendarService {
 
   // Obtener hora según el turno
   private static getTimeFromShift(shift: string): string {
+    // Align times with 'Mis cursos' display: mañana -> 08:00, tarde -> 14:00, noche -> 18:00
     const timeMap: { [key: string]: string } = {
-      'MANIANA': '07:30',
-      'TARDE': '13:30',
-      'NOCHE': '18:30'
+      'MANIANA': '08:00',
+      'MANANA': '08:00',
+      'TARDE': '14:00',
+      'NOCHE': '18:00'
     }
-    return timeMap[shift] ?? '07:30'
+    return timeMap[shift] ?? '08:00'
   }
 }

@@ -103,12 +103,13 @@ export function useAnimatedBalance(
   
   const formatCurrency = (amount: number): string => {
     // Formatear con incrementos más visibles durante la animación
-    const roundedAmount = isAnimating ? Math.floor(amount) : amount
+    // Always show integer (no decimals) as requested: remove comma and decimals
+    const roundedAmount = Math.trunc(amount)
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
       currency: 'ARS',
-      minimumFractionDigits: isAnimating ? 0 : 2, // Sin decimales durante animación
-      maximumFractionDigits: isAnimating ? 0 : 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(roundedAmount).replace('ARS', '$')
   }
 

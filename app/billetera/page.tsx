@@ -143,16 +143,16 @@ export default function BilleteraPage() {
 
   const formatCurrency = (amount: number) => {
     const formatted = Math.abs(amount).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })
     return amount >= 0 ? `+$${formatted}` : `-$${formatted}`
   }
 
   const formatBalance = (amount: number) => {
     const formatted = Math.abs(amount).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })
     return amount >= 0 ? `$${formatted}` : `-$${formatted}`
   }
@@ -280,46 +280,7 @@ export default function BilleteraPage() {
             </Link>
           </div>
 
-          {/* Gasto del mes (gráfico dona) */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Resumen del mes</h3>
-            {totalExpenses === 0 ? (
-              <div className="text-sm text-gray-500">Sin gastos registrados este mes</div>
-            ) : (
-              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
-                  {computeArcs().map((arc, i) => (
-                    <path key={i} d={arc.path} fill={arc.color} />
-                  ))}
-                  {/* agujero para dona */}
-                  <circle cx="50" cy="50" r="24" fill="#fff" />
-                </svg>
-                <div className="flex-1 w-full">
-                  <div className="grid grid-cols-1 gap-2">
-                    {pieData.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs md:text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
-                          <span className="text-gray-700">{d.label}</span>
-                        </div>
-                        <span className="font-medium text-gray-900">${Math.round(d.value).toLocaleString("es-AR")}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 md:mt-4 grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <div className="text-slate-600">Total depositado</div>
-                      <div className="text-slate-900 font-semibold">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
-                    </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <div className="text-slate-600">Total gastado</div>
-                      <div className="text-slate-900 font-semibold">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Resumen del mes removed as requested */}
         </div>
       </div>
 
