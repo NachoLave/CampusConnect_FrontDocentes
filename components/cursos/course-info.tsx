@@ -558,6 +558,28 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId])
+
+  // Check backend if there are acts for this course and block edits when an acta is closed
+  useEffect(() => {
+    let mounted = true
+    const loadActs = async () => {
+      try {
+        const resp = await CoursesService.getActs(Number(courseId))
+        if (!mounted) return
+        if (resp && resp.success) {
+          const acts = Array.isArray(resp.data) ? resp.data : []
+          const closed = acts.some((a: any) => (a && ((a.estado && String(a.estado).toUpperCase() === 'CERRADO') || a.actaId)))
+          if (closed || acts.length > 0) setIsCourseLocked(true)
+        }
+      } catch (err) {
+        // ignore - don't block on error
+      }
+    }
+
+    loadActs()
+    return () => { mounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId])
   useEffect(() => {
     try {
       localStorage.setItem(attendanceStorageKey, JSON.stringify(attendanceData))
@@ -1409,6 +1431,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [allCourseDates, attendanceInit])
 
   const setAttendance = (studentId: number, status: "P" | "1/2" | "A") => {
+    // Prevent edits when the course is locked (has acta / closed)
+    if (isCourseLocked) return
     if (!isDateSelectable(selectedMonth, selectedDate)) return
     const key = `${selectedMonth}-${selectedDate}`
     setAttendanceData((prev) => ({
@@ -1422,6 +1446,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const handleSaveAttendance = async () => {
+    // Guard against saving when course is locked
+    if (isCourseLocked) return
     if (!selectedDateObj) return
     
     const key = `${selectedMonth}-${selectedDate}`
@@ -2038,7 +2064,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           </div>
           <button
             onClick={() => setShowActaModal(true)}
-            className="flex items-center space-x-2 bg-slate-700 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md text-xs lg:text-sm font-medium hover:bg-slate-800 transition-colors whitespace-nowrap"
+            disabled={isCourseLocked}
+            title={isCourseLocked ? 'Curso cerrado: no se permiten modificaciones ni generación de acta' : 'Gestionar acta'}
+            className={`flex items-center space-x-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-md text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${isCourseLocked ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-slate-700 text-white hover:bg-slate-800'}`}
           >
             <ClipboardCheck className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
             <span>Gestionar Acta</span>
@@ -2470,7 +2498,17 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   </div>
 
                   {/* Botón Guardar - Desktop: margen izquierdo auto para empujarlo a la derecha, Mobile: full width */}
-                  {hasUnsavedAttendance && (
+                  {hasUnsavedAttendance && isCourseLocked && (
+                    <button
+                      disabled
+                      title="No se puede editar asistencia: el curso tiene acta o está cerrado"
+                      className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-gray-300 text-white font-medium rounded-md transition-colors lg:ml-auto opacity-60 cursor-not-allowed"
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
+                      <span>Guardar</span>
+                    </button>
+                  )}
+                  {hasUnsavedAttendance && !isCourseLocked && (
                     <button
                       onClick={handleSaveAttendance}
                       className="flex items-center justify-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm bg-slate-700 hover:bg-slate-800 text-white font-medium rounded-md transition-colors lg:ml-auto"
@@ -2607,16 +2645,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
                 <button
                   onClick={() => {
+                    if (isCourseLocked) return
                     if (isEditingGrades) {
                       handleSaveGradesClick()
                     } else {
                       setIsEditingGrades(true)
                     }
                   }}
+                  disabled={isCourseLocked}
+                  title={isCourseLocked ? 'Curso cerrado: no se permiten modificaciones' : isEditingGrades ? 'Guardar' : 'Editar'}
                   className={`flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm rounded-md transition-colors ${
-                    isEditingGrades
-                      ? "bg-green-600 text-white hover:bg-green-700"
-                      : "bg-slate-700 text-white hover:bg-slate-800"
+                    isCourseLocked
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : isEditingGrades
+                        ? "bg-green-600 text-white hover:bg-green-700"
+                        : "bg-slate-700 text-white hover:bg-slate-800"
                   }`}
                 >
                   <Edit className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
@@ -2761,6 +2804,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             min="1"
                             max="10"
                             step="0.5"
+                            disabled={isCourseLocked}
                             value={gradesData[student.id]?.["1P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "1P", e.target.value)}
                             onKeyDown={(e) => {
@@ -2768,7 +2812,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 e.preventDefault()
                               }
                             }}
-                            className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                           />
                         ) : (
                           <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["1P"] || "-"}</span>
@@ -2781,6 +2825,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             min="1"
                             max="10"
                             step="0.5"
+                            disabled={isCourseLocked}
                             value={gradesData[student.id]?.["2P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "2P", e.target.value)}
                             onKeyDown={(e) => {
@@ -2788,7 +2833,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 e.preventDefault()
                               }
                             }}
-                            className="w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                           />
                         ) : (
                           <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["2P"] || "-"}</span>
@@ -2799,12 +2844,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           (() => {
                             const perms = getGradePermissions(gradesData[student.id] || {})
                             return (
-                              <input
+                                <input
                                 type="number"
                                 min="1"
                                 max="10"
                                 step="0.5"
-                                disabled={!perms.recEnabled}
+                                disabled={!perms.recEnabled || isCourseLocked}
                                 value={gradesData[student.id]?.["REC"] || ""}
                                 onChange={(e) => updateGrade(String(student.id), "REC", e.target.value)}
                                 onKeyDown={(e) => {
@@ -2812,9 +2857,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                     e.preventDefault()
                                   }
                                 }}
-                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                  !perms.recEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                                }`}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.recEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                               />
                             )
                           })()
@@ -2849,7 +2892,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 min="1"
                                 max="10"
                                 step="0.5"
-                                disabled={!perms.finalEnabled}
+                                disabled={!perms.finalEnabled || isCourseLocked}
                                 value={finalValue}
                                 onChange={(e) => updateGrade(String(student.id), "FINAL", e.target.value)}
                                 onKeyDown={(e) => {
@@ -2857,9 +2900,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                     e.preventDefault()
                                   }
                                 }}
-                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                  !perms.finalEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                                }`}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.finalEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                               />
                             )
                           })()

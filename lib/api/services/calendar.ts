@@ -46,8 +46,8 @@ export class CalendarService {
 
       const courses = await coursesResponse.json()
       
-      // Convertir cursos a eventos del calendario
-      const classEvents = this.convertCoursesToEvents(courses, startDate, endDate)
+  // Convertir cursos a eventos del calendario (incluye exámenes)
+  const classEvents = await this.convertCoursesToEvents(courses, startDate, endDate)
 
       // Obtener reservas de comedor
       const canteenUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
@@ -165,59 +165,104 @@ export class CalendarService {
   }
 
   // Convertir cursos del backend a eventos del calendario
-  private static convertCoursesToEvents(courses: any[], startDate: string, endDate: string): CalendarEvent[] {
+  private static async convertCoursesToEvents(courses: any[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
     const events: CalendarEvent[] = []
-    
-    courses.forEach((course: any) => {
-      // Determinar rango de fechas según el periodo (Q1 o Q2)
-      const periodo = String(course.periodo || '').toUpperCase()
-      let courseStart: Date
-      let courseEnd: Date
-      
-      if (periodo === '2025Q1') {
-        // Q1: 01/03/2025 - 31/07/2025
-        courseStart = new Date(2025, 2, 1) // Marzo es mes 2 (0-indexed)
-        courseEnd = new Date(2025, 6, 31) // Julio es mes 6
-      } else if (periodo === '2025Q2') {
-        // Q2: 01/08/2025 - 23/12/2025
-        courseStart = new Date(2025, 7, 1) // Agosto es mes 7
-        courseEnd = new Date(2025, 11, 23) // Diciembre es mes 11
-      } else {
-        // Si no tiene periodo válido, saltar este curso
-        return
-      }
-      
-      // Obtener el día de la semana del curso
-      const dayOfWeek = this.getDayOfWeekNumber(course.diaSemana)
-      const time = this.getTimeFromShift(course.turno)
-      
-      // Generar todas las fechas del curso que coincidan con el día de la semana
-      const currentDate = new Date(courseStart)
-      while (currentDate <= courseEnd) {
-        if (currentDate.getDay() === dayOfWeek) {
-          const dateStr = currentDate.toISOString().split('T')[0]
-          
-          // Solo agregar si está en el rango solicitado
-          if (dateStr >= startDate && dateStr <= endDate) {
-            events.push({
-              id: `${course.courseId}-${dateStr}`,
-              title: `Clase de ${course.materia}`,
-              courseId: course.courseId,
-              courseTitle: course.materia,
-              date: dateStr,
-              time: time,
-              duration: 240, // 4 horas por defecto
-              classroom: course.aula || '',
-              sede: course.campus || '',
-              type: 'class'
-            })
-          }
+
+    const headers = {
+      'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
+      'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
+      'Accept': 'application/json'
+    }
+
+    // Process courses in parallel to fetch assessments for each course
+    await Promise.all((courses || []).map(async (course: any) => {
+      try {
+        // Determinar rango de fechas según el periodo (Q1 o Q2)
+        const periodo = String(course.periodo || '').toUpperCase()
+        let courseStart: Date
+        let courseEnd: Date
+
+        if (periodo.includes('Q1')) {
+          // Q1: 01/03/YYYY - 31/07/YYYY
+          const year = (periodo.match(/\d{4}/) || [])[0] || '2025'
+          courseStart = new Date(Number(year), 2, 1)
+          courseEnd = new Date(Number(year), 6, 31)
+        } else if (periodo.includes('Q2')) {
+          // Q2: 01/08/YYYY - 23/12/YYYY
+          const year = (periodo.match(/\d{4}/) || [])[0] || '2025'
+          courseStart = new Date(Number(year), 7, 1)
+          courseEnd = new Date(Number(year), 11, 23)
+        } else {
+          // If no valid period, skip
+          return
         }
-        // Avanzar al siguiente día
-        currentDate.setDate(currentDate.getDate() + 1)
+
+        // Obtener el día de la semana del curso
+        const dayOfWeek = this.getDayOfWeekNumber(course.diaSemana)
+        const time = this.getTimeFromShift(course.turno)
+
+        // Generate class occurrences
+        const currentDate = new Date(courseStart)
+        while (currentDate <= courseEnd) {
+          if (currentDate.getDay() === dayOfWeek) {
+            const dateStr = currentDate.toISOString().split('T')[0]
+            if (dateStr >= startDate && dateStr <= endDate) {
+              events.push({
+                id: `${course.courseId}-${dateStr}`,
+                title: `Clase: ${course.materia}`,
+                courseId: course.courseId,
+                courseTitle: course.materia,
+                date: dateStr,
+                time: time,
+                duration: 240,
+                classroom: course.aula || '',
+                sede: course.campus || '',
+                type: 'class'
+              })
+            }
+          }
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+
+        // Fetch assessments for this course and convert them to exam events
+        try {
+          const assessmentsUrl = `${API_CONFIG.BASE_URL}/teaching/courses/${course.courseId}/assessments`
+          const resp = await fetch(assessmentsUrl, { method: 'GET', headers })
+          if (resp.ok) {
+            const assessments = await resp.json()
+            if (Array.isArray(assessments)) {
+              assessments.forEach((a: any) => {
+                // Expecting a.date in YYYY-MM-DD
+                const aDate = String(a.date || '')
+                if (!aDate) return
+                if (aDate >= startDate && aDate <= endDate) {
+                  events.push({
+                    id: `exam-${a.assessmentId}-${course.courseId}`,
+                    // Include assessment type and course name in the label
+                    title: `Examen: ${a.type || 'Evaluación'} • ${course.materia}`,
+                    courseId: course.courseId,
+                    courseTitle: course.materia,
+                    date: aDate,
+                    time: this.getTimeFromShift(course.turno),
+                    duration: 120,
+                    classroom: course.aula || '',
+                    sede: course.campus || '',
+                    type: 'exam'
+                  })
+                }
+              })
+            }
+          }
+        } catch (err) {
+          // swallow assessment fetch errors for this course
+          console.warn(`Error fetching assessments for course ${course.courseId}:`, err)
+        }
+
+      } catch (err) {
+        console.warn('Error processing course for calendar events:', err)
       }
-    })
-    
+    }))
+
     return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }
 
@@ -247,7 +292,7 @@ export class CalendarService {
             
             upcomingClasses.push({
               id: `${course.courseId}-${dateStr}`,
-              title: `Clase de ${course.materia}`,
+              title: `Clase: ${course.materia}`,
               courseTitle: course.materia,
               date: dateStr,
               time: time,
@@ -290,11 +335,13 @@ export class CalendarService {
 
   // Obtener hora según el turno
   private static getTimeFromShift(shift: string): string {
+    // Align times with 'Mis cursos' display: mañana -> 08:00, tarde -> 14:00, noche -> 18:00
     const timeMap: { [key: string]: string } = {
-      'MANIANA': '07:30',
-      'TARDE': '13:30',
-      'NOCHE': '18:30'
+      'MANIANA': '08:00',
+      'MANANA': '08:00',
+      'TARDE': '14:00',
+      'NOCHE': '18:00'
     }
-    return timeMap[shift] ?? '07:30'
+    return timeMap[shift] ?? '08:00'
   }
 }
