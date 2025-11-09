@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
+import { useRouter } from 'next/navigation'
 import coursesData from "@/lib/data/courses.json"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
@@ -355,6 +356,7 @@ export default function CalendarioPage() {
       const mappedType = mapBackendType(e.type, e.id, e.title)
       return {
         id: e.id,
+        courseId: (e as any).courseId,
         type: mappedType,
         title: e.title,
         date: formatIsoToDdMmYyyy(e.date),
@@ -379,6 +381,36 @@ export default function CalendarioPage() {
     // Return backend-derived events (may be empty)
     return fromBackend
   }, [selectedLabel, selectedDate, filters, backendEvents])
+
+  const router = useRouter()
+
+  const handleViewMore = (event: any) => {
+    if (!event) return
+    if (event.type === 'clase' || event.type === 'examen') {
+      const id = event.courseId || event.courseId === 0 ? String(event.courseId) : null
+      if (id && id !== '0') {
+        router.push(`/cursos/${id}`)
+        return
+      }
+      // fallback: try to extract numeric id from event.id if present
+      const m = String(event.id || '').match(/(\d+)/)
+      if (m) {
+        router.push(`/cursos/${m[1]}`)
+        return
+      }
+      // otherwise go to cursos list
+      router.push('/cursos')
+      return
+    }
+
+    if (event.type === 'comedor') {
+      router.push('/comedor')
+      return
+    }
+
+    // Default: go to calendar (no-op alternative)
+    router.push('/calendario')
+  }
 
   // Fetch backend events for the two-month window (currentMonth and next month)
   useEffect(() => {
@@ -780,7 +812,12 @@ export default function CalendarioPage() {
                       </div>
                       { (event as any).description ? <p className="text-xs md:text-sm text-gray-700 mb-3">{(event as any).description}</p> : null }
                     </div>
-                    <Button variant="outline" size="sm" className="md:ml-4 bg-transparent w-full md:w-auto text-xs md:text-sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="md:ml-4 bg-transparent w-full md:w-auto text-xs md:text-sm"
+                      onClick={() => handleViewMore(event)}
+                    >
                       VER MAS
                     </Button>
                   </div>
