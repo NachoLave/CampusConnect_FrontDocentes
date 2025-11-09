@@ -46,7 +46,10 @@ export const API_CONFIG = {
     ACTS_CONFIRM: '/teaching/acts:confirm',
     
     // Admin - Materias
-    ADMIN_SUBJECTS: '/admin/subjects'
+    ADMIN_SUBJECTS: '/admin/subjects',
+    
+    // Admin - Sedes
+    ADMIN_CAMPUSES: '/admin/sedes'
   }
 }
 

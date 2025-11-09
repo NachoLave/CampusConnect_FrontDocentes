@@ -10,6 +10,7 @@ interface UseProposalsReturn {
   createProposal: (subjectId: number) => Promise<boolean>
   deleteProposal: (subjectId: number) => Promise<boolean>
   resendProposal: (proposalId: number) => Promise<boolean>
+  toggleProposalAvailability: (proposalId: number) => Promise<boolean>
 }
 
 /**
@@ -92,6 +93,23 @@ export function useProposals(): UseProposalsReturn {
     }
   }
 
+  const toggleProposalAvailability = async (proposalId: number): Promise<boolean> => {
+    try {
+      const response = await TeacherService.toggleProposalAvailability(proposalId)
+      
+      if (response.success) {
+        await fetchProposals() // Recargar la lista
+        return true
+      } else {
+        setError(response.error || 'Error al cambiar la disponibilidad')
+        return false
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+      return false
+    }
+  }
+
   useEffect(() => {
     fetchProposals()
   }, [])
@@ -103,7 +121,8 @@ export function useProposals(): UseProposalsReturn {
     refetch: fetchProposals,
     createProposal,
     deleteProposal,
-    resendProposal
+    resendProposal,
+    toggleProposalAvailability
   }
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AvailabilityBlock, UpdateAvailabilityRequest } from '@/lib/types'
+import { AvailabilityBlock, CreateAvailabilityBlockRequest } from '@/lib/types'
 import { TeacherService } from '@/lib/api/services/teacher'
 
 interface UseAvailabilityReturn {
@@ -7,12 +7,14 @@ interface UseAvailabilityReturn {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
-  updateAvailability: (blocks: AvailabilityBlock[]) => Promise<boolean>
+  addAvailability: (block: CreateAvailabilityBlockRequest) => Promise<AvailabilityBlock | null>
+  deleteAvailability: (blockId: number) => Promise<boolean>
+  updateAvailabilityBlock: (blockId: number, data: { campuses: string[], modality?: string }) => Promise<boolean>
 }
 
 /**
  * Hook para gestionar la disponibilidad horaria del docente
- * Consume los endpoints GET/PUT /teachers/me/availability
+ * Consume los endpoints GET/POST/DELETE/PATCH /teachers/me/availability
  */
 export function useAvailability(): UseAvailabilityReturn {
   const [availability, setAvailability] = useState<AvailabilityBlock[]>([])
@@ -38,16 +40,49 @@ export function useAvailability(): UseAvailabilityReturn {
     }
   }
 
-  const updateAvailability = async (blocks: AvailabilityBlock[]): Promise<boolean> => {
+  const addAvailability = async (block: CreateAvailabilityBlockRequest): Promise<AvailabilityBlock | null> => {
     try {
-      const request: UpdateAvailabilityRequest = { blocks }
-      const response = await TeacherService.updateAvailability(request)
+      const response = await TeacherService.addAvailabilityBlock(block)
+      
+      if (response.success && response.data) {
+        return response.data // Devolver el bloque creado con su ID real
+      } else {
+        setError(response.error || 'Error al agregar el bloque')
+        return null
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+      return null
+    }
+  }
+
+  const deleteAvailability = async (blockId: number): Promise<boolean> => {
+    try {
+      const response = await TeacherService.deleteAvailabilityBlock(blockId)
       
       if (response.success) {
-        await fetchAvailability() // Recargar la lista
         return true
       } else {
-        setError(response.error || 'Error al actualizar la disponibilidad')
+        setError(response.error || 'Error al eliminar el bloque')
+        return false
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+      return false
+    }
+  }
+
+  const updateAvailabilityBlock = async (
+    blockId: number, 
+    data: { campuses: string[], modality?: string }
+  ): Promise<boolean> => {
+    try {
+      const response = await TeacherService.updateAvailabilityBlock(blockId, data)
+      
+      if (response.success) {
+        return true
+      } else {
+        setError(response.error || 'Error al actualizar la disponibilidad del bloque')
         return false
       }
     } catch (err) {
@@ -65,7 +100,9 @@ export function useAvailability(): UseAvailabilityReturn {
     isLoading,
     error,
     refetch: fetchAvailability,
-    updateAvailability
+    addAvailability,
+    deleteAvailability,
+    updateAvailabilityBlock
   }
 }
 
