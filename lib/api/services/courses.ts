@@ -89,6 +89,27 @@ export class CoursesService {
     }
   }
 
+  // Obtener actas (acts) asociadas a un curso
+  static async getActs(courseId: number): Promise<ApiResponse<any[]>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
+        ? API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)
+        : `/teaching/courses/${courseId}/acts`
+
+      const resp = await apiClient.get<any[]>(endpoint)
+      if (!resp || !resp.success) {
+        return { data: [], success: false, error: resp?.error || 'Error obteniendo actas' }
+      }
+
+      const dataAny: any = resp.data
+      const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
+      return { data: list, success: true, message: 'Actas obtenidas' }
+    } catch (error) {
+      return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener listado de alumnos de un curso (roster)
   static async getCourseRoster(courseId: number): Promise<ApiResponse<any[]>> {
     // Prefer using the shared apiClient and configured endpoint

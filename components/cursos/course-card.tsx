@@ -1,8 +1,9 @@
 "use client"
 
-import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building } from "lucide-react"
-import { useState, memo } from "react"
+import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building, Lock } from "lucide-react"
+import { useState, useEffect, memo } from "react"
 import { useRouter } from "next/navigation"
+import { CoursesService } from '@/lib/api/services/courses'
 
 interface Teacher {
   id: number
@@ -119,6 +120,7 @@ function getTeacherColor(teacherId: number): string {
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
+  const [hasActa, setHasActa] = useState(false)
   const router = useRouter()
 
   const handleInfoClick = () => {
@@ -136,6 +138,28 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
   const handleStudentsClick = () => {
     router.push(`/cursos/${course.id}?tab=alumnos`)
   }
+
+  // Check backend for acts for this course and show a lock if an acta exists / is closed
+  useEffect(() => {
+    let mounted = true
+    const fetchActs = async () => {
+      try {
+        if (!course?.id) return
+        const resp = await CoursesService.getActs(Number(course.id))
+        if (!mounted) return
+        if (resp && resp.success) {
+          const acts = Array.isArray(resp.data) ? resp.data : []
+          const closed = acts.some((a: any) => (a && ((a.estado && String(a.estado).toUpperCase() === 'CERRADO') || a.actaId)))
+          setHasActa(closed || acts.length > 0)
+        }
+      } catch (err) {
+        // ignore errors - don't block UI
+      }
+    }
+
+    fetchActs()
+    return () => { mounted = false }
+  }, [course?.id])
 
   return (
     <div
@@ -169,7 +193,14 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
 
       {/* Course Content */}
       <div className="p-3 lg:p-4">
-        <h3 className="font-semibold text-gray-900 text-base lg:text-lg mb-2 lg:mb-3 line-clamp-2">{course.title}</h3>
+        <h3 className="font-semibold text-gray-900 text-base lg:text-lg mb-2 lg:mb-3 line-clamp-2 flex items-center">
+          <span className="flex-1">{course.title}</span>
+          {(hasActa || (course.status || '').toUpperCase().includes('ACTA')) && (
+            <span title="Acta generada - curso cerrado" className="ml-2 flex items-center">
+              <Lock className="h-4 w-4 text-gray-500 flex-shrink-0" aria-hidden />
+            </span>
+          )}
+        </h3>
 
         {/* Course Details */}
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4 text-xs lg:text-sm text-gray-600">
