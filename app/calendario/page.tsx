@@ -254,25 +254,20 @@ export default function CalendarioPage() {
     examenes: true,
     eventos: true,
     comedor: true,
-    inscripto: false,
-    participacionObligatoria: false,
   })
-
   const handleFilterChange = (filterName: string, checked: boolean) => {
     setFilters((prev) => ({
       ...prev,
       [filterName]: checked,
     }))
   }
-
+  
   const resetFilters = () => {
     setFilters({
       clases: true,
       examenes: true,
       eventos: true,
       comedor: true,
-      inscripto: false,
-      participacionObligatoria: false,
     })
   }
 
@@ -891,29 +886,7 @@ export default function CalendarioPage() {
               </div>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="inscripto"
-                  checked={filters.inscripto}
-                  onCheckedChange={(checked) => handleFilterChange("inscripto", checked as boolean)}
-                />
-                <label htmlFor="inscripto" className="text-sm font-medium text-gray-700">
-                  Inscripto
-                </label>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="participacionObligatoria"
-                  checked={filters.participacionObligatoria}
-                  onCheckedChange={(checked) => handleFilterChange("participacionObligatoria", checked as boolean)}
-                />
-                <label htmlFor="participacionObligatoria" className="text-sm font-medium text-gray-700">
-                  Participación obligatoria
-                </label>
-              </div>
-            </div>
+            {/* Removed 'Inscripto' and 'Participación obligatoria' filters per request */}
 
             {/* Botones removidos: los filtros aplican automáticamente al seleccionar */}
           </div>
