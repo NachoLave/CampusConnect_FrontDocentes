@@ -38,9 +38,9 @@ export default function BilleteraPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
-  // Estados para gráfico del año
-  const [yearHistoryItems, setYearHistoryItems] = useState<WalletHistoryItem[]>([])
-  const [loadingYearHistory, setLoadingYearHistory] = useState(true)
+  // Estados para gráfico del mes actual
+  const [monthHistoryItems, setMonthHistoryItems] = useState<WalletHistoryItem[]>([])
+  const [loadingMonthHistory, setLoadingMonthHistory] = useState(true)
   
   // Estados para información de cuenta
   const [teacherLegajo, setTeacherLegajo] = useState<string | null>(null)
@@ -81,24 +81,23 @@ export default function BilleteraPage() {
     return () => { mounted = false }
   }, [])
 
-  // Cargar historial del año 2025 para el gráfico
+  // Cargar historial del mes actual para el gráfico
   useEffect(() => {
     let mounted = true
-    const loadYearHistory = async () => {
-      setLoadingYearHistory(true)
+    const loadMonthHistory = async () => {
+      setLoadingMonthHistory(true)
       try {
-        const year = 2025
-        const resp = await WalletService.getWalletHistory(year)
+        const resp = await WalletService.getWalletHistoryCurrentMonth()
         if (mounted && resp.success && resp.data) {
-          setYearHistoryItems(resp.data)
+          setMonthHistoryItems(resp.data)
         }
       } catch (err) {
-        console.error('Error loading year history:', err)
+        console.error('Error loading month history:', err)
       } finally {
-        if (mounted) setLoadingYearHistory(false)
+        if (mounted) setLoadingMonthHistory(false)
       }
     }
-    loadYearHistory()
+    loadMonthHistory()
     return () => { mounted = false }
   }, [])
 
@@ -153,10 +152,10 @@ export default function BilleteraPage() {
     })
   }, [paginatedItems, currentPage])
 
-  // Calcular datos del gráfico del año 2025
+  // Calcular datos del gráfico del mes actual
   const { pieData, totalExpenses, totalIncomes } = useMemo(() => {
-    const expenseTx = yearHistoryItems.filter(item => item.tipo === 'EGRESO')
-    const incomeTx = yearHistoryItems.filter(item => item.tipo === 'INGRESO')
+    const expenseTx = monthHistoryItems.filter(item => item.tipo === 'EGRESO')
+    const incomeTx = monthHistoryItems.filter(item => item.tipo === 'INGRESO')
     
     const expenseByCategory = expenseTx.reduce<Record<string, number>>((acc, item) => {
       const cat = categoryFor(item.nombre)
@@ -164,33 +163,62 @@ export default function BilleteraPage() {
       return acc
     }, {})
 
-    const pieData = Object.entries(expenseByCategory).map(([label, value]) => ({ label, value }))
+    // Ordenar por valor descendente
+    const sortedCategories = Object.entries(expenseByCategory)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+
+    // Si hay más de 4 categorías, agrupar las menores en "Otros"
+    let pieData: Array<{ label: string; value: number }>
+    if (sortedCategories.length > 4) {
+      // Tomar las 4 principales
+      const top4 = sortedCategories.slice(0, 4)
+      // Sumar el resto en "Otros"
+      const othersTotal = sortedCategories.slice(4).reduce((sum, cat) => sum + cat.value, 0)
+      if (othersTotal > 0) {
+        pieData = [...top4, { label: 'Otros', value: othersTotal }]
+      } else {
+        pieData = top4
+      }
+    } else {
+      // Si hay 4 o menos, usar todas (solo las que tienen valor)
+      pieData = sortedCategories
+    }
+
+    // Limitar a 5 categorías máximo (solo las que tienen valor)
+    pieData = pieData.slice(0, 5)
+
     const totalExpenses = pieData.reduce((s, d) => s + d.value, 0)
     const totalIncomes = incomeTx.reduce((s, item) => s + item.monto, 0)
 
     return { pieData, totalExpenses, totalIncomes }
-  }, [yearHistoryItems])
+  }, [monthHistoryItems])
 
-  const colors = ["#334155", "#64748B", "#94A3B8", "#CBD5E1"] // tonos slate
+  const colors = ["#334155", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"] // 5 tonos slate para 5 categorías
 
   const computeArcs = () => {
     let cumulative = 0
-    return pieData.map((d, idx) => {
-      const fraction = totalExpenses > 0 ? d.value / totalExpenses : 0
-      const startAngle = cumulative * 2 * Math.PI - Math.PI / 2
-      cumulative += fraction
-      const endAngle = cumulative * 2 * Math.PI - Math.PI / 2
-      const r = 38
-      const cx = 50
-      const cy = 50
-      const x1 = cx + r * Math.cos(startAngle)
-      const y1 = cy + r * Math.sin(startAngle)
-      const x2 = cx + r * Math.cos(endAngle)
-      const y2 = cy + r * Math.sin(endAngle)
-      const largeArc = fraction > 0.5 ? 1 : 0
-      const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
-      return { path, color: colors[idx % colors.length], label: d.label, value: d.value }
-    })
+    // Solo calcular arcos para categorías con valor > 0
+    return pieData
+      .filter(d => d.value > 0)
+      .map((d, idx) => {
+        const fraction = totalExpenses > 0 ? d.value / totalExpenses : 0
+        const startAngle = cumulative * 2 * Math.PI - Math.PI / 2
+        cumulative += fraction
+        const endAngle = cumulative * 2 * Math.PI - Math.PI / 2
+        const r = 38
+        const cx = 50
+        const cy = 50
+        const x1 = cx + r * Math.cos(startAngle)
+        const y1 = cy + r * Math.sin(startAngle)
+        const x2 = cx + r * Math.cos(endAngle)
+        const y2 = cy + r * Math.sin(endAngle)
+        const largeArc = fraction > 0.5 ? 1 : 0
+        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
+        // Encontrar el índice original en pieData para el color correcto
+        const originalIdx = pieData.findIndex(cat => cat.label === d.label)
+        return { path, color: colors[originalIdx % colors.length], label: d.label, value: d.value }
+      })
   }
 
   const formatCurrency = (amount: number) => {
@@ -402,10 +430,12 @@ export default function BilleteraPage() {
             </Link>
           </div>
 
-          {/* Gasto del año (gráfico dona) */}
+          {/* Gasto del mes (gráfico dona) */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Resumen del año 2025</h3>
-            {loadingYearHistory ? (
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">
+              Resumen del mes {new Date().toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
+            </h3>
+            {loadingMonthHistory ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
                   <Skeleton className="w-24 h-24 rounded-full" />
@@ -424,37 +454,55 @@ export default function BilleteraPage() {
                 </div>
               </div>
             ) : totalExpenses === 0 ? (
-              <div className="text-sm text-gray-500">Sin gastos registrados este año</div>
+              <div className="text-sm text-gray-500">Sin gastos registrados este mes</div>
             ) : (
-              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
-                  {computeArcs().map((arc, i) => (
-                    <path key={i} d={arc.path} fill={arc.color} />
-                  ))}
-                  {/* agujero para dona */}
-                  <circle cx="50" cy="50" r="24" fill="#fff" />
-                </svg>
-                <div className="flex-1 w-full">
-                  <div className="grid grid-cols-1 gap-2">
-                    {pieData.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs md:text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
-                          <span className="text-gray-700">{d.label}</span>
-                        </div>
-                        <span className="font-medium text-gray-900">${Math.round(d.value).toLocaleString("es-AR")}</span>
-                      </div>
-                    ))}
+              <div className="space-y-4">
+                {/* Gráfico y detalle lado a lado */}
+                <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6">
+                  {/* Gráfico de torta a la izquierda */}
+                  <div className="flex-shrink-0">
+                    <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
+                      {computeArcs().map((arc, i) => (
+                        <path key={i} d={arc.path} fill={arc.color} />
+                      ))}
+                      {/* agujero para dona */}
+                      <circle cx="50" cy="50" r="24" fill="#fff" />
+                    </svg>
                   </div>
-                  <div className="mt-3 md:mt-4 grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <div className="text-slate-600">Total depositado</div>
-                      <div className="text-slate-900 font-semibold">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
+                  
+                  {/* Detalle a la derecha */}
+                  <div className="flex-1 w-full">
+                    <div className="grid grid-cols-1 gap-2">
+                      {pieData
+                        .filter(d => d.value > 0) // Solo mostrar categorías con valor > 0
+                        .map((d, i) => {
+                          // Encontrar el índice original en pieData para el color correcto
+                          const originalIdx = pieData.findIndex(cat => cat.label === d.label)
+                          return (
+                            <div key={i} className="flex items-center justify-between text-xs md:text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[originalIdx % colors.length] }} />
+                                <span className="text-gray-700">{d.label}</span>
+                              </div>
+                              <span className="font-medium text-gray-900">
+                                ${Math.round(d.value).toLocaleString("es-AR")}
+                              </span>
+                            </div>
+                          )
+                        })}
                     </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <div className="text-slate-600">Total gastado</div>
-                      <div className="text-slate-900 font-semibold">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
-                    </div>
+                  </div>
+                </div>
+                
+                {/* Totales abajo */}
+                <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <div className="text-slate-600">Total depositado</div>
+                    <div className="text-slate-900 font-semibold">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <div className="text-slate-600">Total gastado</div>
+                    <div className="text-slate-900 font-semibold">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
                   </div>
                 </div>
               </div>
