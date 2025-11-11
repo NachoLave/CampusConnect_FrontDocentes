@@ -71,22 +71,23 @@ export function useBalance() {
       
       if (response.success) {
         setBalance(response.data)
+        setLoadingState({ isLoading: false, error: null })
       } else {
+        // Si hay error, mantener el balance en 0 y marcar como no loading
+        setBalance(0)
         setLoadingState({ 
           isLoading: false, 
           error: response.error || 'Error al cargar saldo' 
         })
-        return
       }
     } catch (error) {
+      // Si hay error, mantener el balance en 0 y marcar como no loading
+      setBalance(0)
       setLoadingState({ 
         isLoading: false, 
         error: 'Error inesperado al cargar saldo' 
       })
-      return
     }
-
-    setLoadingState({ isLoading: false, error: null })
   }, [])
 
   useEffect(() => {

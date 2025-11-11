@@ -635,7 +635,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
-                {balanceLoading || balanceError ? (
+                {balanceLoading ? (
                   <InlineBalanceSkeleton />
                 ) : (
                 <AnimatedBalance 

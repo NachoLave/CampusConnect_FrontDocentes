@@ -29,22 +29,37 @@ class PostmanProxy {
         'Connection': 'keep-alive'
       }
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: headers
-      })
+      // Agregar timeout de 10 segundos para evitar que se quede colgado
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 segundos
+      
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: headers,
+          signal: controller.signal
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Error del servidor: ${response.status} - ${errorText}`)
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Error del servidor: ${response.status} - ${errorText}`)
+        }
+
+        const data = await response.json()
+        
+        this.balance = data.balance
+        this.lastUpdate = Date.now()
+        
+        return this.balance
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Timeout: La solicitud tardó demasiado tiempo')
+        }
+        throw fetchError
       }
-
-      const data = await response.json()
-      
-      this.balance = data.balance
-      this.lastUpdate = Date.now()
-      
-      return this.balance
     } catch (error) {
       console.error('Error obteniendo balance del backend:', error)
       throw error
