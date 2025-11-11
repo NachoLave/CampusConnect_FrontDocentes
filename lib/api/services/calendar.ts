@@ -30,6 +30,9 @@ export class CalendarService {
   // Obtener eventos del calendario para una semana específica
   static async getWeeklyEvents(startDate: string, endDate: string): Promise<ApiResponse<CalendarEvent[]>> {
     try {
+      const baseUrl = API_CONFIG.BASE_URL
+      console.log('📅 CalendarService.getWeeklyEvents - Iniciando', { startDate, endDate, baseUrl })
+      
       const headers = {
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
         'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
@@ -37,34 +40,53 @@ export class CalendarService {
       }
 
       // Obtener cursos del docente para ambos cuatrimestres
-      const coursesUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=2025Q2&includePrevious=true`
+      const coursesUrl = `${baseUrl}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=2025Q2&includePrevious=true`
+      console.log('📅 Fetching courses from:', coursesUrl)
+      
       const coursesResponse = await fetch(coursesUrl, { method: 'GET', headers })
+      console.log('📅 Courses response status:', coursesResponse.status, coursesResponse.statusText)
 
       if (!coursesResponse.ok) {
-        throw new Error(`Error del servidor cursos: ${coursesResponse.status}`)
+        const errorText = await coursesResponse.text().catch(() => 'No error body')
+        console.error('❌ Error del servidor cursos:', {
+          status: coursesResponse.status,
+          statusText: coursesResponse.statusText,
+          body: errorText
+        })
+        throw new Error(`Error del servidor cursos: ${coursesResponse.status} - ${coursesResponse.statusText}`)
       }
 
       const courses = await coursesResponse.json()
+      console.log('📅 Courses recibidos:', Array.isArray(courses) ? courses.length : 'No es array', courses)
       
-  // Convertir cursos a eventos del calendario (incluye exámenes)
-  const classEvents = await this.convertCoursesToEvents(courses, startDate, endDate)
+      // Convertir cursos a eventos del calendario (incluye exámenes)
+      const classEvents = await this.convertCoursesToEvents(courses, startDate, endDate)
+      console.log('📅 Class events generados:', classEvents.length)
 
       // Obtener reservas de comedor
-      const canteenUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
+      const canteenUrl = `${baseUrl}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
       let canteenEvents: CalendarEvent[] = []
       
       try {
+        console.log('📅 Fetching canteen reservations from:', canteenUrl)
         const canteenResponse = await fetch(canteenUrl, { method: 'GET', headers })
+        console.log('📅 Canteen response status:', canteenResponse.status)
+        
         if (canteenResponse.ok) {
           const canteenData = await canteenResponse.json()
+          console.log('📅 Canteen data recibida:', Array.isArray(canteenData) ? canteenData.length : 'No es array')
           canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
+          console.log('📅 Canteen events generados:', canteenEvents.length)
+        } else {
+          console.warn('⚠️ Canteen response no OK:', canteenResponse.status, canteenResponse.statusText)
         }
       } catch (err) {
-        console.warn('Error obteniendo reservas de comedor:', err)
+        console.warn('⚠️ Error obteniendo reservas de comedor:', err)
       }
 
       // Combinar eventos de clases y comedor
       const allEvents = [...classEvents, ...canteenEvents]
+      console.log('✅ Total eventos del calendario:', allEvents.length, allEvents)
 
       return {
         data: allEvents,
@@ -72,12 +94,17 @@ export class CalendarService {
         message: 'Eventos del calendario obtenidos correctamente'
       }
     } catch (error) {
-      console.error('Error obteniendo eventos del calendario:', error)
+      console.error('❌ Error obteniendo eventos del calendario:', error)
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        baseUrl: API_CONFIG.BASE_URL
+      })
 
       return {
         data: [],
         success: false,
-        message: 'No se pudieron obtener eventos del backend'
+        message: error instanceof Error ? error.message : 'No se pudieron obtener eventos del backend'
       }
     }
   }
