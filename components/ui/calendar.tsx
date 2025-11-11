@@ -105,9 +105,8 @@ function Calendar({
         ),
         range_middle: cn('rounded-none'),
         range_end: cn('rounded-r-md bg-accent'),
-        today: cn(
-          'bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none'
-        ),
+        // No estilos especiales para el día actual: que se vea como cualquier otro
+        today: cn(''),
         outside: cn(
           'text-muted-foreground aria-selected:text-muted-foreground'
         ),
@@ -215,7 +214,9 @@ function CalendarDayButton({
       data-range-middle={modifiers.range_middle}
       className={cn(
         // Selected single -> show a subtle rounded rectangle outline (like Home)
-        'data-[selected-single=true]:bg-transparent data-[selected-single=true]:border data-[selected-single=true]:border-muted/30 data-[selected-single=true]:rounded-md data-[selected-single=true]:text-primary-foreground',
+        'data-[selected-single=true]:bg-transparent data-[selected-single=true]:rounded-lg data-[selected-single=true]:text-gray-900 dark:data-[selected-single=true]:text-white',
+        // Borde persistente para seleccionado
+        'data-[selected-single=true]:border data-[selected-single=true]:border-gray-300 data-[selected-single=true]:hover:bg-transparent',
         // Range visuals (middle and edges)
         'data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground',
         'data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground',
@@ -233,19 +234,22 @@ function CalendarDayButton({
       )}
       {...props}
     >
-      <span className={cn(
-        "relative text-base font-bold",
-        // Marcar día actual con fondo azul MUY OBVIO
-        day.date.toDateString() === new Date().toDateString() && "bg-red-500 text-white font-bold text-lg rounded-full p-2"
-      )}>
-        {(props as any).children}
+      <span
+        className={cn(
+          'relative text-base font-bold',
+          modifiers.outside
+            ? 'text-gray-400 opacity-60 dark:text-gray-500'
+            : 'text-gray-900 dark:text-gray-100'
+        )}
+      >
+        {day.date.getDate()}
       </span>
       <div className="flex items-center justify-center gap-0.5 mt-1 min-h-[30px]">
         {/* Render event dots only when there is real data (provided via EventsContext/eventsByDay) */}
-        {meta.clase ? <span className="w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-700" title="Clase" /> : null}
-        {meta.examen ? <span className="w-3 h-3 rounded-full bg-orange-500 border-2 border-orange-700" title="Examen" /> : null}
-        {meta.evento ? <span className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" title="Evento" /> : null}
-        {meta.comedor ? <span className="w-3 h-3 rounded-full bg-yellow-500 border-2 border-yellow-700" title="Comedor" /> : null}
+        {meta.clase ? <span className="w-1.5 h-1.5 rounded-full bg-blue-500" title="Clase" /> : null}
+        {meta.examen ? <span className="w-1.5 h-1.5 rounded-full bg-orange-500" title="Examen" /> : null}
+        {meta.evento ? <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Evento" /> : null}
+        {meta.comedor ? <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" title="Comedor" /> : null}
       </div>
     </Button>
   )

@@ -457,7 +457,13 @@ export default function CalendarioPage() {
           return `${pad(startDt.getHours())}:${pad(startDt.getMinutes())} - ${pad(endDt.getHours())}:${pad(endDt.getMinutes())}`
         })(),
         location: e.classroom || '',
-        color: e.type === 'class' ? 'border-l-blue-500' : e.type === 'exam' ? 'border-l-orange-500' : 'border-l-green-500',
+        color: (() => {
+          const t = mapBackendType(e.type, e.id, e.title)
+          if (t === 'clase') return 'border-l-blue-500'
+          if (t === 'examen') return 'border-l-orange-500'
+          if (t === 'comedor') return 'border-l-yellow-500'
+          return 'border-l-green-500' // evento
+        })(),
         dt: new Date((e.date || '') + 'T' + (e.time || '00:00') + ':00')
       }))
       .filter((ev) => ev.date === todayLabel && isEventVisible(ev))
@@ -631,42 +637,8 @@ export default function CalendarioPage() {
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
 
-                    // Also add a secondary key using the event's local date components to avoid timezone mismatches
-                    try {
-                      const d = new Date(e.date)
-                      if (!isNaN(d.getTime())) {
-                        const dd = String(d.getDate()).padStart(2, '0')
-                        const mm = String(d.getMonth() + 1).padStart(2, '0')
-                        const yyyy = d.getFullYear()
-                        const altKey = `${dd}/${mm}/${yyyy}`
-                        if (altKey !== key) {
-                          map[altKey] = map[altKey] || {}
-                          map[altKey][mappedType] = true
-                        }
-                      }
-                    } catch (err) {
-                      // ignore
-                    }
-                  })
 
-                  // If backend returned no events, keep previous mock/course-derived behavior as fallback
-                  if (backendEvents.length === 0) {
-                    const add = (ev: any) => {
-                      if (!isEventVisible(ev)) return
-                      const d = ev.date
-                      map[d] = map[d] || {}
-                      if (ev.type) map[d][ev.type] = true
-                    }
-                    mockEvents.forEach(add)
-                    const october2025 = new Date(2025, 9, 1)
-                    const november2025 = new Date(2025, 10, 1)
-                    for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
-                      getCourseEventsForDate(new Date(d)).forEach(add)
-                    }
-                    for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
-                      getCourseEventsForDate(new Date(d)).forEach(add)
-                    }
-                  }
+                  })
 
                   return map
                 }, [currentMonth, filters, backendEvents])}
@@ -729,47 +701,8 @@ export default function CalendarioPage() {
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
 
-                    // Also add a secondary key using the event's local date components to avoid timezone mismatches
-                    try {
-                      const d = new Date(e.date)
-                      if (!isNaN(d.getTime())) {
-                        const dd = String(d.getDate()).padStart(2, '0')
-                        const mm = String(d.getMonth() + 1).padStart(2, '0')
-                        const yyyy = d.getFullYear()
-                        const altKey = `${dd}/${mm}/${yyyy}`
-                        if (altKey !== key) {
-                          map[altKey] = map[altKey] || {}
-                          map[altKey][mappedType] = true
-                        }
-                      }
-                    } catch (err) {
-                      // ignore
-                    }
+
                   })
-
-                  if (backendEvents.length === 0) {
-                    const add = (ev: any) => {
-                      if (!isEventVisible(ev)) return
-                      const d = ev.date
-                      map[d] = map[d] || {}
-                      if (ev.type) map[d][ev.type] = true
-                    }
-                    mockEvents.forEach(add)
-                    const october2025 = new Date(2025, 9, 1)
-                    const november2025 = new Date(2025, 10, 1)
-                    for (let d = new Date(october2025); d.getMonth() === 9; d.setDate(d.getDate() + 1)) {
-                      getCourseEventsForDate(new Date(d)).forEach(add)
-                    }
-                    for (let d = new Date(november2025); d.getMonth() === 10; d.setDate(d.getDate() + 1)) {
-                      getCourseEventsForDate(new Date(d)).forEach(add)
-                    }
-                  }
-
-                  try {
-                    console.log('🔎 eventsByDay (right calendar) keys generated:', Object.keys(map).slice(0, 50))
-                  } catch (err) {
-                    // ignore
-                  }
 
                   return map
                 }, [currentMonth, filters, backendEvents])}
