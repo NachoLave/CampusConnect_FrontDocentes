@@ -35,6 +35,7 @@ export const API_CONFIG = {
     
     // Cuenta y servicios
     ACCOUNT_BALANCE: '/teachers/me/account/balance',
+    WALLET_HISTORY: '/teachers/me/wallet/history',
     CANTEEN_RESERVATIONS: '/teachers/me/canteen/reservations',
     CANTEEN_EXPORT: '/teachers/me/canteen/reservations:export',
     STORE_ORDERS: '/teachers/me/store/orders',
@@ -42,6 +43,7 @@ export const API_CONFIG = {
     
     // Actas
     COURSE_ACTS: (courseId: number) => `/teaching/courses/${courseId}/acts`,
+    COURSE_ACTS_PREVIEW: (courseId: number) => `/teaching/courses/${courseId}/acts:preview`,
     ACTS_PREVIEW: '/teaching/acts:preview',
     ACTS_CONFIRM: '/teaching/acts:confirm',
     

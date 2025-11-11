@@ -79,6 +79,16 @@ class ApiClient {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
+      // Manejar respuestas 204 No Content (sin body)
+      if (response.status === 204) {
+        return {
+          data: null as T,
+          success: true,
+          message: 'Operación realizada correctamente'
+        }
+      }
+
+      // Para otras respuestas exitosas, intentar parsear JSON
       const data = await response.json()
       return {
         data,
@@ -123,6 +133,16 @@ class ApiClient {
         throw new Error(errorDetail)
       }
 
+      // Manejar respuestas 204 No Content (sin body)
+      if (response.status === 204) {
+        return {
+          data: null as T,
+          success: true,
+          message: 'Datos actualizados correctamente'
+        }
+      }
+
+      // Para otras respuestas exitosas, intentar parsear JSON
       const data = await response.json()
       return {
         data,
