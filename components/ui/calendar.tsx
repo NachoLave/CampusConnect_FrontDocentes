@@ -30,20 +30,15 @@ function Calendar({
   // Removed getDefaultClassNames as it's not available in this version
 
   // Debug log - stringify snapshot so DevTools doesn't show a live object reference
-  React.useEffect(() => {
+  if (process.env.NODE_ENV === 'development') {
     try {
-      const keys = eventsByDay ? Object.keys(eventsByDay) : []
       const snapshot = eventsByDay ? JSON.stringify(eventsByDay, Object.keys(eventsByDay || {}).slice(0, 200)) : '{}'
-      console.log('📅 Calendar component - eventsByDay recibido:', {
-        hasEvents: !!eventsByDay,
-        keysCount: keys.length,
-        keys: keys.slice(0, 10),
-        snapshot: snapshot.substring(0, 500)
-      })
+      console.log('📅 Calendar eventsByDay snapshot:', snapshot)
     } catch (err) {
       console.log('📅 Calendar recibiendo eventsByDay (non-serializable):', eventsByDay)
     }
-  }, [eventsByDay])
+  }
+  // No DOM-injected fake dots: dots are rendered from eventsByDay passed into the component
 
 
   return (
@@ -176,7 +171,7 @@ function CalendarDayButton({
   modifiers,
   ...props
 }: React.ComponentProps<typeof DayButton>) {
-  // LOG MUY OBVIO PARA VER SI SE EJECUTA - include the computed key used to lookup eventsByDay
+  // Compute the day key used to lookup eventsByDay
   const dayKey = day.date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   
   // Removed getDefaultClassNames as it's not available in this version
@@ -189,17 +184,19 @@ function CalendarDayButton({
   const key = dayKey
   const meta = events?.[key] || {}
 
-  // Debug más detallado solo para días con eventos o días específicos (reducir spam)
-  React.useEffect(() => {
-    if (meta.clase || meta.examen || meta.evento || meta.comedor) {
-      const keys = events ? Object.keys(events).slice(0, 20) : []
-      console.log(`🎯 Día ${key} tiene eventos:`, {
-        meta,
-        totalDaysWithEvents: keys.length,
-        sampleKeys: keys.slice(0, 5)
-      })
+  // Debug logs only in development
+  if (process.env.NODE_ENV === 'development') {
+    try {
+      const keys = events ? Object.keys(events).slice(0, 50) : []
+      console.log(`🔍 Día ${key}: eventsByDay keys (sample):`, keys, 'resolved meta:', JSON.stringify(meta))
+    } catch (err) {
+      console.log(`🔍 Día ${key}:`, { events, meta })
     }
-  }, [key, meta, events])
+
+    if (meta.clase || meta.examen || meta.evento || meta.comedor) {
+      console.log(`🎯 Día ${key} tiene eventos:`, meta)
+    }
+  }
 
   return (
     <Button

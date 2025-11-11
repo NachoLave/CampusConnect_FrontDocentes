@@ -418,33 +418,15 @@ export default function CalendarioPage() {
         const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
         const fromIso = from.toISOString().split('T')[0]
         const toIso = to.toISOString().split('T')[0]
-        
-        console.log('📅 CalendarioPage - Fetching events', { fromIso, toIso, currentMonth: currentMonth.toISOString() })
-        
         const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
-        
-        console.log('📅 CalendarioPage - Response recibida', {
-          success: res.success,
-          dataLength: Array.isArray(res.data) ? res.data.length : 'No es array',
-          message: res.message,
-          sampleData: Array.isArray(res.data) && res.data.length > 0 ? res.data[0] : null
-        })
-        
         if (res.success && Array.isArray(res.data)) {
-          console.log('✅ CalendarioPage - Estableciendo eventos:', res.data.length, res.data)
           setBackendEvents(res.data)
         } else {
-          console.warn('⚠️ CalendarioPage - Respuesta no exitosa o no es array', res)
           setBackendEvents([])
           setEventsError(res.message || 'No events')
         }
       } catch (err: any) {
-        console.error('❌ CalendarioPage - Error fetching calendar events', err)
-        console.error('❌ Error details:', {
-          message: err?.message,
-          stack: err?.stack,
-          name: err?.name
-        })
+        console.error('Error fetching calendar events', err)
         setBackendEvents([])
         setEventsError(String(err?.message || err))
       } finally {
@@ -648,17 +630,16 @@ export default function CalendarioPage() {
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
-                  console.log('📅 Building eventsByDay map (first calendar) - backendEvents:', backendEvents.length)
-                  
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
                     const mappedType = mapBackendType(e.type, e.id, e.title)
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
+
+
                   })
 
-                  console.log('📅 eventsByDay map construido (first calendar):', Object.keys(map).length, 'días con eventos', map)
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />
@@ -713,17 +694,16 @@ export default function CalendarioPage() {
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
-                  console.log('📅 Building eventsByDay map (second calendar) - backendEvents:', backendEvents.length)
-                  
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
                     const mappedType = mapBackendType(e.type, e.id, e.title)
                     if (!isEventVisible({ type: mappedType })) return
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
+
+
                   })
 
-                  console.log('📅 eventsByDay map construido (second calendar):', Object.keys(map).length, 'días con eventos', map)
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />
