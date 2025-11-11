@@ -6,6 +6,14 @@ import walletData from '@/lib/data/wallet.json'
 import { GraduationCap, DollarSign, UtensilsCrossed } from 'lucide-react'
 import { postmanProxy } from '@/lib/utils/postmanProxy'
 
+// Interfaz para las transacciones del historial del backend
+export interface WalletHistoryItem {
+  nombre: string
+  tipo: 'EGRESO' | 'INGRESO'
+  fecha: string
+  monto: number
+}
+
 // Mapeo de iconos para los datos mock
 const iconMap = {
   'GraduationCap': GraduationCap,
@@ -202,6 +210,62 @@ export class WalletService {
       newBalance: number
       transactionId: string
     }>(`${API_CONFIG.ENDPOINTS.WALLET}/payment`, { amount, description, category })
+  }
+
+  // Obtener historial de wallet del año completo
+  static async getWalletHistory(year: number = new Date().getFullYear()): Promise<ApiResponse<WalletHistoryItem[]>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      
+      const fromDate = `${year}-01-01`
+      const toDate = `${year}-12-31`
+      const endpoint = `${API_CONFIG.ENDPOINTS.WALLET_HISTORY}?from=${fromDate}&to=${toDate}`
+      
+      const resp = await apiClient.get<WalletHistoryItem[]>(endpoint)
+      if (!resp || !resp.success) {
+        return { data: [] as WalletHistoryItem[], success: false, error: resp?.error || 'Error obteniendo historial' }
+      }
+      
+      // Ordenar del más reciente al más antiguo (por fecha descendente)
+      const sorted = Array.isArray(resp.data) 
+        ? [...resp.data].sort((a, b) => {
+            const dateA = new Date(a.fecha).getTime()
+            const dateB = new Date(b.fecha).getTime()
+            return dateB - dateA // Más reciente primero
+          })
+        : []
+      
+      return { data: sorted, success: true, message: 'Historial obtenido correctamente' }
+    } catch (error) {
+      return { data: [] as WalletHistoryItem[], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
+  // Obtener historial de wallet del mes actual (para gráfico)
+  static async getWalletHistoryCurrentMonth(): Promise<ApiResponse<WalletHistoryItem[]>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const fromDate = `${year}-${month}-01`
+      
+      // Obtener último día del mes
+      const lastDay = new Date(year, now.getMonth() + 1, 0).getDate()
+      const toDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
+      
+      const endpoint = `${API_CONFIG.ENDPOINTS.WALLET_HISTORY}?from=${fromDate}&to=${toDate}`
+      
+      const resp = await apiClient.get<WalletHistoryItem[]>(endpoint)
+      if (!resp || !resp.success) {
+        return { data: [] as WalletHistoryItem[], success: false, error: resp?.error || 'Error obteniendo historial del mes' }
+      }
+      
+      return { data: Array.isArray(resp.data) ? resp.data : [], success: true, message: 'Historial del mes obtenido correctamente' }
+    } catch (error) {
+      return { data: [] as WalletHistoryItem[], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
   }
 
   // Acreditar saldo usando tarjeta de crédito

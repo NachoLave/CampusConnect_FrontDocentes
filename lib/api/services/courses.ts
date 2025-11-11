@@ -132,6 +132,34 @@ export class CoursesService {
     }
   }
 
+  // Obtener preview del acta de un curso
+  static async getCourseActsPreview(courseId: number): Promise<ApiResponse<any>> {
+    try {
+      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
+        ? API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW(courseId)
+        : `/teaching/courses/${courseId}/acts:preview`
+      
+      console.log('[CoursesService] getCourseActsPreview - courseId:', courseId)
+      console.log('[CoursesService] getCourseActsPreview - endpoint:', endpoint)
+      console.log('[CoursesService] getCourseActsPreview - baseURL:', API_CONFIG.BASE_URL)
+      
+      const resp = await apiClient.get<any>(endpoint)
+      console.log('[CoursesService] getCourseActsPreview - response:', resp)
+      
+      if (!resp || !resp.success) {
+        console.warn('[CoursesService] getCourseActsPreview - failed:', resp?.error)
+        return { data: null as any, success: false, error: resp?.error || 'Error obteniendo preview del acta' }
+      }
+      
+      console.log('[CoursesService] getCourseActsPreview - success, data:', resp.data)
+      return { data: resp.data, success: true, message: 'Preview del acta obtenido correctamente' }
+    } catch (error) {
+      console.error('[CoursesService] getCourseActsPreview - exception:', error)
+      return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+    }
+  }
+
   // Obtener curso por ID
   static async getCourseById(id: number): Promise<ApiResponse<Course>> {
     if (USE_MOCK_DATA) {
@@ -272,19 +300,77 @@ export class CoursesService {
   // Obtener calificaciones de un curso (todas las evaluaciones y notas)
   static async getCourseGrades(courseId: number): Promise<ApiResponse<any[]>> {
     try {
-      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_GRADES === 'function'
-        ? API_CONFIG.ENDPOINTS.COURSE_GRADES(courseId)
-        : `/teaching/courses/${courseId}/grades`
+      // Paso 1: Obtener la lista de evaluaciones del curso
+      // GET /teaching/courses/{courseId}/assessments
+      const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
+        ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
+        : `/teaching/courses/${courseId}/assessments`
 
-      const resp = await apiClient.get<any[]>(endpoint)
-      if (!resp || !resp.success) {
-        return { data: [], success: false, error: resp?.error || 'Error obteniendo calificaciones' }
+      const assessmentsResp = await apiClient.get<any[]>(assessmentsEndpoint)
+      if (!assessmentsResp || !assessmentsResp.success) {
+        return { data: [], success: false, error: assessmentsResp?.error || 'Error obteniendo evaluaciones' }
       }
 
-      // The backend may return the array directly or wrapped in { value: [...] }
-      const dataAny: any = resp.data
-      const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
-      return { data: list, success: true, message: 'Calificaciones obtenidas' }
+      // Obtener el array de evaluaciones
+      const assessmentsData: any = assessmentsResp.data
+      const assessments = Array.isArray(assessmentsData?.value) ? assessmentsData.value : Array.isArray(assessmentsData) ? assessmentsData : []
+
+      if (assessments.length === 0) {
+        return { data: [], success: true, message: 'No hay evaluaciones para este curso' }
+      }
+
+      // Paso 2: Para cada evaluación, obtener sus notas
+      // GET /teaching/assessments/{assessmentId}/grades
+      const result: any[] = []
+      
+      for (const assessment of assessments) {
+        const assessmentId = assessment.assessmentId || assessment.id
+        if (!assessmentId) continue
+
+        const gradesEndpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
+          ? API_CONFIG.ENDPOINTS.GRADES(assessmentId)
+          : `/teaching/assessments/${assessmentId}/grades`
+
+        try {
+          const gradesResp = await apiClient.get<any[]>(gradesEndpoint)
+          
+          if (gradesResp && gradesResp.success) {
+            const gradesData: any = gradesResp.data
+            const grades = Array.isArray(gradesData?.value) ? gradesData.value : Array.isArray(gradesData) ? gradesData : []
+
+            // Combinar la información de la evaluación con sus notas
+            // El resultado debe tener el formato que espera el componente
+            result.push({
+              assessmentId: assessment.assessmentId || assessment.id,
+              tipo: assessment.type || assessment.tipo, // PARCIAL_1, PARCIAL_2, RECUPERATORIO, FINAL
+              fecha: assessment.date || assessment.fecha,
+              courseId: assessment.courseId || courseId,
+              grades: grades.map((g: any) => ({
+                studentId: g.studentId,
+                studentName: g.studentName,
+                legajo: g.legajo,
+                grade: g.grade,
+                published: g.published !== undefined ? g.published : false,
+                assessmentId: g.assessmentId || assessmentId,
+                assessmentName: g.assessmentName || assessment.type || assessment.tipo,
+                courseId: g.courseId || assessment.courseId || courseId
+              }))
+            })
+          }
+        } catch (gradeError) {
+          console.warn(`Error obteniendo notas para evaluación ${assessmentId}:`, gradeError)
+          // Continuar con las demás evaluaciones incluso si una falla
+          result.push({
+            assessmentId: assessment.assessmentId || assessment.id,
+            tipo: assessment.type || assessment.tipo,
+            fecha: assessment.date || assessment.fecha,
+            courseId: assessment.courseId || courseId,
+            grades: []
+          })
+        }
+      }
+
+      return { data: result, success: true, message: 'Calificaciones obtenidas correctamente' }
     } catch (error) {
       return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
     }
@@ -293,66 +379,98 @@ export class CoursesService {
   // Guardar/actualizar calificaciones de un curso
   static async saveCourseGrades(courseId: number, assessments: any[]): Promise<ApiResponse<any>> {
     try {
+      // Paso 1: Obtener las evaluaciones existentes del curso
+      const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
+        ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
+        : `/teaching/courses/${courseId}/assessments`
+      
+      const existingAssessmentsResp = await apiClient.get<any[]>(assessmentsEndpoint)
+      const existingAssessmentsData: any = existingAssessmentsResp?.data || []
+      const existingAssessments = Array.isArray(existingAssessmentsData?.value) 
+        ? existingAssessmentsData.value 
+        : Array.isArray(existingAssessmentsData) 
+        ? existingAssessmentsData 
+        : []
+      
       const results: any[] = []
+      const errors: string[] = []
 
       for (const ass of assessments) {
-        // Normalize grades array for sending
+        // Normalize grades array for sending - solo studentId y grade
         const gradesPayload = Array.isArray(ass.grades)
-          ? ass.grades.map((g: any) => ({ studentId: Number(g.studentId), grade: String(g.grade) }))
+          ? ass.grades.map((g: any) => ({ 
+              studentId: Number(g.studentId), 
+              grade: g.grade === null ? null : String(g.grade)
+            }))
           : []
 
-        // If assessmentId provided -> update grades via PUT to /teaching/assessments/{id}/grades
-        const aid = Number(ass.assessmentId || ass.assessmentId === 0 ? ass.assessmentId : NaN)
+        // Intentar obtener el assessmentId: del parámetro o buscarlo en las evaluaciones existentes
+        let aid = Number(ass.assessmentId || ass.assessmentId === 0 ? ass.assessmentId : NaN)
+        
+        // Si no tiene assessmentId, buscar en las evaluaciones existentes por tipo
+        if (!Number.isFinite(aid)) {
+          const matchingAssessment = existingAssessments.find((ea: any) => {
+            const eaType = String(ea.type || ea.tipo || '').toUpperCase()
+            const assType = String(ass.tipo || '').toUpperCase()
+            return eaType === assType
+          })
+          
+          if (matchingAssessment) {
+            aid = Number(matchingAssessment.assessmentId || matchingAssessment.id)
+          }
+        }
+        
+        // If assessmentId provided or found -> update grades via PUT to /teaching/assessments/{id}/grades
         if (Number.isFinite(aid)) {
           const endpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
             ? API_CONFIG.ENDPOINTS.GRADES(aid)
             : `/teaching/assessments/${aid}/grades`
 
           const body = { courseId, grades: gradesPayload }
-          const resp = await apiClient.put<any>(endpoint, body)
-          if (!resp || !resp.success) {
-            return { data: null as any, success: false, error: resp?.error || `Error actualizando calificaciones para assessment ${aid}` }
-          }
-          results.push(resp.data)
-        } else {
-          // No assessmentId -> create a new assessment for this course
-          const endpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
-            ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
-            : `/teaching/courses/${courseId}/assessments`
-
-          // Send tipo/fecha and grades
-          const body = { tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
-
+          
           try {
-            const resp = await apiClient.post<any>(endpoint, body)
-            if (!resp || !resp.success) {
-              // Try alternative create endpoint if backend expects assessments to be created at /teaching/assessments
-              const altBody = { courseId, tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
-              const altResp = await apiClient.post<any>('/teaching/assessments', altBody)
-              if (!altResp || !altResp.success) {
-                return { data: null as any, success: false, error: altResp?.error || resp?.error || 'Error creando nueva evaluación' }
-              }
-              results.push(altResp.data)
-            } else {
+            const resp = await apiClient.put<any>(endpoint, body)
+            
+            if (resp && resp.success) {
               results.push(resp.data)
+            } else {
+              const errorMsg = `Error en ${ass.tipo}: ${resp?.error || 'Error desconocido'}`
+              errors.push(errorMsg)
             }
           } catch (err) {
-            // If the first attempt threw (500), try the alternative path used by some backends
-            try {
-              const altBody = { courseId, tipo: ass.tipo || 'Parcial', fecha: ass.fecha || new Date().toISOString(), grades: gradesPayload }
-              const altResp = await apiClient.post<any>('/teaching/assessments', altBody)
-              if (!altResp || !altResp.success) {
-                return { data: null as any, success: false, error: altResp?.error || 'Error creando nueva evaluación (fallback)' }
-              }
-              results.push(altResp.data)
-            } catch (err2) {
-              return { data: null as any, success: false, error: err2 instanceof Error ? err2.message : 'Error desconocido creando evaluación' }
-            }
+            const errorMsg = `Error en ${ass.tipo}: ${err instanceof Error ? err.message : 'Error desconocido'}`
+            errors.push(errorMsg)
           }
+        } else {
+          // No assessmentId -> evaluación no existe, registrar error
+          const errorMsg = `No se encontró evaluación para ${ass.tipo}. Debe crear la evaluación primero.`
+          errors.push(errorMsg)
         }
       }
 
-      return { data: results, success: true, message: 'Operación de calificaciones completada' }
+      // Retornar resultado final
+      if (errors.length > 0 && results.length === 0) {
+        // Todos fallaron
+        return { 
+          data: null as any, 
+          success: false, 
+          error: `Todas las evaluaciones fallaron:\n${errors.join('\n')}` 
+        }
+      } else if (errors.length > 0 && results.length > 0) {
+        // Algunos exitosos, algunos fallaron
+        return { 
+          data: results, 
+          success: true, 
+          message: `${results.length} evaluación(es) guardada(s). ${errors.length} error(es):\n${errors.join('\n')}` 
+        }
+      } else {
+        // Todos exitosos
+        return { 
+          data: results, 
+          success: true, 
+          message: `${results.length} evaluación(es) guardada(s) correctamente` 
+        }
+      }
     } catch (error) {
       return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
     }

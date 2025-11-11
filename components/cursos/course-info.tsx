@@ -527,6 +527,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
   const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
   const [gradesAlertMessage, setGradesAlertMessage] = useState("")
+  const [gradesAlertType, setGradesAlertType] = useState<'success' | 'error'>('error')
   const [savingGrades, setSavingGrades] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
@@ -587,6 +588,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [attendanceData])
   const [isEditingGrades, setIsEditingGrades] = useState(false)
   const [gradesData, setGradesData] = useState<Record<string, Record<string, string>>>({})
+  const [loadingGrades, setLoadingGrades] = useState(false)
+  // Estado para guardar los assessmentId de cada tipo de evaluación
+  const [assessmentIds, setAssessmentIds] = useState<Record<string, number>>({})
+  // Estado para almacenar los datos del preview del acta
+  const [actsPreviewData, setActsPreviewData] = useState<any>(null)
 
   // Persistencia local de calificaciones por curso
   const gradesStorageKey = `grades_${courseId}`
@@ -621,11 +627,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     } catch {}
   }, [gradesData])
 
-  // Load grades from backend when Calificaciones tab is opened
+  // Load grades from backend (cargar siempre para estadísticas, no solo cuando se abre la pestaña)
   useEffect(() => {
     let mounted = true
     const loadGrades = async () => {
-      if (activeTab !== 'Calificaciones') return
+      // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Calificaciones'
+      setLoadingGrades(true)
       try {
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
         const resp = await CoursesService.getCourseGrades(Number(courseId))
@@ -633,21 +640,37 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         if (resp && resp.success && Array.isArray(resp.data)) {
           const assessments: any[] = resp.data
           const updated: Record<string, Record<string, string>> = {}
+          const assessmentIdsMap: Record<string, number> = {}
 
           // Map assessment types to internal grade keys
+          // Mapeo directo entre tipos del backend y claves internas
           const mapTipoToKey = (tipo: string) => {
-            const t = String(tipo || '').toUpperCase()
+            const t = String(tipo || '').toUpperCase().trim()
+            // Mapeo exacto
+            if (t === 'PARCIAL_1') return '1P'
+            if (t === 'PARCIAL_2') return '2P'
+            if (t === 'RECUPERATORIO') return 'REC'
+            if (t === 'FINAL') return 'FINAL'
+            // Fallback para variantes
             if (t.includes('PARCIAL') && t.includes('1')) return '1P'
             if (t.includes('PARCIAL') && t.includes('2')) return '2P'
-            if (t.includes('PARCIAL') && !t.includes('1') && !t.includes('2')) return '1P'
-            if (t.includes('RECUP') || t.includes('RECUPERATORIO') || t.includes('REC')) return 'REC'
+            if (t.includes('RECUP') || t.includes('REC')) return 'REC'
             if (t.includes('FINAL')) return 'FINAL'
             return ''
           }
 
           for (const ass of assessments) {
             const key = mapTipoToKey(ass.tipo)
-            if (!key) continue
+            if (!key) {
+              console.warn(`⚠️ Tipo de evaluación no reconocido: ${ass.tipo}`)
+              continue
+            }
+            
+            // Guardar el assessmentId para este tipo de evaluación
+            if (ass.assessmentId) {
+              assessmentIdsMap[key] = ass.assessmentId
+            }
+            
             const gradesArr = Array.isArray(ass.grades) ? ass.grades : []
             for (const g of gradesArr) {
           const sid = String(g.studentId ?? g.studentId)
@@ -670,12 +693,17 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           })
 
           setGradesData(updated)
+          setAssessmentIds(assessmentIdsMap)
         } else {
           // no data or error - keep existing gradesData
           console.warn('No grades data returned', resp?.error)
         }
       } catch (err) {
         console.warn('Error loading grades:', err)
+      } finally {
+        if (mounted) {
+          setLoadingGrades(false)
+        }
       }
     }
 
@@ -699,6 +727,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     status: '',
     teachers: [] as any[],
     studentsData: [] as any[],
+    promocionable: true, // Por defecto true
     stats: {
       timeProgress: 0,
       averageAttendance: 0,
@@ -821,6 +850,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               fechaFin,
               horarioInicio,
               horarioFin,
+              promocionable: Boolean(backendCourse.promocionable ?? true), // Por defecto true si no viene
               stats: (mapped as any).stats || placeholderCourse.stats,
             }
 
@@ -839,6 +869,37 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
     load()
 
+    return () => { mounted = false }
+  }, [courseId])
+
+  // Cargar preview del acta para obtener estadísticas (independiente de la carga del curso)
+  useEffect(() => {
+    let mounted = true
+    const loadPreview = async () => {
+      try {
+        console.log('[CourseInfo] Loading acts preview for courseId:', courseId)
+        const previewResp = await CoursesService.getCourseActsPreview(Number(courseId))
+        console.log('[CourseInfo] Acts preview response:', previewResp)
+        
+        if (mounted && previewResp && previewResp.success && previewResp.data) {
+          console.log('[CourseInfo] Acts preview loaded successfully:', previewResp.data)
+          console.log('[CourseInfo] Items count:', previewResp.data.items?.length || 0)
+          setActsPreviewData(previewResp.data)
+        } else if (mounted) {
+          console.warn('[CourseInfo] Acts preview not available:', previewResp?.error || 'No data')
+          console.warn('[CourseInfo] Response details:', { success: previewResp?.success, hasData: !!previewResp?.data, error: previewResp?.error })
+          // Si el preview falla, los estados de loading se actualizarán cuando se carguen los datos de calificaciones/asistencia
+        }
+      } catch (previewErr) {
+        console.error('[CourseInfo] Error loading acts preview:', previewErr)
+      }
+    }
+    
+    // Cargar siempre, independientemente de la pestaña activa
+    if (courseId) {
+      loadPreview()
+    }
+    
     return () => { mounted = false }
   }, [courseId])
 
@@ -862,7 +923,24 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const computeAverageAttendance = (): number => {
-    // 1) Preferir asistencias reales cargadas (attendanceData)
+    // 1) Preferir datos del preview del acta (más preciso)
+    console.log('[CourseInfo] computeAverageAttendance - actsPreviewData:', actsPreviewData)
+    if (actsPreviewData && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
+      const items = actsPreviewData.items
+      console.log('[CourseInfo] computeAverageAttendance - items count:', items.length)
+      const validItems = items.filter((item: any) => 
+        item.asistenciaPct !== null && item.asistenciaPct !== undefined && !isNaN(Number(item.asistenciaPct))
+      )
+      console.log('[CourseInfo] computeAverageAttendance - validItems count:', validItems.length)
+      if (validItems.length > 0) {
+        const sum = validItems.reduce((acc: number, item: any) => acc + Number(item.asistenciaPct), 0)
+        const avg = Math.round(sum / validItems.length)
+        console.log('[CourseInfo] computeAverageAttendance - calculated average:', avg)
+        return avg
+      }
+    }
+
+    // 2) Fallback: usar asistencias reales cargadas (attendanceData)
     const dateEntries = Object.values(attendanceData || {}) as Array<Record<number, "P" | "1/2" | "A">>
     let counted = 0
     let score = 0
@@ -877,7 +955,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       return Math.round((score / counted) * 100)
     }
 
-    // 2) Fallback: usar estado simple de studentsData
+    // 3) Fallback: usar estado simple de studentsData
     if (!students.length) return 0
     const present = students.filter((s: any) => (s.attendance === "Presente")).length
     const half = students.filter((s: any) => (s.attendance === "1/2" || s.attendance === "1/2 Falta")).length
@@ -885,30 +963,85 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const computeAverageGrade = (): number => {
+    // 1) Preferir datos del preview del acta (más preciso, no considera ausentes)
+    console.log('[CourseInfo] computeAverageGrade - actsPreviewData:', actsPreviewData)
+    if (actsPreviewData && actsPreviewData.items && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
+      const items = actsPreviewData.items
+      console.log('[CourseInfo] computeAverageGrade - items count:', items.length)
+      // Filtrar items con notaMateria válida (no null, no undefined, no NaN, excluir "A")
+      const validItems = items.filter((item: any) => {
+        const nota = item.notaMateria
+        if (nota === null || nota === undefined || nota === '') return false
+        const upper = String(nota).trim().toUpperCase()
+        // Excluir "A" (ausente) del cálculo del promedio
+        if (upper === "A") return false
+        const numNota = Number(String(nota).replace(",", "."))
+        return !isNaN(numNota) && Number.isFinite(numNota)
+      })
+      console.log('[CourseInfo] computeAverageGrade - validItems count:', validItems.length)
+      if (validItems.length > 0) {
+        const sum = validItems.reduce((acc: number, item: any) => {
+          const nota = Number(String(item.notaMateria).replace(",", "."))
+          return acc + nota
+        }, 0)
+        const average = Math.round((sum / validItems.length) * 100) / 100
+        console.log('[CourseInfo] Average grade from preview:', average, 'from', validItems.length, 'students')
+        return average
+      }
+      // Si hay items pero ninguno tiene nota válida, retornar 0
+      console.log('[CourseInfo] Preview has items but no valid grades')
+      return 0
+    }
+
+    // 2) Fallback: usar gradesData local (solo si está disponible)
     const ids = Object.keys(gradesData)
-    if (ids.length === 0) return course.stats?.averageGrade ?? 0
-    let sum = 0
-    let count = 0
-    for (const id of ids) {
-      const g = gradesData[id] || {}
-      const keys = ["FINAL", "2P", "1P", "REC"]
-      const nums = keys
-        .map((k) => (g[k] ? Number(String(g[k]).replace(",", ".")) : NaN))
-        .filter((n) => Number.isFinite(n)) as number[]
-      if (nums.length > 0) {
-        sum += nums.reduce((a, b) => a + b, 0) / nums.length
-        count += 1
+    if (ids.length > 0) {
+      let sum = 0
+      let count = 0
+      for (const id of ids) {
+        const g = gradesData[id] || {}
+        const keys = ["FINAL", "2P", "1P", "REC"]
+        // Filtrar "A" (ausente) - no se cuenta en el promedio
+        const nums = keys
+          .map((k) => {
+            const val = g[k]
+            if (!val || String(val).trim() === "") return NaN
+            const upper = String(val).trim().toUpperCase()
+            // Excluir "A" del cálculo del promedio
+            if (upper === "A") return NaN
+            return Number(String(val).replace(",", "."))
+          })
+          .filter((n) => Number.isFinite(n)) as number[]
+        if (nums.length > 0) {
+          sum += nums.reduce((a, b) => a + b, 0) / nums.length
+          count += 1
+        }
+      }
+      if (count > 0) {
+        return Math.round((sum / count) * 100) / 100
       }
     }
-    if (count === 0) return course.stats?.averageGrade ?? 0
-    return Math.round((sum / count) * 100) / 100
+
+    // 3) Último fallback: stats del curso o 0
+    return course.stats?.averageGrade ?? 0
   }
 
   
 
-  const timeProgress = computeTimeProgress(course.dates)
-  const averageAttendance = computeAverageAttendance()
-  const averageGrade = computeAverageGrade()
+  // Calcular tiempo transcurrido usando las fechas del curso
+  const timeProgress = useMemo(() => {
+    if (!course.dates || course.dates.trim() === '') return 0
+    return computeTimeProgress(course.dates)
+  }, [course.dates])
+  
+  // Usar useMemo para recalcular cuando cambien los datos del preview
+  const averageAttendance = useMemo(() => {
+    return computeAverageAttendance()
+  }, [actsPreviewData, attendanceData, students])
+  
+  const averageGrade = useMemo(() => {
+    return computeAverageGrade()
+  }, [actsPreviewData, gradesData, course.stats])
 
   const studentConditionOptions = useMemo(() => {
     const set = new Set<string>()
@@ -1231,11 +1364,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   // Fechas reales de asistencia según backend (records), indexadas por mes -> días
   const [attendanceRecordsByMonth, setAttendanceRecordsByMonth] = useState<Record<number, Set<number>>>({})
 
-  // Cargar los registros de asistencia para conocer fechas reales existentes
+  // Cargar los registros de asistencia para conocer fechas reales existentes (cargar siempre para estadísticas)
   useEffect(() => {
     let mounted = true
     const loadRecords = async () => {
-      if (activeTab !== 'Asistencia') return
+      // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Asistencia'
       try {
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
         const resp = await CoursesService.getAttendanceRecords(Number(courseId))
@@ -1251,12 +1384,70 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             map[m].add(day)
           }
           setAttendanceRecordsByMonth(map)
+          
+          // También cargar las asistencias por fecha para calcular el promedio
+          // Limitar a las últimas 10 fechas para no hacer demasiadas llamadas
+          const allDates = new Set<string>()
+          for (const rec of resp.data as any[]) {
+            const d = new Date(String(rec?.date || ''))
+            if (!Number.isNaN(d.getTime())) {
+              const dateStr = d.toISOString().split('T')[0]
+              allDates.add(dateStr)
+            }
+          }
+          
+          // Ordenar fechas y tomar las más recientes (máximo 10 para no sobrecargar)
+          const sortedDates = Array.from(allDates).sort().reverse().slice(0, 10)
+          
+          // Cargar asistencia para cada fecha
+          const attendancePromises = sortedDates.map(async (dateStr) => {
+            try {
+              const attendanceResp = await CoursesService.getAttendanceByDate(Number(courseId), dateStr)
+              if (attendanceResp && attendanceResp.success && attendanceResp.data) {
+                const items = attendanceResp.data.items || []
+                const dateKey = dateStr
+                const dateData: Record<number, "P" | "1/2" | "A"> = {}
+                for (const item of items) {
+                  if (item.studentId && item.status) {
+                    const status = item.status.toUpperCase()
+                    if (status === 'P' || status === 'PRESENTE') {
+                      dateData[item.studentId] = "P"
+                    } else if (status === '1/2' || status === 'MEDIA') {
+                      dateData[item.studentId] = "1/2"
+                    } else if (status === 'A' || status === 'AUSENTE' || status === 'FALTA') {
+                      dateData[item.studentId] = "A"
+                    }
+                  }
+                }
+                if (Object.keys(dateData).length > 0) {
+                  return { dateKey, dateData }
+                }
+              }
+            } catch (err) {
+              console.warn(`Error loading attendance for date ${dateStr}:`, err)
+            }
+            return null
+          })
+          
+          const attendanceResults = await Promise.all(attendancePromises)
+          const newAttendanceData: { [key: string]: { [key: number]: "P" | "1/2" | "A" } } = {}
+          for (const result of attendanceResults) {
+            if (result) {
+              newAttendanceData[result.dateKey] = result.dateData
+            }
+          }
+          
+          if (Object.keys(newAttendanceData).length > 0) {
+            setAttendanceData(prev => ({ ...prev, ...newAttendanceData }))
+          }
         } else {
           setAttendanceRecordsByMonth({})
         }
       } catch (err) {
         console.warn('Error cargando attendance records:', err)
         setAttendanceRecordsByMonth({})
+      } finally {
+        // Loading completado
       }
     }
 
@@ -1501,8 +1692,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   // Validar y redondear nota a incrementos de 0.5
+  // Helper para mostrar "-" cuando la nota es null, undefined o vacía
+  const formatGradeForDisplay = (grade: string | undefined | null): string => {
+    if (grade === undefined || grade === null || String(grade).trim() === "") {
+      return "-"
+    }
+    return String(grade)
+  }
+
   const validateAndRoundGrade = (value: string): string => {
     if (!value || value.trim() === "") return ""
+    
+    const trimmed = value.trim().toUpperCase()
+    
+    // Permitir "A" para ausente
+    if (trimmed === "A") return "A"
     
     // Remover caracteres no numéricos excepto punto y signo negativo
     let cleanValue = value.replace(/[^\d.-]/g, "")
@@ -1530,8 +1734,17 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const getVal = (k: string) => {
       const v = studentGrades[k]
       if (v === undefined || v === null || String(v).trim() === "") return null
+      const upper = String(v).trim().toUpperCase()
+      // Si es "A" (ausente), tratarlo como desaprobado (equivalente a 1, 2 o 3)
+      if (upper === "A") return 1 // Retornar 1 para que se considere desaprobado
       const n = Number.parseFloat(String(v))
       return Number.isFinite(n) ? n : null
+    }
+    
+    const isAusente = (k: string): boolean => {
+      const v = studentGrades[k]
+      if (v === undefined || v === null || String(v).trim() === "") return false
+      return String(v).trim().toUpperCase() === "A"
     }
 
     const p1 = getVal("1P")
@@ -1539,18 +1752,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const rec = getVal("REC")
     const final = getVal("FINAL")
 
-    const hasP1 = p1 !== null
-    const hasP2 = p2 !== null
-    const hasRec = rec !== null
-    const hasFinal = final !== null
+    const hasP1 = p1 !== null || isAusente("1P")
+    const hasP2 = p2 !== null || isAusente("2P")
+    const hasRec = rec !== null || isAusente("REC")
+    const hasFinal = final !== null || isAusente("FINAL")
 
     // Sin datos aún
     if (!hasP1 && !hasP2 && !hasRec && !hasFinal) return ""
 
+    // Obtener si el curso es promocionable
+    const esPromocionable = course.promocionable !== false // Por defecto true
+
     // Necesitamos ambos parciales para decidir estados definitivos/promoción
     if (hasP1 && hasP2) {
-      // Promoción directa: calcula promedio automático
-      if ((p1 as number) >= 8 && (p2 as number) >= 8) {
+      // Promoción directa: solo si el curso es promocionable y ambas notas >= 8
+      if (esPromocionable && (p1 as number) >= 8 && (p2 as number) >= 8) {
         // Calcular promedio de todas las evaluaciones cargadas
         const grades = [p1 as number, p2 as number]
         if (hasRec && (rec as number) >= 8) grades.push(rec as number)
@@ -1593,24 +1809,57 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   type GradePermissions = { recEnabled: boolean; finalEnabled: boolean; finalAutoCalculated: boolean }
 
   const getGradePermissions = (studentGrades: Record<string, string>): GradePermissions => {
-    const p1 = Number.parseFloat(studentGrades["1P"]) || 0
-    const p2 = Number.parseFloat(studentGrades["2P"]) || 0
-    const rec = Number.parseFloat(studentGrades["REC"]) || 0
+    const getVal = (k: string) => {
+      const v = studentGrades[k]
+      if (v === undefined || v === null || String(v).trim() === "") return null
+      const upper = String(v).trim().toUpperCase()
+      // Si es "A" (ausente), tratarlo como desaprobado (equivalente a 1, 2 o 3)
+      if (upper === "A") return 1 // Retornar 1 para que se considere desaprobado
+      const n = Number.parseFloat(String(v))
+      return Number.isFinite(n) ? n : null
+    }
+    
+    const isAusente = (k: string): boolean => {
+      const v = studentGrades[k]
+      if (v === undefined || v === null || String(v).trim() === "") return false
+      return String(v).trim().toUpperCase() === "A"
+    }
 
-    const p1Approved = p1 >= 4
-    const p2Approved = p2 >= 4
+    const p1 = getVal("1P")
+    const p2 = getVal("2P")
+    const rec = getVal("REC")
 
-    // Promoción directa: bloquea REC y FINAL (FINAL se calcula automático)
-    if (p1 >= 8 && p2 >= 8) return { recEnabled: false, finalEnabled: false, finalAutoCalculated: true }
+    const p1Num = p1 ?? 0
+    const p2Num = p2 ?? 0
+    const recNum = rec ?? 0
 
-    // Ambos desaprobados: bloquea REC y FINAL
-    if (!p1Approved && !p2Approved) return { recEnabled: false, finalEnabled: false, finalAutoCalculated: false }
+    const p1Approved = (p1 !== null && p1Num >= 4) && !isAusente("1P")
+    const p2Approved = (p2 !== null && p2Num >= 4) && !isAusente("2P")
+    
+    // Obtener si el curso es promocionable
+    const esPromocionable = course.promocionable !== false // Por defecto true
+
+    // Si ambas notas están entre 4 y 10 (y no son "A"), REC debe estar deshabilitado (null)
+    const bothValid = p1 !== null && p2 !== null && !isAusente("1P") && !isAusente("2P") && p1Num >= 4 && p1Num <= 10 && p2Num >= 4 && p2Num <= 10
+    if (bothValid) {
+      // Solo si es promocionable Y ambas >= 8, FINAL se calcula automáticamente
+      if (esPromocionable && p1Num >= 8 && p2Num >= 8) {
+        return { recEnabled: false, finalEnabled: false, finalAutoCalculated: true }
+      }
+      // En cualquier otro caso (no promocionable o < 8), FINAL se puede modificar
+      return { recEnabled: false, finalEnabled: true, finalAutoCalculated: false }
+    }
+
+    // Ambos desaprobados (incluyendo "A"): bloquea REC y FINAL
+    if (p1 !== null && p2 !== null && !p1Approved && !p2Approved) {
+      return { recEnabled: false, finalEnabled: false, finalAutoCalculated: false }
+    }
 
     // REC habilitado solo si exactamente uno desaprobado
-    const recEnabled = (p1Approved && !p2Approved) || (!p1Approved && p2Approved)
+    const recEnabled = p1 !== null && p2 !== null && ((p1Approved && !p2Approved) || (!p1Approved && p2Approved))
 
     // FINAL habilitado si ambas aprobadas (puras) o si una fue aprobada vía REC
-    const finalEnabled = (p1Approved && p2Approved) || (recEnabled && rec >= 4)
+    const finalEnabled = (p1 !== null && p2 !== null && p1Approved && p2Approved) || (recEnabled && rec !== null && recNum >= 4 && !isAusente("REC"))
 
     return { recEnabled, finalEnabled, finalAutoCalculated: false }
   }
@@ -1619,19 +1868,22 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const getVal = (k: string) => {
       const v = studentGrades[k]
       if (v === undefined || v === null || String(v).trim() === "") return null
+      const upper = String(v).trim().toUpperCase()
+      // Si es "A" (ausente), no se cuenta en el cálculo del promedio
+      if (upper === "A") return null
       const n = Number.parseFloat(String(v))
       return Number.isFinite(n) ? n : null
     }
 
     const p1 = getVal("1P")
     const p2 = getVal("2P")
-    const rec = getVal("REC")
+    
+    // Obtener si el curso es promocionable
+    const esPromocionable = course.promocionable !== false // Por defecto true
 
-    // Solo calcular si promociona
-    if (p1 !== null && p2 !== null && p1 >= 8 && p2 >= 8) {
-      const grades = [p1, p2]
-      if (rec !== null && rec >= 8) grades.push(rec)
-      const average = grades.reduce((a, b) => a + b, 0) / grades.length
+    // Solo calcular promedio si es promocionable Y ambas notas >= 8 (y no son "A")
+    if (esPromocionable && p1 !== null && p2 !== null && p1 >= 8 && p2 >= 8) {
+      const average = (p1 + p2) / 2
       const rounded = Math.round(average * 2) / 2
       return rounded.toString()
     }
@@ -1644,12 +1896,45 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       // Validar y redondear el valor si no está vacío
       const validatedValue = value.trim() === "" ? "" : validateAndRoundGrade(value)
       
+      const currentGrades = prev[studentId] || {}
+      const isDeleting = validatedValue === ""
+      
       const updated = {
         ...prev,
         [studentId]: {
-          ...prev[studentId],
+          ...currentGrades,
           [field]: validatedValue,
         },
+      }
+
+      // Lógica de eliminación en cascada
+      if (isDeleting) {
+        // Si se elimina P1 o P2 y hay REC y FINAL, eliminar ambos
+        if ((field === "1P" || field === "2P")) {
+          const hasRec = currentGrades["REC"] && currentGrades["REC"].trim() !== ""
+          const hasFinal = currentGrades["FINAL"] && currentGrades["FINAL"].trim() !== ""
+          
+          if (hasRec) {
+            updated[studentId]["REC"] = ""
+          }
+          if (hasFinal) {
+            updated[studentId]["FINAL"] = ""
+          }
+        }
+        
+        // Si se elimina REC y hay P1, P2, REC y FINAL, eliminar también FINAL
+        if (field === "REC") {
+          const hasP1 = currentGrades["1P"] && currentGrades["1P"].trim() !== ""
+          const hasP2 = currentGrades["2P"] && currentGrades["2P"].trim() !== ""
+          const hasFinal = currentGrades["FINAL"] && currentGrades["FINAL"].trim() !== ""
+          
+          if (hasP1 && hasP2 && hasFinal) {
+            updated[studentId]["FINAL"] = ""
+          }
+        }
+        
+        // Si se elimina FINAL, solo recalcular condición (no pasa nada más)
+        // Esto se maneja más abajo
       }
 
       // Obtener permisos para este estudiante
@@ -1678,11 +1963,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const validateGradesBeforeSave = (): { valid: boolean; message: string } => {
-    // Validar que todas las notas cargadas estén entre 1 y 10
+    // Validar que todas las notas cargadas estén entre 1 y 10, o sean "A" (ausente)
     for (const [studentId, grades] of Object.entries(gradesData)) {
       for (const [field, value] of Object.entries(grades)) {
         if (field === "CONDICIÓN FINAL") continue
         if (!value || value.trim() === "") continue
+        
+        const upper = String(value).trim().toUpperCase()
+        // Permitir "A" para ausente
+        if (upper === "A") continue
         
         const numValue = Number.parseFloat(value)
         if (!Number.isFinite(numValue)) {
@@ -1708,6 +1997,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const validation = validateGradesBeforeSave()
     
     if (!validation.valid) {
+      setGradesAlertType('error')
       setGradesAlertMessage(validation.message)
       setShowGradesAlertModal(true)
       return
@@ -1726,10 +2016,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         // Build payload: array of assessments with grades per student
         const keys = ["1P", "2P", "REC", "FINAL"]
         const mapKeyToTipo = (k: string) => {
-          if (k === '1P') return 'Parcial 1'
-          if (k === '2P') return 'Parcial 2'
-          if (k === 'REC') return 'Recuperatorio'
-          if (k === 'FINAL') return 'Final'
+          // Mapear a los tipos exactos que usa el backend
+          if (k === '1P') return 'PARCIAL_1'
+          if (k === '2P') return 'PARCIAL_2'
+          if (k === 'REC') return 'RECUPERATORIO'
+          if (k === 'FINAL') return 'FINAL'
           return k
         }
 
@@ -1738,23 +2029,41 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         for (const k of keys) {
           const gradesArr: any[] = []
+          let hasAnyData = false
+          
           for (const s of students) {
             const sid = String(s.id)
             const val = gradesData[sid]?.[k]
-            if (val !== undefined && val !== null && String(val).trim() !== "") {
-              const parsed = Number.parseFloat(String(val))
-              if (Number.isFinite(parsed)) {
-                gradesArr.push({ studentId: Number(s.id), grade: parsed, published: false })
+            
+            // Si el campo tiene algún valor (incluso vacío pero existe en gradesData)
+            if (val !== undefined) {
+              hasAnyData = true
+              
+              // Si está vacío o es null, enviar null
+              if (val === null || val === "" || String(val).trim() === "") {
+                gradesArr.push({ studentId: Number(s.id), grade: null })
+              } else {
+                // Si tiene valor, parsearlo y enviarlo
+                const parsed = Number.parseFloat(String(val))
+                if (Number.isFinite(parsed)) {
+                  gradesArr.push({ studentId: Number(s.id), grade: String(parsed) })
+                } else {
+                  // Si no es un número válido, enviar null
+                  gradesArr.push({ studentId: Number(s.id), grade: null })
+                }
               }
             }
           }
 
-          if (gradesArr.length > 0) {
-            assessments.push({ assessmentId: null, tipo: mapKeyToTipo(k), fecha: today, grades: gradesArr })
+          // Solo incluir si hay algún dato modificado
+          if (hasAnyData && gradesArr.length > 0) {
+            const assessmentId = assessmentIds[k] || null
+            assessments.push({ assessmentId, tipo: mapKeyToTipo(k), fecha: today, grades: gradesArr })
           }
         }
 
         if (assessments.length === 0) {
+          setGradesAlertType('error')
           setGradesAlertMessage('No hay calificaciones para guardar')
           setShowGradesAlertModal(true)
           setSavingGrades(false)
@@ -1768,14 +2077,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         if (resp && resp.success) {
           // On success, stop editing and optionally refresh grades from backend
           setIsEditingGrades(false)
-          setGradesAlertMessage('Calificaciones guardadas correctamente')
+          setGradesAlertType('success')
+          // Usar el mensaje del servicio que incluye detalles de cuántas se guardaron
+          setGradesAlertMessage(resp.message || 'Calificaciones guardadas correctamente')
           setShowGradesAlertModal(true)
         } else {
+          setGradesAlertType('error')
           setGradesAlertMessage(resp?.error || 'Error guardando calificaciones')
           setShowGradesAlertModal(true)
         }
       } catch (err) {
         setSavingGrades(false)
+        setGradesAlertType('error')
         setGradesAlertMessage(err instanceof Error ? err.message : 'Error desconocido al guardar')
         setShowGradesAlertModal(true)
       }
@@ -2781,7 +3094,41 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredGradesStudents.map((student, index) => (
+                  {loadingGrades && Object.keys(gradesData).length === 0 ? (
+                    // Skeleton loading rows - solo mostrar si no hay datos
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <tr
+                        key={`skeleton-${index}`}
+                        className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                      >
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                          <div className="flex items-center space-x-2 lg:space-x-3">
+                            <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                            <Skeleton className="h-4 w-32" />
+                          </div>
+                        </td>
+                        <td className="py-2 lg:py-3 px-2 lg:px-4">
+                          <Skeleton className="h-4 w-20 mx-auto" />
+                        </td>
+                        <td className="py-2 lg:py-3 px-2 lg:px-4">
+                          <Skeleton className="h-6 w-12 mx-auto" />
+                        </td>
+                        <td className="py-2 lg:py-3 px-2 lg:px-4">
+                          <Skeleton className="h-6 w-12 mx-auto" />
+                        </td>
+                        <td className="py-2 lg:py-3 px-2 lg:px-4">
+                          <Skeleton className="h-6 w-12 mx-auto" />
+                        </td>
+                        <td className="py-2 lg:py-3 px-2 lg:px-4">
+                          <Skeleton className="h-6 w-12 mx-auto" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <Skeleton className="h-6 w-24 mx-auto rounded-full" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    filteredGradesStudents.map((student, index) => (
                     <tr
                       key={student.id}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
@@ -2800,43 +3147,51 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            step="0.5"
+                            type="text"
                             disabled={isCourseLocked}
                             value={gradesData[student.id]?.["1P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "1P", e.target.value)}
                             onKeyDown={(e) => {
+                              // Permitir "A" o "a" para ausente
+                              if (e.key === 'a' || e.key === 'A') {
+                                // Permitir que se escriba
+                                return
+                              }
+                              // Bloquear caracteres no permitidos
                               if (e.key === '-' || e.key === 'e' || e.key === 'E') {
                                 e.preventDefault()
                               }
                             }}
                             className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                            placeholder="-"
                           />
                         ) : (
-                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["1P"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{formatGradeForDisplay(gradesData[student.id]?.["1P"])}</span>
                         )}
                       </td>
                       <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            step="0.5"
+                            type="text"
                             disabled={isCourseLocked}
                             value={gradesData[student.id]?.["2P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "2P", e.target.value)}
                             onKeyDown={(e) => {
+                              // Permitir "A" o "a" para ausente
+                              if (e.key === 'a' || e.key === 'A') {
+                                // Permitir que se escriba
+                                return
+                              }
+                              // Bloquear caracteres no permitidos
                               if (e.key === '-' || e.key === 'e' || e.key === 'E') {
                                 e.preventDefault()
                               }
                             }}
                             className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                            placeholder="-"
                           />
                         ) : (
-                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["2P"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{formatGradeForDisplay(gradesData[student.id]?.["2P"])}</span>
                         )}
                       </td>
                       <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
@@ -2844,25 +3199,29 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           (() => {
                             const perms = getGradePermissions(gradesData[student.id] || {})
                             return (
-                                <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                step="0.5"
+                              <input
+                                type="text"
                                 disabled={!perms.recEnabled || isCourseLocked}
                                 value={gradesData[student.id]?.["REC"] || ""}
                                 onChange={(e) => updateGrade(String(student.id), "REC", e.target.value)}
                                 onKeyDown={(e) => {
+                                  // Permitir "A" o "a" para ausente
+                                  if (e.key === 'a' || e.key === 'A') {
+                                    // Permitir que se escriba
+                                    return
+                                  }
+                                  // Bloquear caracteres no permitidos
                                   if (e.key === '-' || e.key === 'e' || e.key === 'E') {
                                     e.preventDefault()
                                   }
                                 }}
                                 className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.recEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                                placeholder="-"
                               />
                             )
                           })()
                         ) : (
-                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["REC"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{formatGradeForDisplay(gradesData[student.id]?.["REC"])}</span>
                         )}
                       </td>
                       <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
@@ -2878,7 +3237,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                   <input
                                     type="text"
                                     disabled
-                                    value={finalValue}
+                                    value={finalValue || "-"}
                                     className="w-12 lg:w-16 px-1 lg:px-2 py-1 border-2 border-green-300 bg-green-50 rounded text-center text-xs lg:text-sm font-semibold text-green-700 cursor-not-allowed"
                                     title="Calculado automáticamente (Promoción)"
                                   />
@@ -2888,24 +3247,28 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             
                             return (
                               <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                step="0.5"
+                                type="text"
                                 disabled={!perms.finalEnabled || isCourseLocked}
                                 value={finalValue}
                                 onChange={(e) => updateGrade(String(student.id), "FINAL", e.target.value)}
                                 onKeyDown={(e) => {
+                                  // Permitir "A" o "a" para ausente
+                                  if (e.key === 'a' || e.key === 'A') {
+                                    // Permitir que se escriba
+                                    return
+                                  }
+                                  // Bloquear caracteres no permitidos
                                   if (e.key === '-' || e.key === 'e' || e.key === 'E') {
                                     e.preventDefault()
                                   }
                                 }}
                                 className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.finalEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                                placeholder="-"
                               />
                             )
                           })()
                         ) : (
-                          <span className="text-gray-600 text-xs lg:text-sm">{gradesData[student.id]?.["FINAL"] || "-"}</span>
+                          <span className="text-gray-600 text-xs lg:text-sm">{formatGradeForDisplay(gradesData[student.id]?.["FINAL"])}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -2926,7 +3289,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         </span>
                       </td>
                     </tr>
-                  ))}
+                  ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -3183,16 +3547,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           <td className="py-2.5 px-3 text-xs border-b border-r">{student.legajo}</td>
                           <td className="py-2.5 px-3 text-xs border-b border-r truncate">{student.email}</td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
-                            {g["1P"] || "-"}
+                            {formatGradeForDisplay(g["1P"])}
                           </td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
-                            {g["2P"] || "-"}
+                            {formatGradeForDisplay(g["2P"])}
                           </td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
-                            {g["REC"] || "-"}
+                            {formatGradeForDisplay(g["REC"])}
                           </td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
-                            {g["FINAL"] || "-"}
+                            {formatGradeForDisplay(g["FINAL"])}
                           </td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r">
                             {condition ? (
@@ -3414,7 +3778,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         </div>
       )}
 
-      {/* Modal de Alerta - Error en Calificaciones */}
+      {/* Modal de Alerta - Calificaciones */}
       {showGradesAlertModal && (
         <div 
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-150"
@@ -3426,15 +3790,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           >
             {/* Icono de alerta */}
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-                <X className="h-8 w-8 text-red-600" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                gradesAlertType === 'success' ? 'bg-green-100' : 'bg-red-100'
+              }`}>
+                {gradesAlertType === 'success' ? (
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                ) : (
+                  <X className="h-8 w-8 text-red-600" />
+                )}
               </div>
             </div>
 
             {/* Contenido */}
             <div className="text-center">
               <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
-                Error de Validación
+                {gradesAlertType === 'success' ? 'Operación Exitosa' : 'Error de Validación'}
               </h2>
               <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">
                 {gradesAlertMessage}
@@ -3443,7 +3813,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               {/* Botón de confirmación */}
               <button
                 onClick={() => setShowGradesAlertModal(false)}
-                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+                className={`w-full font-medium py-3 px-6 rounded-lg transition-colors duration-200 ${
+                  gradesAlertType === 'success' 
+                    ? 'bg-green-600 hover:bg-green-700 active:bg-green-800' 
+                    : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
+                } text-white`}
               >
                 Entendido
               </button>
