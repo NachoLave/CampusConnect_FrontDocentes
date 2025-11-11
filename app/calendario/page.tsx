@@ -237,9 +237,6 @@ const getCourseEventsForDate = (date: Date) => {
       color: 'bg-blue-100 border-blue-200 text-blue-800',
     }))
     
-  if (events.length > 0) {
-    console.log(`✅ Eventos para ${label}:`, events.map(e => e.title))
-  }
   return events
 }
 
@@ -306,17 +303,34 @@ export default function CalendarioPage() {
     return true
   }
 
-  // Helper: format YYYY-MM-DD to dd/MM/yyyy
+  // Helper: format YYYY-MM-DD to dd/MM/yyyy (normalizado para coincidir con CalendarDayButton)
+  // Esta función debe producir EXACTAMENTE el mismo formato que CalendarDayButton
   const formatIsoToDdMmYyyy = (iso: string) => {
     if (!iso) return ''
     // If iso is in YYYY-MM-DD format (no timezone), parse components to avoid timezone shift
     const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+    let date: Date
     if (isoDateOnly) {
       const [y, m, d] = iso.split('-').map((n) => parseInt(n, 10))
-      return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      date = new Date(y, m - 1, d)
+    } else {
+      date = new Date(iso)
     }
-    const dt = new Date(iso)
-    return dt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    // Normalizar el formato para que coincida exactamente con CalendarDayButton
+    // Usar el mismo método que CalendarDayButton: toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    // Asegurarse de que no haya espacios extra
+    return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).trim()
+  }
+  
+  // Helper: normalizar fecha a formato dd/mm/yyyy para comparación consistente
+  const normalizeDateKey = (date: Date | string): string => {
+    let d: Date
+    if (typeof date === 'string') {
+      d = new Date(date)
+    } else {
+      d = date
+    }
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).trim()
   }
 
   // Map backend event.type to page types
@@ -346,15 +360,17 @@ export default function CalendarioPage() {
 
   const eventsOfSelected = useMemo(() => {
     const label = selectedLabel
+    
     // Prefer backend events
     const fromBackend = backendEvents.map((e) => {
       const mappedType = mapBackendType(e.type, e.id, e.title)
+      const eventDate = formatIsoToDdMmYyyy(e.date)
       return {
         id: e.id,
         courseId: (e as any).courseId,
         type: mappedType,
         title: e.title,
-        date: formatIsoToDdMmYyyy(e.date),
+        date: eventDate,
         // build time range from start (time) and duration
         time: (() => {
           const start = e.time // HH:MM
@@ -371,7 +387,9 @@ export default function CalendarioPage() {
                mappedType === 'comedor' ? 'bg-yellow-100 border-yellow-200 text-yellow-800' :
                'bg-green-100 border-green-200 text-green-800'
       }
-    }).filter((ev) => ev.date === label && isEventVisible(ev))
+    }).filter((ev) => {
+      return ev.date === label && isEventVisible(ev)
+    })
 
     // Return backend-derived events (may be empty)
     return fromBackend
@@ -630,16 +648,17 @@ export default function CalendarioPage() {
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
+                  
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
                     const mappedType = mapBackendType(e.type, e.id, e.title)
-                    if (!isEventVisible({ type: mappedType })) return
+                    if (!isEventVisible({ type: mappedType })) {
+                      return
+                    }
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
-
-
                   })
-
+                  
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />
@@ -694,16 +713,17 @@ export default function CalendarioPage() {
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
                 eventsByDay={useMemo(() => {
                   const map: Record<string, any> = {}
+                  
                   backendEvents.forEach((e) => {
                     const key = formatIsoToDdMmYyyy(e.date)
                     const mappedType = mapBackendType(e.type, e.id, e.title)
-                    if (!isEventVisible({ type: mappedType })) return
+                    if (!isEventVisible({ type: mappedType })) {
+                      return
+                    }
                     map[key] = map[key] || {}
                     map[key][mappedType] = true
-
-
                   })
-
+                  
                   return map
                 }, [currentMonth, filters, backendEvents])}
               />

@@ -253,10 +253,8 @@ export default function BilleteraPage() {
               </div>
             </div>
             <div className="text-2xl md:text-4xl font-bold text-gray-900">
-              {isLoading ? (
+              {isLoading || error ? (
                 <InlineBalanceSkeleton />
-              ) : error ? (
-                <span className="text-red-600">No se pudo obtener el saldo</span>
               ) : showBalance ? (
                 formatBalance(totalBalance)
               ) : (

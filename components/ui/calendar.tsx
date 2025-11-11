@@ -6,12 +6,39 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from 'lucide-react'
-import { DayButton, DayPicker } from 'react-day-picker'
+import { Day as RDPDay, DayPicker } from 'react-day-picker'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 
 const EventsContext = React.createContext<Record<string, any> | undefined>(undefined)
+
+// Componente para renderizar los puntos de eventos
+function EventDots({ date }: { date: Date }) {
+  const events = React.useContext(EventsContext)
+  const dayKey = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const key = dayKey.trim()
+  const meta = events?.[key] || {}
+  
+  if (!meta.clase && !meta.examen && !meta.evento && !meta.comedor) {
+    return null
+  }
+  
+  return (
+    <div 
+      className="flex items-center justify-center gap-0.5 mt-1 h-2 min-h-[8px] pointer-events-none"
+      onClick={(e) => {
+        e.stopPropagation()
+        e.preventDefault()
+      }}
+    >
+      {meta.clase && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Clase" />}
+      {meta.examen && <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" title="Examen" />}
+      {meta.evento && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Evento" />}
+      {meta.comedor && <span className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" title="Comedor" />}
+    </div>
+  )
+}
 
 function Calendar({
   className,
@@ -20,7 +47,7 @@ function Calendar({
   captionLayout = 'label',
   buttonVariant = 'ghost',
   formatters,
-  components,
+  components: externalComponents,
   eventsByDay,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
@@ -29,17 +56,8 @@ function Calendar({
 }) {
   // Removed getDefaultClassNames as it's not available in this version
 
-  // Debug log - stringify snapshot so DevTools doesn't show a live object reference
-  try {
-    const snapshot = eventsByDay ? JSON.stringify(eventsByDay, Object.keys(eventsByDay || {}).slice(0, 200)) : '{}'
-    console.log('📅 Calendar eventsByDay snapshot:', snapshot)
-  } catch (err) {
-    console.log('📅 Calendar recibiendo eventsByDay (non-serializable):', eventsByDay)
-  }
-  console.log('🚨 CALENDAR COMPONENT EJECUTÁNDOSE - CalendarDayButton configurado:', CalendarDayButton)
-  console.log('🎨 CSS GLOBAL APLICADO - Puntos para días específicos')
-  // No DOM-injected fake dots: dots are rendered from eventsByDay passed into the component
-
+  // Extraer components de props para evitar que sobrescriba nuestra definición
+  const { components: propsComponents, ...restProps } = props
 
   return (
     <EventsContext.Provider value={eventsByDay}>
@@ -52,10 +70,6 @@ function Calendar({
         className,
       )}
       captionLayout={captionLayout}
-      components={{
-        Day: CalendarDayButton,
-        DayButton: CalendarDayButton,
-      }}
       formatters={{
         formatMonthDropdown: (date) =>
           date.toLocaleString('default', { month: 'short' }),
@@ -116,6 +130,7 @@ function Calendar({
         hidden: cn('invisible'),
         ...classNames,
       }}
+      {...restProps}
       components={{
         Root: ({ className, rootRef, ...props }) => {
           return (
@@ -147,7 +162,6 @@ function Calendar({
             <ChevronDownIcon className={cn('size-4', className)} {...props} />
           )
         },
-        DayButton: (p) => <CalendarDayButton {...p} />,
         WeekNumber: ({ children, ...props }) => {
           return (
             <td {...props}>
@@ -157,9 +171,77 @@ function Calendar({
             </td>
           )
         },
-        ...components,
+        // Asegurar que nuestros componentes tengan prioridad sobre los externos
+        ...(externalComponents || {}),
+        ...(propsComponents || {}),
+        // IMPORTANTE: DayContent debe estar DESPUÉS de externalComponents y propsComponents
+        // para que tenga prioridad y no sea sobrescrito
+        // En react-day-picker v8, DayContent renderiza el contenido dentro del botón del día
+        DayContent: (dayContentProps: any) => {
+          const { date, displayMonth, modifiers = {}, ...contentProps } = dayContentProps
+          
+          if (!date) {
+            return null
+          }
+          
+          return (
+            <>
+              <span
+                className={cn(
+                  'relative text-base font-bold',
+                  modifiers.outside
+                    ? 'text-gray-400 opacity-60 dark:text-gray-500'
+                    : 'text-gray-900 dark:text-gray-100'
+                )}
+              >
+                {date.getDate()}
+              </span>
+              <EventDots date={date} />
+            </>
+          )
+        },
+        // También personalizar DayButton para asegurar el layout correcto
+        DayButton: (dayButtonProps: any) => {
+          const { date, displayMonth, modifiers = {}, children, ...buttonProps } = dayButtonProps
+          
+          if (!date) {
+            return <button {...buttonProps}>{children}</button>
+          }
+          
+          return (
+            <button
+              {...buttonProps}
+              className={cn(
+                // Layout base
+                'flex aspect-square size-auto w-full min-w-[60px] h-[80px] flex-col gap-1 leading-none font-normal',
+                // Selected single -> show a subtle rounded rectangle outline
+                modifiers.selected &&
+                  !modifiers.range_start &&
+                  !modifiers.range_end &&
+                  !modifiers.range_middle &&
+                  'bg-transparent rounded-lg text-gray-900 dark:text-white border border-gray-300 hover:bg-transparent',
+                // Range visuals
+                modifiers.range_middle && 'bg-accent text-accent-foreground rounded-none',
+                modifiers.range_start && 'bg-primary text-primary-foreground rounded-md rounded-l-md',
+                modifiers.range_end && 'bg-primary text-primary-foreground rounded-md rounded-r-md',
+                // Estilos para días fuera del mes
+                modifiers.outside && 'text-gray-400 opacity-60 dark:text-gray-500',
+                // Estilos para el día de hoy
+                modifiers.today && 'font-bold text-blue-600 dark:text-blue-400',
+                // Estilos para el día seleccionado (si no es range)
+                modifiers.selected &&
+                  !modifiers.range_start &&
+                  !modifiers.range_end &&
+                  !modifiers.range_middle &&
+                  'bg-blue-500 text-white hover:bg-blue-600 hover:text-white focus:bg-blue-500 focus:text-white',
+                buttonProps.className
+              )}
+            >
+              {children}
+            </button>
+          )
+        },
       }}
-      {...props}
     />
     </EventsContext.Provider>
   )
@@ -168,12 +250,16 @@ function Calendar({
 function CalendarDayButton({
   className,
   day,
-  modifiers,
+  modifiers = {},
   ...props
-}: React.ComponentProps<typeof DayButton>) {
-  // LOG MUY OBVIO PARA VER SI SE EJECUTA - include the computed key used to lookup eventsByDay
+}: any) {
+  // Verificar que day existe y tiene date
+  if (!day || !day.date) {
+    console.error('CalendarDayButton: day o day.date es undefined', { day, props })
+    return null
+  }
+  
   const dayKey = day.date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  console.log(`🚨 CalendarDayButton EJECUTÁNDOSE para día: ${dayKey}`)
   
   // Removed getDefaultClassNames as it's not available in this version
   const events = React.useContext(EventsContext)
@@ -182,19 +268,14 @@ function CalendarDayButton({
   React.useEffect(() => {
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
-  const key = dayKey
-  const meta = events?.[key] || {}
-
-  // Debug más detallado - snapshot the event map keys and the resolved meta for this day
-  try {
-    const keys = events ? Object.keys(events).slice(0, 50) : []
-    console.log(`🔍 Día ${key}: eventsByDay keys (sample):`, keys, 'resolved meta:', JSON.stringify(meta))
-  } catch (err) {
-    console.log(`🔍 Día ${key}:`, { events, meta })
-  }
-
-  if (meta.clase || meta.examen || meta.evento || meta.comedor) {
-    console.log(`🎯 Día ${key} tiene eventos:`, meta)
+  
+  // Normalizar la clave para asegurar que coincida exactamente con el formato usado en eventsByDay
+  const key = dayKey.trim()
+  let meta = events?.[key] || {}
+  
+  // Si no se encuentra con la clave normalizada, intentar con la clave original (por si hay espacios)
+  if (!meta || Object.keys(meta).length === 0) {
+    meta = events?.[dayKey] || {}
   }
 
   return (
@@ -244,13 +325,28 @@ function CalendarDayButton({
       >
         {day.date.getDate()}
       </span>
-      <div className="flex items-center justify-center gap-0.5 mt-1 min-h-[30px]">
-        {/* Render event dots only when there is real data (provided via EventsContext/eventsByDay) */}
-        {meta.clase ? <span className="w-1.5 h-1.5 rounded-full bg-blue-500" title="Clase" /> : null}
-        {meta.examen ? <span className="w-1.5 h-1.5 rounded-full bg-orange-500" title="Examen" /> : null}
-        {meta.evento ? <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Evento" /> : null}
-        {meta.comedor ? <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" title="Comedor" /> : null}
-      </div>
+      {/* Render event dots - similar to dashboard weekly calendar */}
+      {/* Siempre renderizar el contenedor para mantener el layout, incluso si no hay eventos */}
+      {(() => {
+        const tieneEventos = !!(meta.clase || meta.examen || meta.evento || meta.comedor)
+        if (!tieneEventos) {
+          return null
+        }
+        return (
+          <div 
+            className="flex items-center justify-center gap-0.5 mt-1 h-2 min-h-[8px] pointer-events-none"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+            }}
+          >
+            {meta.clase && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Clase" />}
+            {meta.examen && <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" title="Examen" />}
+            {meta.evento && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Evento" />}
+            {meta.comedor && <span className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" title="Comedor" />}
+          </div>
+        )
+      })()}
     </Button>
   )
 }

@@ -36,7 +36,7 @@ export class WalletService {
       // Obtener balance real del backend
       const balanceResponse = await this.getBalance()
 
-      if (balanceResponse.success && balanceResponse.data !== null) {
+      if (balanceResponse.success && balanceResponse.data !== null && balanceResponse.data !== undefined) {
         // Combinar balance real con información mock para el resto
         const walletInfo: WalletInfo = {
           ...walletData.walletInfo,
@@ -49,7 +49,13 @@ export class WalletService {
           message: 'Información de billetera obtenida correctamente desde el backend'
         }
       } else {
-        throw new Error('No se pudo obtener el balance del backend')
+        // No usar datos mock - devolver error real
+        return {
+          data: null as any,
+          success: false,
+          error: balanceResponse.error || 'No se pudo obtener el balance del backend',
+          message: 'No se pudo obtener la información de la billetera'
+        }
       }
     } catch (error) {
       console.error('Error obteniendo información de billetera real:', error)
@@ -57,6 +63,7 @@ export class WalletService {
       return {
         data: null as any,
         success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido',
         message: 'No se pudo obtener la información de la billetera'
       }
     }
@@ -76,13 +83,12 @@ export class WalletService {
     } catch (error) {
       console.error('Error obteniendo saldo real:', error)
       
-      // Fallback a datos mock si el backend no está disponible
-      const mockBalance = walletData.walletInfo.balance
-      
+      // No usar datos mock como fallback - devolver error real
       return {
-        data: mockBalance,
-        success: true,
-        message: 'Saldo obtenido desde datos mock (backend no disponible)'
+        data: 0,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error al obtener el saldo del backend',
+        message: 'No se pudo obtener el saldo del backend'
       }
     }
   }

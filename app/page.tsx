@@ -60,7 +60,7 @@ export default function DashboardPage() {
   const carouselRef = useRef<HTMLDivElement>(null)
 
   // Usar hooks del backend para obtener datos reales
-  const { balance, isLoading: balanceLoading } = useBalance()
+  const { balance, isLoading: balanceLoading, error: balanceError } = useBalance()
   const { nextClass, isLoading: nextClassLoading } = useNextClass()
   const { reservations, isLoading: reservationsLoading, error: reservationsError } = useCanteenReservations()
 
@@ -635,7 +635,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
                 </div>
-                {balanceLoading ? (
+                {balanceLoading || balanceError ? (
                   <InlineBalanceSkeleton />
                 ) : (
                 <AnimatedBalance 
