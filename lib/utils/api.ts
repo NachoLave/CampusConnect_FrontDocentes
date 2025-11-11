@@ -190,7 +190,7 @@ class ApiClient {
   }
 
   // Método para hacer requests PATCH
-  async patch<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+  async patch<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
     try {
       if (process.env.NODE_ENV === 'development') {
         await mockDelay()
@@ -199,7 +199,7 @@ class ApiClient {
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         method: 'PATCH',
         headers: this.headers,
-        body: JSON.stringify(body)
+        body: body ? JSON.stringify(body) : undefined
       })
 
       if (!response.ok) {

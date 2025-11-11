@@ -986,7 +986,7 @@ Actualizar estado de propuesta (Admin).
 
 **Request:**
 ```http
-PUT /teachers/me/proposals/9000
+  /teachers/me/proposals/9000
 X-Teacher-Id: 1000
 X-Teacher-Roles: TITULAR
 Content-Type: application/json

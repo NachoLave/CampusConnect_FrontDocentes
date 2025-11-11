@@ -141,7 +141,7 @@ export interface TeacherProfile {
 export interface Proposal {
   proposalId: number
   subjectId: number
-  subjectName: string
+  subjectName: string | null // null para mostrar shimmer durante carga optimista
   status: 'PENDIENTE' | 'APROBADA' | 'RECHAZADA'
   createdAt: string
   decidedAt: string | null
@@ -154,14 +154,31 @@ export interface CreateProposalRequest {
 
 // Tipos para Disponibilidad Horaria
 export interface AvailabilityBlock {
-  dayOfWeek: string // LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO
-  shift: 'MANANA' | 'TARDE' | 'NOCHE'
-  modality: 'PRESENCIAL' | 'VIRTUAL' | 'HIBRIDA'
+  id?: number // Opcional porque al crear no tiene ID aún
+  dayOfWeek: string // LUNES, MARTES, MIERCOLES, JUEVES, VIERNES
+  shift: 'MANIANA' | 'MANANA' | 'TARDE' | 'NOCHE' // MANIANA es el correcto, MANANA por compatibilidad
+  modality: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
   campuses: string[]
 }
 
-export interface UpdateAvailabilityRequest {
-  blocks: AvailabilityBlock[]
+export interface CreateAvailabilityBlockRequest {
+  dayOfWeek: string
+  shift: 'MANIANA' | 'MANANA' | 'TARDE' | 'NOCHE' // MANIANA es el correcto, MANANA por compatibilidad
+  modality: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
+  campuses: string[]
+}
+
+export interface UpdateAvailabilityBlockRequest {
+  modality?: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
+  campuses: string[]
+}
+
+// Tipos para Sedes
+export interface Campus {
+  id: number
+  code: string
+  name: string
+  active: boolean
 }
 
 // Tipos para Materias (Admin)

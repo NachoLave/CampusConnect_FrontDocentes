@@ -195,16 +195,16 @@ export default function BilleteraPage() {
 
   const formatCurrency = (amount: number) => {
     const formatted = Math.abs(amount).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })
     return amount >= 0 ? `+$${formatted}` : `-$${formatted}`
   }
 
   const formatBalance = (amount: number) => {
     const formatted = Math.abs(amount).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })
     return amount >= 0 ? `$${formatted}` : `-$${formatted}`
   }
@@ -404,6 +404,7 @@ export default function BilleteraPage() {
             </Link>
           </div>
 
+<<<<<<< HEAD
           {/* Gasto del año (gráfico dona) */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Resumen del año 2025</h3>

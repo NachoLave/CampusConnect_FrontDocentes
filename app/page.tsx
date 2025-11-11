@@ -8,6 +8,7 @@ import Link from "next/link"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import { useWeeklyCalendar, useNextClass } from "@/lib/hooks/useCalendar"
 import { useBalance } from "@/lib/hooks/useWallet"
+import { useCanteenReservations } from '@/lib/hooks'
 import { EventSkeleton, InlineNextClassSkeleton, InlineBalanceSkeleton } from "@/components/ui/loaders"
 
 const carouselImages = [
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   // Usar hooks del backend para obtener datos reales
   const { balance, isLoading: balanceLoading } = useBalance()
   const { nextClass, isLoading: nextClassLoading } = useNextClass()
+  const { reservations, isLoading: reservationsLoading, error: reservationsError } = useCanteenReservations()
 
   // Calcular rango de semana para eventos
   const getWeekRange = () => {
@@ -524,6 +526,8 @@ export default function DashboardPage() {
                       return (
                         <div className="flex items-center justify-center gap-1 mt-1 h-1.5">
                           {types.has("class") && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                          {types.has("meeting") && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
+                          {types.has("exam") && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
                         </div>
                       )
                     })()}
@@ -542,7 +546,7 @@ export default function DashboardPage() {
                         event.type === "class"
                           ? "bg-blue-50 border-blue-200"
                           : event.type === "meeting"
-                            ? "bg-gray-50 border-gray-200"
+                            ? "bg-yellow-50 border-yellow-200"
                             : "bg-orange-50 border-orange-200"
                       }`}
                     >
@@ -550,10 +554,10 @@ export default function DashboardPage() {
                         <div
                           className={`w-2 h-2 rounded-full ${
                             event.type === "class"
-                              ? "bg-slate-600"
-                              : event.type === "meeting"
-                                ? "bg-gray-400"
-                                : "bg-orange-500"
+                                ? "bg-slate-600"
+                                : event.type === "meeting"
+                                  ? "bg-yellow-400"
+                                  : "bg-orange-500"
                           }`}
                         ></div>
                         <span className="text-sm text-slate-700 font-medium">
@@ -597,10 +601,7 @@ export default function DashboardPage() {
                   <>
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-4 w-4 text-slate-600" />
-                      <h3 className="font-semibold text-lg text-slate-800">{nextClass.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                      <span>{nextClass.courseTitle}</span>
+                      <h3 className="font-semibold text-lg text-slate-800">{nextClass.title.replace(/^Clase:\s*/i, '')}</h3>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">
@@ -638,7 +639,7 @@ export default function DashboardPage() {
                   <InlineBalanceSkeleton />
                 ) : (
                 <AnimatedBalance 
-                    amount={balance ?? 0} 
+                    amount={Math.trunc(balance ?? 0)} 
                   className="text-2xl md:text-4xl font-bold text-gray-900"
                   animated={false}
                   neutral={true}
@@ -650,11 +651,52 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Mis reservas</h3>
                 </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium text-slate-700">Hoy</span>
-                </div>
-                <p className="text-gray-600">9:00 - 11:00</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="h-4 w-4 text-gray-500" />
+                    <span className="font-medium text-slate-700">Hoy</span>
+                  </div>
+                  {/* Use canteen reservations from backend instead of mock */}
+                  {
+                    (() => {
+                      const getDatePart = (d: any) => {
+                        if (!d) return ''
+                        try {
+                          const dt = new Date(d)
+                          return dt.toISOString().split('T')[0]
+                        } catch (e) {
+                          return String(d).split('T')[0]
+                        }
+                      }
+
+                      const todayStr = new Date().toISOString().split('T')[0]
+                      const todays = (reservations || []).filter(r => getDatePart(r.date) === todayStr)
+
+                      if (reservationsLoading) {
+                        return <p className="text-gray-600">Cargando reservas...</p>
+                      }
+
+                      if (reservationsError) {
+                        return <p className="text-red-500">No se pudieron cargar las reservas</p>
+                      }
+
+                      if (!todays || todays.length === 0) {
+                        return <p className="text-gray-600">No tenes reservas hoy</p>
+                      }
+
+                      // Show first reservation timeRange or formatted time
+                      const r = todays[0]
+                      const timeText = r.timeRange || (() => {
+                        try {
+                          const dt = new Date(r.date)
+                          const hh = String(dt.getHours()).padStart(2,'0')
+                          const mm = String(dt.getMinutes()).padStart(2,'0')
+                          return `${hh}:${mm}`
+                        } catch (e) { return '' }
+                      })()
+
+                      return <p className="text-gray-600">{timeText} {r.total ? `• ${r.total}` : ''}</p>
+                    })()
+                  }
               </div>
             </div>
           </div>

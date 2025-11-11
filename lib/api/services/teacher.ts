@@ -1,4 +1,4 @@
-import { TeacherProfile, ApiResponse, Proposal, CreateProposalRequest, AvailabilityBlock, UpdateAvailabilityRequest } from '@/lib/types'
+import { TeacherProfile, ApiResponse, Proposal, CreateProposalRequest, AvailabilityBlock, CreateAvailabilityBlockRequest, UpdateAvailabilityRequest } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 
@@ -138,6 +138,35 @@ export class TeacherService {
   }
 
   /**
+   * Cambia la disponibilidad (activa/inactiva) de una propuesta aprobada
+   * PATCH /teachers/me/proposals/{proposalId}/toggle-availability
+   */
+  static async toggleProposalAvailability(proposalId: number): Promise<ApiResponse<Proposal>> {
+    try {
+      const response = await apiClient.patch<Proposal>(
+        `${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}/toggle-availability`
+      )
+      
+      if (response.success && response.data) {
+        return {
+          data: response.data,
+          success: true,
+          message: 'Disponibilidad actualizada correctamente'
+        }
+      }
+
+      throw new Error(response.error || 'Error al cambiar la disponibilidad')
+    } catch (error) {
+      console.error('Error cambiando disponibilidad de propuesta:', error)
+      return {
+        data: null as any,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al cambiar la disponibilidad'
+      }
+    }
+  }
+
+  /**
    * Obtiene la disponibilidad horaria del docente
    * GET /teachers/me/availability
    */
@@ -165,12 +194,68 @@ export class TeacherService {
   }
 
   /**
-   * Actualiza la disponibilidad horaria del docente
-   * PUT /teachers/me/availability
+   * Agrega un bloque individual de disponibilidad horaria
+   * POST /teachers/me/availability
    */
-  static async updateAvailability(request: UpdateAvailabilityRequest): Promise<ApiResponse<void>> {
+  static async addAvailabilityBlock(request: CreateAvailabilityBlockRequest): Promise<ApiResponse<AvailabilityBlock>> {
     try {
-      const response = await apiClient.put<void>(API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY, request)
+      const response = await apiClient.post<AvailabilityBlock>(API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY, request)
+      
+      if (response.success && response.data) {
+        return {
+          data: response.data,
+          success: true,
+          message: 'Bloque de disponibilidad agregado correctamente'
+        }
+      }
+
+      throw new Error(response.error || 'Error al agregar el bloque')
+    } catch (error) {
+      console.error('Error agregando bloque de disponibilidad:', error)
+      return {
+        data: null as any,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al agregar el bloque'
+      }
+    }
+  }
+
+  /**
+   * Elimina un bloque individual de disponibilidad horaria
+   * DELETE /teachers/me/availability/{id}
+   */
+  static async deleteAvailabilityBlock(blockId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete<void>(`${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`)
+      
+      return {
+        data: undefined,
+        success: true,
+        message: 'Bloque de disponibilidad eliminado correctamente'
+      }
+    } catch (error) {
+      console.error('Error eliminando bloque de disponibilidad:', error)
+      return {
+        data: undefined,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al eliminar el bloque'
+      }
+    }
+  }
+
+  /**
+   * Actualiza las sedes y/o modalidad de un bloque de disponibilidad específico
+   * PATCH /teachers/me/availability/{blockId}
+   */
+  static async updateAvailabilityBlock(
+    blockId: number, 
+    data: { campuses: string[], modality?: string }
+  ): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.patch<void>(
+        `${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
+        data
+      )
       
       return {
         data: undefined,
@@ -178,7 +263,7 @@ export class TeacherService {
         message: 'Disponibilidad actualizada correctamente'
       }
     } catch (error) {
-      console.error('Error actualizando disponibilidad:', error)
+      console.error('Error actualizando disponibilidad del bloque:', error)
       return {
         data: undefined,
         success: false,
