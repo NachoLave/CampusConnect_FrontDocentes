@@ -25,6 +25,7 @@ import { CoursesService, mapBackendCourseToFrontend } from '@/lib/api/services/c
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
+import CourseNotFound from '@/app/cursos/[id]/not-found'
 
 interface CourseInfoProps {
   courseId: string
@@ -747,6 +748,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [course, setCourse] = useState(() => placeholderCourse)
   const [loadingCourse, setLoadingCourse] = useState(true)
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null)
+  const [courseNotFound, setCourseNotFound] = useState(false)
   const students = course.studentsData || []
 
   // Helper to normalize condition/status values (function declaration so it's available to earlier code)
@@ -865,12 +867,28 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
             setCourse(merged)
             setCourseLoadError(null)
+            setCourseNotFound(false)
           } else {
-            setCourseLoadError('Course endpoint returned no data')
+            // Course not found - show 404
+            setCourseNotFound(true)
           }
-        } catch (err) {
-          setCourseLoadError(String(err))
-          console.warn('Error loading course details or roster:', err)
+        } catch (err: any) {
+          // Check if it's a 404 error from the API
+          const errorMessage = String(err)
+          const isNotFoundError = 
+            err?.response?.status === 404 ||
+            err?.status === 404 ||
+            errorMessage.includes('404') ||
+            errorMessage.toLowerCase().includes('not found') ||
+            errorMessage.toLowerCase().includes('no encontrado')
+          
+          if (isNotFoundError) {
+            // Show the not-found page
+            setCourseNotFound(true)
+          } else {
+            setCourseLoadError(errorMessage)
+            console.warn('Error loading course details or roster:', err)
+          }
         } finally {
           if (mounted) setLoadingCourse(false)
         }
@@ -2262,6 +2280,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setGradesFilterConditions((prev) => prev.filter((c) => c !== condition))
   }
 
+  // Show 404 page if course was not found
+  if (courseNotFound) {
+    return <CourseNotFound />
+  }
+
   // Show loading skeleton while course data is being fetched
   if (loadingCourse) {
     return (
@@ -2392,7 +2415,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     <div className="min-h-screen">
       {/* Hero Section with Course Header */}
       <div
-        className="relative h-32 lg:h-48 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900"
+        className="relative h-32 lg:h-48 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 overflow-hidden"
         style={{
           backgroundImage: `url('/geometric-architectural-pattern-dark-blue-building.jpg')`,
           backgroundSize: "cover",
@@ -2400,6 +2423,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           backgroundBlendMode: "overlay",
         }}
       >
+        {/* Blur overlay */}
+        <div className="absolute inset-0 backdrop-blur-sm bg-slate-900/20"></div>
+        
         {/* Back Button */}
         <button
           onClick={() => router.push("/cursos")}
@@ -2521,9 +2547,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         <td className="py-2 lg:py-3 px-3 lg:px-4">
                           <span
                             className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium ${
-                              teacher.role === "Titular"
-                                ? "bg-green-100 text-green-800"
-                                : "bg-orange-100 text-orange-800"
+                              String(teacher.role || '').toUpperCase() === "TITULAR"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-purple-100 text-purple-800"
                             }`}
                           >
                             {teacher.role}

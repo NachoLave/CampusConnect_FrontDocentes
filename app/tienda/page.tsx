@@ -17,6 +17,8 @@ export default function TiendaPage() {
   // allow selecting multiple sedes like Comedor's Estado filter
   const [selectedSedes, setSelectedSedes] = useState<string[]>([])
   const [showSedeFilter, setShowSedeFilter] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
 
   const deriveSede = (address?: string | null) => {
     if (!address) return 'Monserrat'
@@ -72,6 +74,20 @@ export default function TiendaPage() {
       return true
     })
   }, [rows, fromDate, toDate, searchTerm, selectedSedes])
+
+  // Paginación
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return filteredRows.slice(startIndex, endIndex)
+  }, [filteredRows, currentPage])
+
+  const totalPages = Math.ceil(filteredRows.length / itemsPerPage)
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [fromDate, toDate, searchTerm, selectedSedes])
 
   const toggleSede = (sede: string) => {
     setSelectedSedes(prev => prev.includes(sede) ? prev.filter(x => x !== sede) : [...prev, sede])
@@ -310,7 +326,7 @@ export default function TiendaPage() {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map(({ order, item, sede }, idx) => (
+                paginatedRows.map(({ order, item, sede }, idx) => (
                   <tr key={`${order.id}-${item.id}-${idx}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(order.date)}
@@ -336,6 +352,46 @@ export default function TiendaPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {!ordersLoading && filteredRows.length > 0 && totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredRows.length)} de {filteredRows.length} resultados
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Anterior
+              </Button>
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className={page === currentPage ? "bg-slate-800 hover:bg-slate-700" : ""}
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

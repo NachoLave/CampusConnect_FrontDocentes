@@ -24,6 +24,8 @@ export default function ComedorPage() {
   const [estados, setEstados] = useState<string[]>([])
   const [showTipoFilter, setShowTipoFilter] = useState(false)
   const [showEstadoFilter, setShowEstadoFilter] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
 
 
   // Cerrar filtros al hacer click afuera
@@ -94,6 +96,20 @@ export default function ComedorPage() {
       return true
     })
   }, [reservations, fromDate, toDate, tipos, estados])
+
+  // Paginación
+  const paginatedReservations = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return filteredReservations.slice(startIndex, endIndex)
+  }, [filteredReservations, currentPage])
+
+  const totalPages = Math.ceil(filteredReservations.length / itemsPerPage)
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [fromDate, toDate, tipos, estados])
 
   const toggleTipo = (tipo: string) => {
     setTipos(prev => 
@@ -399,7 +415,7 @@ export default function ComedorPage() {
                   </td>
                 </tr>
               ) : (
-                filteredReservations.map((reservation) => (
+                paginatedReservations.map((reservation) => (
                   <tr key={reservation.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(reservation.date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -421,6 +437,46 @@ export default function ComedorPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {!isLoading && filteredReservations.length > 0 && totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredReservations.length)} de {filteredReservations.length} resultados
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Anterior
+              </Button>
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className={page === currentPage ? "bg-slate-800 hover:bg-slate-700" : ""}
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

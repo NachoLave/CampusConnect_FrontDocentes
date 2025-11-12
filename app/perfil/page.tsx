@@ -89,10 +89,6 @@ function ProfileInfoSkeleton() {
             </div>
           ))}
         </div>
-        <div className="flex items-center text-sm text-gray-600 mt-4">
-          <AlertCircle className="w-4 h-4 mr-2" />
-          Los datos de perfil se sincronizan desde Backoffice
-        </div>
       </CardContent>
     </Card>
   )
@@ -1291,10 +1287,6 @@ export default function PerfilPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Correo institucional</label>
                 <div className="bg-gray-100 px-3 py-2 rounded-md text-gray-900">{profile.email}</div>
               </div>
-            </div>
-            <div className="flex items-center text-sm text-gray-600 mt-4">
-              <AlertCircle className="w-4 h-4 mr-2" />
-              Los datos de perfil se sincronizan desde Backoffice
             </div>
           </CardContent>
         </Card>
