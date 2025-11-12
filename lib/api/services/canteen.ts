@@ -21,7 +21,7 @@ export class CanteenService {
     try {
       // Usar proxy interno para evitar CORS/401 en navegador
       const url = `/api/canteen/reservations`
-      console.log('🔗 URL de la petición:', url)
+      console.log('URL de la petición:', url)
 
       // Obtener headers según el modo de autenticación
       const user = authService.getProfile()
@@ -42,10 +42,10 @@ export class CanteenService {
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive'
       }
-      console.log('📋 Headers de la petición:', headers)
+      console.log('Headers de la petición:', headers)
 
       const response = await fetch(url, { method: 'GET', headers })
-      console.log('📡 Respuesta del servidor:', {
+      console.log('Respuesta del servidor:', {
         status: response.status,
         statusText: response.statusText,
         headers: Object.fromEntries(response.headers.entries())
@@ -53,7 +53,7 @@ export class CanteenService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('❌ Error del servidor:', {
+        console.error('Error del servidor:', {
           status: response.status,
           statusText: response.statusText,
           body: errorText
@@ -62,11 +62,11 @@ export class CanteenService {
       }
 
       const data = await response.json()
-      console.log('📊 Datos recibidos del servidor:', data)
+      console.log('Datos recibidos del servidor:', data)
 
       // El endpoint devuelve { value: [...], Count: number }
       const reservationsData = data.value || data
-      console.log('📊 Datos de reservas extraídos:', reservationsData)
+      console.log('Datos de reservas extraídos:', reservationsData)
 
        const deriveMealType = (d: Date) => {
          const h = d.getHours()
@@ -96,14 +96,14 @@ export class CanteenService {
            total: r.menu || r.type || 'Menu no especificado', // Mostrar el menu en la columna 'Menú'
            status: mapStatus(r.status || r.estado || 'Pendiente')
          }
-         console.log('🔄 Mapeando reserva:', { original: r, mapped })
+         console.log('Mapeando reserva:', { original: r, mapped })
          return mapped
        }) : []
 
-      console.log('✅ Reservas procesadas:', reservations)
+      console.log('Reservas procesadas:', reservations)
       return { data: reservations, success: true, message: 'Reservas de comedor obtenidas' }
     } catch (error) {
-      console.error('❌ Error obteniendo reservas de comedor:', error)
+      console.error('Error obteniendo reservas de comedor:', error)
       return { 
         data: [] as any, 
         success: false, 

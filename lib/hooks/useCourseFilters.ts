@@ -28,7 +28,7 @@ export function useCourseFilters(selectedPeriod?: string) {
       if (coursesResponse.success && coursesResponse.data) {
         // Extraer sedes únicas de los cursos del usuario
         const uniqueSedes = [...new Set(coursesResponse.data.map(course => course.sede).filter(Boolean))].sort()
-        console.log('🏢 Sedes únicas del usuario (todos los períodos):', uniqueSedes)
+        console.log('Sedes únicas del usuario (todos los períodos):', uniqueSedes)
         setSedes(uniqueSedes)
       } else {
         setSedesLoading({
@@ -72,7 +72,7 @@ export function useCourseFilters(selectedPeriod?: string) {
         const uniqueDays = [...new Set(coursesResponse.data.map(course => course.day).filter(Boolean))]
           .sort((a, b) => (dayOrder[a] || 0) - (dayOrder[b] || 0))
         
-        console.log('📅 Días únicos del usuario ordenados:', uniqueDays)
+        console.log('Días únicos del usuario ordenados:', uniqueDays)
         setDays(uniqueDays)
       } else {
         setDaysLoading({

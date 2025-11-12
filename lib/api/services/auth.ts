@@ -23,7 +23,7 @@ class AuthService {
    */
   initializeMockMode(): void {
     if (!USE_MOCK_DATA) {
-      console.warn('⚠️ initializeMockMode() llamado pero USE_MOCK_DATA es false')
+      console.warn('initializeMockMode() llamado pero USE_MOCK_DATA es false')
       return
     }
     
@@ -37,7 +37,7 @@ class AuthService {
       localStorage.setItem('mock_token', MOCK_TOKEN)
     }
     
-    console.log('🔧 Modo mock de autenticación inicializado')
+    console.log('Modo mock de autenticación inicializado')
   }
 
   /**
@@ -147,7 +147,7 @@ class AuthService {
       localStorage.removeItem('mock_token')
     }
     
-    console.log('👋 Usuario deslogueado')
+    console.log('Usuario deslogueado')
   }
 
   /**

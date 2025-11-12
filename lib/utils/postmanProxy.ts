@@ -65,7 +65,7 @@ class PostmanProxy {
         const contentType = response.headers.get('content-type')
         if (!contentType || !contentType.includes('application/json')) {
           const text = await response.text()
-          console.warn('⚠️ Respuesta no es JSON:', text.substring(0, 100))
+          console.warn('Respuesta no es JSON:', text.substring(0, 100))
           throw new Error('Respuesta del servidor no es válida')
         }
 

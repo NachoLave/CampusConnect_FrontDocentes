@@ -28,7 +28,7 @@ export class WalletService {
   // Método para actualizar el balance manualmente (desde Postman)
   static updateBalanceFromPostman(newBalance: number) {
     this.currentBalance = newBalance
-    console.log(`💰 Balance actualizado desde Postman: $${newBalance}`)
+    console.log(`Balance actualizado desde Postman: $${newBalance}`)
   }
   // Obtener información de la billetera
   static async getWalletInfo(): Promise<ApiResponse<WalletInfo>> {
@@ -289,7 +289,7 @@ export class WalletService {
         }
       }
 
-      console.log('💰 Intentando acreditar saldo:', { amount, teacherId })
+      console.log('Intentando acreditar saldo:', { amount, teacherId })
 
       // Usar los mismos headers que postmanProxy para autenticación mock
       const headers = {
@@ -302,7 +302,7 @@ export class WalletService {
         'Content-Type': 'application/json'
       }
 
-      console.log('🔑 Headers de autenticación:', headers)
+      console.log('Headers de autenticación:', headers)
 
       // Usar fetch directamente con los mismos headers que postmanProxy
       const response = await fetch('https://modulodocentefinal-production.up.railway.app/teachers/me/account/balance', {
@@ -314,17 +314,17 @@ export class WalletService {
         })
       })
 
-      console.log('📡 Status de respuesta:', response.status)
-      console.log('📡 Headers de respuesta:', response.headers)
+      console.log('Status de respuesta:', response.status)
+      console.log('Headers de respuesta:', response.headers)
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('❌ Error del servidor:', errorText)
+        console.error('Error del servidor:', errorText)
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
-      console.log('📡 Datos de respuesta:', data)
+      console.log('Datos de respuesta:', data)
 
       return {
         data: {
@@ -335,7 +335,7 @@ export class WalletService {
         message: 'Saldo acreditado correctamente'
       }
     } catch (error) {
-      console.error('❌ Error acreditando saldo:', error)
+      console.error('Error acreditando saldo:', error)
       return {
         data: null as any,
         success: false,

@@ -11,7 +11,7 @@ export function useMockAuth() {
     if (USE_MOCK_DATA) {
       // Inicializar modo mock automáticamente
       authService.initializeMockMode()
-      console.log('🔧 Modo mock de autenticación inicializado')
+      console.log('Modo mock de autenticación inicializado')
     }
   }, [])
 }

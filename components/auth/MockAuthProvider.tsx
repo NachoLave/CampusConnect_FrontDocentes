@@ -20,7 +20,7 @@ export function MockAuthProvider({ children }: MockAuthProviderProps) {
   // Configurar headers de autenticación globalmente para apiClient
   useEffect(() => {
     apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-    console.log('🔐 Headers de autenticación configurados:', {
+    console.log('Headers de autenticación configurados:', {
       'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
       'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES
     })

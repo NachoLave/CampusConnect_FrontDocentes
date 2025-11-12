@@ -82,8 +82,8 @@ export default function DashboardPage() {
   const { events: weeklyEvents, isLoading: eventsLoading } = useWeeklyCalendar(weekRange.start, weekRange.end)
 
   // Debug: Log de eventos recibidos
-  console.log('🔍 Dashboard - Eventos semanales recibidos:', weeklyEvents)
-  console.log('📅 Dashboard - Rango de semana:', weekRange)
+  console.log('Dashboard - Eventos semanales recibidos:', weeklyEvents)
+  console.log('Dashboard - Rango de semana:', weekRange)
 
 
   const startAutoTransition = () => {

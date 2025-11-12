@@ -16,8 +16,9 @@ export default function CargarSaldoPage() {
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvc, setCardCvc] = useState("")
   const [amount, setAmount] = useState("")
-  const AMOUNT_MAX = 1000000
+  const AMOUNT_MAX = 500000
   const [amountErrorMessage, setAmountErrorMessage] = useState<string | null>(null)
+  const [expiryErrorMessage, setExpiryErrorMessage] = useState<string | null>(null)
   const [cardType, setCardType] = useState<"VISA" | "MASTERCARD" | "">("")
   const [focusCvc, setFocusCvc] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -46,17 +47,62 @@ export default function CargarSaldoPage() {
     setCardNumber(formatted)
   }
 
-  // Formatear vencimiento
+  // Formatear vencimiento y validar
   const handleExpiryChange = (value: string) => {
     let formatted = value.replace(/\D/g, "")
     if (formatted.length >= 3) formatted = `${formatted.slice(0, 2)}/${formatted.slice(2, 4)}`
     setCardExpiry(formatted)
+    
+    // Validar en tiempo real
+    if (formatted.length >= 2) {
+      const month = parseInt(formatted.slice(0, 2))
+      if (month < 1 || month > 12) {
+        setExpiryErrorMessage("El mes debe estar entre 01 y 12")
+      } else {
+        setExpiryErrorMessage(null)
+      }
+    } else {
+      setExpiryErrorMessage(null)
+    }
   }
 
   // Limitar nombre
   const handleCardNameChange = (value: string) => {
     if (value.length <= 20) setCardName(value.toUpperCase())
     else setCardName(value.slice(0, 20).toUpperCase())
+  }
+
+  // Limitar monto
+  const handleAmountChange = (value: string) => {
+    // Permitir solo números y punto decimal
+    const cleanValue = value.replace(/[^\d.]/g, "")
+    
+    // Si hay más de un punto, mantener solo el primero
+    const parts = cleanValue.split(".")
+    let formattedValue = parts[0]
+    if (parts.length > 1) {
+      formattedValue += "." + parts.slice(1).join("")
+    }
+    
+    // Limitar a 2 decimales
+    if (formattedValue.includes(".")) {
+      const [integer, decimals] = formattedValue.split(".")
+      formattedValue = integer + "." + decimals.slice(0, 2)
+    }
+    
+    // Convertir a número y validar máximo
+    const numValue = parseFloat(formattedValue)
+    if (!isNaN(numValue) && numValue > AMOUNT_MAX) {
+      // No permitir ingresar más del máximo
+      setAmount(AMOUNT_MAX.toString())
+      setAmountErrorMessage("No se puede cargar más de $500,000 por transaccion")
+    } else {
+      setAmount(formattedValue)
+      // Limpiar mensaje si el valor es válido
+      if (formattedValue === "" || numValue <= AMOUNT_MAX) {
+        setAmountErrorMessage(null)
+      }
+    }
   }
 
   // Fondo por tipo
@@ -72,7 +118,7 @@ export default function CargarSaldoPage() {
   }
 
   const handleLoadSaldo = async () => {
-    // Validación
+    // Validación de monto
     const parsedAmount = parseFloat(amount || '0')
     let amountErr = false
     let amountMsg: string | null = null
@@ -81,18 +127,44 @@ export default function CargarSaldoPage() {
       amountMsg = 'Completá el monto a acreditar'
     } else if (parsedAmount > AMOUNT_MAX) {
       amountErr = true
-      amountMsg = `El monto máximo permitido es $${AMOUNT_MAX.toLocaleString()}`
+      amountMsg = "No se puede cargar más de $500,000 por transaccion"
+    }
+
+    // Validación de vencimiento
+    let expiryErr = false
+    let expiryMsg: string | null = null
+    if (!cardExpiry.trim()) {
+      expiryErr = true
+      expiryMsg = 'Completá el vencimiento'
+    } else {
+      // Validar formato MM/AA
+      const expiryParts = cardExpiry.split('/')
+      if (expiryParts.length === 2) {
+        const month = parseInt(expiryParts[0])
+        if (isNaN(month) || month < 1 || month > 12) {
+          expiryErr = true
+          expiryMsg = 'El mes debe estar entre 01 y 12'
+        }
+      } else if (cardExpiry.length >= 2) {
+        // Validar mes incluso si no tiene el formato completo
+        const month = parseInt(cardExpiry.slice(0, 2))
+        if (isNaN(month) || month < 1 || month > 12) {
+          expiryErr = true
+          expiryMsg = 'El mes debe estar entre 01 y 12'
+        }
+      }
     }
 
     const newErrors = {
       cardNumber: !cardNumber.trim(),
       cardName: !cardName.trim(),
-      cardExpiry: !cardExpiry.trim(),
+      cardExpiry: expiryErr,
       cardCvc: !cardCvc.trim(),
       amount: amountErr,
     }
     setErrors(newErrors)
     setAmountErrorMessage(amountMsg)
+    setExpiryErrorMessage(expiryMsg)
 
   // Si hay algún error, no continuar
   if (Object.values(newErrors).some(Boolean)) return
@@ -184,7 +256,10 @@ export default function CargarSaldoPage() {
                   onFocus={() => setFocusCvc(false)}
                 />
                 {errors.cardExpiry && (
-                  <p className="text-red-500 text-xs mt-1">Completá el vencimiento</p>
+                  <p className="text-red-500 text-xs mt-1">{expiryErrorMessage || 'Completá el vencimiento'}</p>
+                )}
+                {expiryErrorMessage && !errors.cardExpiry && (
+                  <p className="text-red-500 text-xs mt-1">{expiryErrorMessage}</p>
                 )}
               </div>
               <div>
@@ -209,9 +284,9 @@ export default function CargarSaldoPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Monto a cargar</label>
               <input
-                type="number"
+                type="text"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => handleAmountChange(e.target.value)}
                 min={0}
                 max={AMOUNT_MAX}
                 step={0.01}
@@ -220,6 +295,9 @@ export default function CargarSaldoPage() {
               />
               {errors.amount && (
                 <p className="text-red-500 text-xs mt-1">{amountErrorMessage || 'Completá el monto a acreditar'}</p>
+              )}
+              {amountErrorMessage && !errors.amount && (
+                <p className="text-red-500 text-xs mt-1">{amountErrorMessage}</p>
               )}
             </div>
           </div>

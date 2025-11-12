@@ -113,7 +113,7 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
       }
       
       const totalBlocks = selectedDays.length * selectedShifts.length
-      console.log(`📋 Creando ${totalBlocks} bloques de disponibilidad...`)
+      console.log(`Creando ${totalBlocks} bloques de disponibilidad...`)
       
       // Generar todas las combinaciones y llamar a onAddAvailability para cada una
       selectedDays.forEach(day => {

@@ -512,13 +512,13 @@ export default function PerfilPage() {
         }
         // Si result es null/undefined, intentar de nuevo
         if (attempt < maxRetries) {
-          console.log(`🔄 Reintentando operación (intento ${attempt + 2}/${maxRetries + 1})...`)
+          console.log(`Reintentando operación (intento ${attempt + 2}/${maxRetries + 1})...`)
           await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, attempt)))
         }
       } catch (error) {
-        console.error(`❌ Error en intento ${attempt + 1}:`, error)
+        console.error(`Error en intento ${attempt + 1}:`, error)
         if (attempt < maxRetries) {
-          console.log(`🔄 Reintentando en ${delayMs * Math.pow(2, attempt)}ms...`)
+          console.log(`Reintentando en ${delayMs * Math.pow(2, attempt)}ms...`)
           await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, attempt)))
         }
       }
@@ -537,7 +537,7 @@ export default function PerfilPage() {
     
     // Si ya está siendo procesado, omitir
     if (processingBlocksRef.current.has(blockKey)) {
-      console.log('⏭️ Bloque ya en proceso, omitiendo duplicado:', blockKey)
+      console.log('Bloque ya en proceso, omitiendo duplicado:', blockKey)
       return
     }
     
@@ -594,9 +594,9 @@ export default function PerfilPage() {
           const updatedCampuses = [...campusesEnAmbas, ...sedesNuevas, 'VIR'] // Mantener VIR
           const updatedBlock = { ...ambasBlock, campuses: updatedCampuses }
           
-          console.log(`🔄 Agregando sedes a bloque AMBAS existente:`, sedesNuevas.map(c => getCampusName(c)).join(', '))
-          console.log(`🔄 PATCH /teachers/me/availability/${ambasBlockId}`)
-          console.log('📦 Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
+          console.log(`Agregando sedes a bloque AMBAS existente:`, sedesNuevas.map(c => getCampusName(c)).join(', '))
+          console.log(`PATCH /teachers/me/availability/${ambasBlockId}`)
+          console.log('Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
           
           // Optimistic Update
           setAvailability(prev => prev.map(b => 
@@ -605,7 +605,7 @@ export default function PerfilPage() {
           
           // Hacer PATCH al backend con retry
           retryOperation(() => updateAvailabilityBlock(ambasBlockId, { campuses: updatedCampuses }), 2, 1000).then(success => {
-            console.log('✅ Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
+            console.log('Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
             if (success) {
               failedAvailabilityAttemptsRef.current = 0
               // Mostrar mensaje informativo
@@ -622,7 +622,7 @@ export default function PerfilPage() {
               ))
               
               if (failedAvailabilityAttemptsRef.current >= 2) {
-                console.log('⚠️ Múltiples fallos detectados, sincronizando con servidor...')
+                console.log('Múltiples fallos detectados, sincronizando con servidor...')
                 setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
                 refetchAvailability().then(() => {
                   failedAvailabilityAttemptsRef.current = 0
@@ -671,7 +671,7 @@ export default function PerfilPage() {
       // Si hay consolidación, actualizar el payload
       if (sedesPresencialesExistentes.size > 0) {
         const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c))
-        console.log(`🔀 Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
+        console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
         
         // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
         availabilityData.campuses = [...sedesConsolidadas, 'VIR']
@@ -695,7 +695,7 @@ export default function PerfilPage() {
       
       if (virtualBlock && virtualBlock.id) {
         const virtualBlockId = virtualBlock.id
-        console.log('🗑️ Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
+        console.log('Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
         
         setAvailability(prev => prev.filter(b => b.id !== virtualBlockId))
         
@@ -712,7 +712,7 @@ export default function PerfilPage() {
         if (!presencialBlock.id) return
         
         const presencialBlockId = presencialBlock.id
-        console.log('🗑️ Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
+        console.log('Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
         
         setAvailability(prev => prev.filter(b => b.id !== presencialBlockId))
         
@@ -741,7 +741,7 @@ export default function PerfilPage() {
       
       if (newCampuses.length === 0) {
         // Bloque idéntico ya existe - omitir silenciosamente (para creación múltiple)
-        console.log('⏭️ Bloque duplicado omitido:', availabilityData)
+        console.log('Bloque duplicado omitido:', availabilityData)
         return
       }
       
@@ -756,10 +756,10 @@ export default function PerfilPage() {
       const existingBlockId = existingBlock.id // Capturar ID para uso en closure
       
       // 🔍 LOG TEMPORAL - Request PATCH
-      console.log(`🔄 PATCH /teachers/me/availability/${existingBlockId}`)
-      console.log('📦 Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
-      console.log('📋 Bloque existente:', existingBlock)
-      console.log('➕ Sedes nuevas a agregar:', newCampuses)
+      console.log(`PATCH /teachers/me/availability/${existingBlockId}`)
+      console.log('Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
+      console.log('Bloque existente:', existingBlock)
+      console.log('Sedes nuevas a agregar:', newCampuses)
       
       // Optimistic Update: Actualizar inmediatamente en la UI
       setAvailability(prev => prev.map(b => 
@@ -768,7 +768,7 @@ export default function PerfilPage() {
       
       // Hacer la petición real al backend con retry
       retryOperation(() => updateAvailabilityBlock(existingBlockId, { campuses: updatedCampuses }), 2, 1000).then(success => {
-        console.log('✅ Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
+        console.log('Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
         if (success) {
           failedAvailabilityAttemptsRef.current = 0
         } else {
@@ -782,7 +782,7 @@ export default function PerfilPage() {
           
           // Si hay múltiples fallos, sincronizar
           if (failedAvailabilityAttemptsRef.current >= 2) {
-            console.log('⚠️ Múltiples fallos detectados, sincronizando con servidor...')
+            console.log('Múltiples fallos detectados, sincronizando con servidor...')
             setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
             refetchAvailability().then(() => {
               failedAvailabilityAttemptsRef.current = 0
@@ -809,16 +809,16 @@ export default function PerfilPage() {
         modality: newBlock.modality,
         campuses: newBlock.campuses // Si es Virtual viene ["VIR"], si no, las sedes seleccionadas
       }
-      console.log('🚀 POST /teachers/me/availability')
-      console.log('📦 Request Body:', JSON.stringify(requestPayload, null, 2))
-      console.log('📋 Datos desde modal:', availabilityData)
+      console.log('POST /teachers/me/availability')
+      console.log('Request Body:', JSON.stringify(requestPayload, null, 2))
+      console.log('Datos desde modal:', availabilityData)
       
       // Optimistic Update: Agregar inmediatamente a la UI
       setAvailability(prev => [...prev, newBlock])
       
       // Hacer la petición real en background con retry
       retryOperation(() => addAvailability(requestPayload), 2, 1000).then(createdBlock => {
-        console.log('✅ Respuesta POST availability:', createdBlock ? 'SUCCESS' : 'FAILED')
+        console.log('Respuesta POST availability:', createdBlock ? 'SUCCESS' : 'FAILED')
         if (createdBlock) {
           // Reemplazar el bloque optimista con el bloque real del servidor
           setAvailability(prev => prev.map(b => 
@@ -835,7 +835,7 @@ export default function PerfilPage() {
           
           // Si hay múltiples fallos consecutivos, hacer refetch para sincronizar
           if (failedAvailabilityAttemptsRef.current >= 2) {
-            console.log('⚠️ Múltiples fallos detectados, sincronizando con servidor...')
+            console.log('Múltiples fallos detectados, sincronizando con servidor...')
             setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
             refetchAvailability().then(() => {
               failedAvailabilityAttemptsRef.current = 0
@@ -864,10 +864,10 @@ export default function PerfilPage() {
     }
     
     // 🔍 LOG TEMPORAL - Request PATCH
-    console.log(`🔄 PATCH /teachers/me/availability/${blockId}`)
-    console.log('📦 Request Body:', JSON.stringify(data, null, 2))
-    console.log('📋 Bloque original:', editingBlock)
-    console.log('✏️ Datos actualizados:', data)
+    console.log(`PATCH /teachers/me/availability/${blockId}`)
+    console.log('Request Body:', JSON.stringify(data, null, 2))
+    console.log('Bloque original:', editingBlock)
+    console.log('Datos actualizados:', data)
     
     // VALIDACIÓN: Si se intenta cambiar a VIRTUAL cuando ya existe AMBAS (mismo día + turno)
     if (data.modality === 'VIRTUAL') {
@@ -943,7 +943,7 @@ export default function PerfilPage() {
       // Si hay consolidación, actualizar los campuses
       if (sedesPresencialesExistentes.size > 0) {
         const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c))
-        console.log(`🔀 Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
+        console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
         
         // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
         data.campuses = [...sedesConsolidadas, 'VIR']
@@ -969,7 +969,7 @@ export default function PerfilPage() {
       
       if (virtualBlock && virtualBlock.id) {
         const virtualBlockId = virtualBlock.id
-        console.log('🗑️ Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
+        console.log('Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
         
         setAvailability(prev => prev.filter(b => b.id !== virtualBlockId))
         
@@ -986,7 +986,7 @@ export default function PerfilPage() {
         if (!presencialBlock.id) return
         
         const presencialBlockId = presencialBlock.id
-        console.log('🗑️ Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
+        console.log('Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
         
         setAvailability(prev => prev.filter(b => b.id !== presencialBlockId))
         
@@ -1009,7 +1009,7 @@ export default function PerfilPage() {
     
     // Hacer la petición real al backend con retry
     retryOperation(() => updateAvailabilityBlock(blockId, data), 2, 1000).then(success => {
-      console.log('✅ Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
+      console.log('Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
       if (success) {
         failedAvailabilityAttemptsRef.current = 0
       } else {
@@ -1023,7 +1023,7 @@ export default function PerfilPage() {
         
         // Si hay múltiples fallos, sincronizar
         if (failedAvailabilityAttemptsRef.current >= 2) {
-          console.log('⚠️ Múltiples fallos detectados, sincronizando con servidor...')
+          console.log('Múltiples fallos detectados, sincronizando con servidor...')
           setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
           refetchAvailability().then(() => {
             failedAvailabilityAttemptsRef.current = 0
@@ -1074,9 +1074,9 @@ export default function PerfilPage() {
         const previousAvailability = [...availability]
         
         // 🔍 LOG TEMPORAL - Request DELETE
-        console.log('🗑️ DELETE /teachers/me/availability/' + blockIdToDelete)
-        console.log('📋 Block ID a eliminar:', blockIdToDelete)
-        console.log('📊 Bloque completo:', availability.find(b => b.id === blockIdToDelete))
+        console.log('DELETE /teachers/me/availability/' + blockIdToDelete)
+        console.log('Block ID a eliminar:', blockIdToDelete)
+        console.log('Bloque completo:', availability.find(b => b.id === blockIdToDelete))
         
         // Cerrar modal primero
         setDeleteTarget(null)
@@ -1087,7 +1087,7 @@ export default function PerfilPage() {
         
         // Hacer la petición real al backend en background con retry
         retryOperation(() => deleteAvailability(blockIdToDelete), 2, 1000).then(success => {
-          console.log('✅ Respuesta DELETE availability:', success ? 'SUCCESS' : 'FAILED')
+          console.log('Respuesta DELETE availability:', success ? 'SUCCESS' : 'FAILED')
           if (success) {
             failedAvailabilityAttemptsRef.current = 0
           } else {
@@ -1099,7 +1099,7 @@ export default function PerfilPage() {
             
             // Si hay múltiples fallos, sincronizar
             if (failedAvailabilityAttemptsRef.current >= 2) {
-              console.log('⚠️ Múltiples fallos detectados, sincronizando con servidor...')
+              console.log('Múltiples fallos detectados, sincronizando con servidor...')
               setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
               refetchAvailability().then(() => {
                 failedAvailabilityAttemptsRef.current = 0

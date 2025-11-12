@@ -153,13 +153,13 @@ export function useCoursesByPeriod(term: string, includePrevious: boolean = fals
   })
 
   const fetchCoursesByPeriod = useCallback(async () => {
-    console.log('🔄 useCoursesByPeriod - Iniciando carga:', { term, includePrevious })
+    console.log('useCoursesByPeriod - Iniciando carga:', { term, includePrevious })
     setLoadingState({ isLoading: true, error: null })
     
     try {
       const response = await CoursesService.getCoursesByPeriod(term, includePrevious)
       
-      console.log('📊 useCoursesByPeriod - Respuesta recibida:', {
+      console.log('useCoursesByPeriod - Respuesta recibida:', {
         success: response.success,
         dataLength: response.data?.length || 0,
         error: response.error,
@@ -168,9 +168,9 @@ export function useCoursesByPeriod(term: string, includePrevious: boolean = fals
       
       if (response.success) {
         setCourses(response.data)
-        console.log('✅ useCoursesByPeriod - Cursos establecidos:', response.data.length)
+        console.log('useCoursesByPeriod - Cursos establecidos:', response.data.length)
       } else {
-        console.log('❌ useCoursesByPeriod - Error en respuesta:', response.error)
+        console.log('useCoursesByPeriod - Error en respuesta:', response.error)
         setLoadingState({ 
           isLoading: false, 
           error: response.error || 'Error al cargar cursos del período' 
@@ -178,7 +178,7 @@ export function useCoursesByPeriod(term: string, includePrevious: boolean = fals
         return
       }
     } catch (error) {
-      console.log('💥 useCoursesByPeriod - Error capturado:', error)
+      console.log('useCoursesByPeriod - Error capturado:', error)
       setLoadingState({ 
         isLoading: false, 
         error: 'Error inesperado al cargar cursos del período' 

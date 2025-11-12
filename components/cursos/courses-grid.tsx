@@ -77,7 +77,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   const shouldShowError = error && backendCourses.length === 0
   
   // Debug logs
-  console.log('🔍 CoursesGrid Debug:', {
+  console.log('CoursesGrid Debug:', {
     selectedPeriod,
     backendCourses: backendCourses.length,
     allCourses: allCourses.length,
@@ -91,7 +91,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   const sedes = availableSedes
   const days = availableDays
   
-  console.log('🔍 CoursesGrid - Filtros disponibles:', {
+  console.log('CoursesGrid - Filtros disponibles:', {
     selectedPeriod,
     availableSedes,
     availableDays,
@@ -136,7 +136,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   }, [allCourses, selectedPeriod])
 
   const filteredAndSortedCourses = useMemo(() => {
-    console.log('🔍 Filtering courses:', {
+    console.log('Filtering courses:', {
       totalCourses: allCourses.length,
       searchTerm,
       selectedSedes,
@@ -159,7 +159,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       
       const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
       
-      console.log('🔍 Course filter check:', {
+      console.log('Course filter check:', {
         title: course.title,
         courseDay: course.day,
         courseDayNormalized,
@@ -174,7 +174,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod
       
       if (!matches) {
-        console.log('❌ Course filtered out:', {
+        console.log('Course filtered out:', {
           title: course.title,
           period: course.period,
           selectedPeriod,
@@ -188,7 +188,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       return matches
     })
 
-    console.log('✅ Filtered courses:', filtered.length)
+    console.log('Filtered courses:', filtered.length)
 
     // Sort by day and then by shift
     return filtered.sort((a, b) => {

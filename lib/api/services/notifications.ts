@@ -65,10 +65,10 @@ export class NotificationsService {
 
   // Obtener notificaciones del docente
   static async getNotifications(): Promise<ApiResponse<Notification[]>> {
-    console.log('🔍 NotificationsService.getNotifications() - USE_MOCK_DATA:', APP_CONFIG.USE_MOCK_DATA)
+    console.log('NotificationsService.getNotifications() - USE_MOCK_DATA:', APP_CONFIG.USE_MOCK_DATA)
     
     if (APP_CONFIG.USE_MOCK_DATA) {
-      console.log('📱 Usando datos mock para notificaciones')
+      console.log('Usando datos mock para notificaciones')
       await new Promise(resolve => setTimeout(resolve, 300))
       
       const mockNotifications: Notification[] = [
@@ -110,7 +110,7 @@ export class NotificationsService {
     }
 
     try {
-      console.log('🌐 Intentando obtener notificaciones reales del backend...')
+      console.log('Intentando obtener notificaciones reales del backend...')
       
       const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}`
       
@@ -123,7 +123,7 @@ export class NotificationsService {
         'Connection': 'keep-alive'
       }
 
-      console.log(`📡 Llamando al backend real: ${url}`)
+      console.log(`Llamando al backend real: ${url}`)
       
       const response = await fetch(url, {
         method: 'GET',
@@ -135,7 +135,7 @@ export class NotificationsService {
       }
 
       const data = await response.json()
-      console.log('✅ Notificaciones obtenidas del backend real:', data)
+      console.log('Notificaciones obtenidas del backend real:', data)
       
       // Convertir las notificaciones del backend al formato del frontend
       const convertedNotifications = data.map((backendNotif: BackendNotification) => 
@@ -148,10 +148,10 @@ export class NotificationsService {
         message: 'Notificaciones obtenidas del backend'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo notificaciones del backend:', error)
+      console.error('Error obteniendo notificaciones del backend:', error)
       
       // Fallback a datos mock en caso de error
-      console.log('🔄 Usando notificaciones de fallback')
+      console.log('Usando notificaciones de fallback')
       const fallbackNotifications: Notification[] = [
         {
           id: "fallback-1",
@@ -207,7 +207,7 @@ export class NotificationsService {
         message: 'Notificación marcada como leída'
       }
     } catch (error) {
-      console.error('❌ Error marcando notificación como leída:', error)
+      console.error('Error marcando notificación como leída:', error)
       return {
         data: undefined,
         success: false,

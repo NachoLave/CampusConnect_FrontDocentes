@@ -60,8 +60,8 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
   const isActive = (label: string) => selectedPeriod === label || (label === "Todos" && selectedPeriod === "Todos")
 
   const handleClick = (label: string) => {
-    // "Anteriores" mostrará todos los cursos, limpiando el filtro de período
-    if (label === "Anteriores") {
+    // "Todas" mostrará todos los cursos, limpiando el filtro de período
+    if (label === "Todas") {
       onSelectPeriod("Todos")
       return
     }
@@ -89,10 +89,10 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
           <span className="sm:hidden">1er {year}</span>
         </button>
         <button
-          onClick={() => handleClick("Anteriores")}
+          onClick={() => handleClick("Todas")}
           className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium border-l border-gray-300 ${selectedPeriod === "Todos" ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
         >
-          Anteriores
+          Todas
         </button>
       </div>
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-3">

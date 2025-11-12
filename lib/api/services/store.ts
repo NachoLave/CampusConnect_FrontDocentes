@@ -76,10 +76,10 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: nu
 export class StoreService {
   // Obtener historial de órdenes de tienda
   static async getOrders(): Promise<ApiResponse<StoreOrder[]>> {
-    console.log('🛒 StoreService.getOrders() - Obteniendo historial de órdenes')
+    console.log('StoreService.getOrders() - Obteniendo historial de órdenes')
     
     try {
-      console.log('🌐 Llamando al backend real...')
+      console.log('Llamando al backend real...')
       
       const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STORE_ORDERS}`
       
@@ -99,7 +99,7 @@ export class StoreService {
         }
       }
 
-      console.log(`📡 Llamando al backend real: ${url}`)
+      console.log(`Llamando al backend real: ${url}`)
       
       // Usar fetch con timeout para evitar que se quede colgado en móviles
       const response = await fetchWithTimeout(url, {
@@ -116,12 +116,12 @@ export class StoreService {
       const contentType = response.headers.get('content-type')
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text()
-        console.warn('⚠️ Respuesta no es JSON:', text.substring(0, 100))
+        console.warn('Respuesta no es JSON:', text.substring(0, 100))
         throw new Error('Respuesta del servidor no es válida')
       }
 
       const data = await response.json()
-      console.log('✅ Órdenes obtenidas del backend real:', data)
+      console.log('Órdenes obtenidas del backend real:', data)
       
       // Validar y limpiar los datos de las órdenes
       const validatedOrders = Array.isArray(data) ? data.map(order => ({
@@ -156,7 +156,7 @@ export class StoreService {
         message: 'Historial de órdenes obtenido correctamente'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo órdenes:', error)
+      console.error('Error obteniendo órdenes:', error)
       
       // Mensaje de error más específico según el tipo de error
       let errorMessage = 'No se pudo obtener el historial de órdenes'
@@ -183,7 +183,7 @@ export class StoreService {
 
   // Obtener resumen de órdenes
   static async getOrderSummary(): Promise<ApiResponse<StoreOrderSummary>> {
-    console.log('📊 StoreService.getOrderSummary() - Obteniendo resumen de órdenes')
+    console.log('StoreService.getOrderSummary() - Obteniendo resumen de órdenes')
     
     try {
       const ordersResponse = await this.getOrders()
@@ -210,7 +210,7 @@ export class StoreService {
         message: 'Resumen de órdenes obtenido correctamente'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo resumen:', error)
+      console.error('Error obteniendo resumen:', error)
       return {
         data: null as any,
         success: false,
@@ -226,7 +226,7 @@ export class StoreService {
     page: number
     totalPages: number
   }>> {
-    console.log('📄 StoreService.getOrdersPaginated() - Obteniendo órdenes paginadas')
+    console.log('StoreService.getOrdersPaginated() - Obteniendo órdenes paginadas')
     
     try {
       const ordersResponse = await this.getOrders()
@@ -257,7 +257,7 @@ export class StoreService {
         message: 'Órdenes paginadas obtenidas correctamente'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo órdenes paginadas:', error)
+      console.error('Error obteniendo órdenes paginadas:', error)
       return {
         data: null as any,
         success: false,
@@ -268,7 +268,7 @@ export class StoreService {
 
   // Exportar órdenes (para futuras funcionalidades)
   static async exportOrders(): Promise<ApiResponse<Blob>> {
-    console.log('📤 StoreService.exportOrders() - Exportando órdenes')
+    console.log('StoreService.exportOrders() - Exportando órdenes')
     
     try {
       const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STORE_EXPORT}`
@@ -283,7 +283,7 @@ export class StoreService {
         'Connection': 'keep-alive'
       }
 
-      console.log(`📡 Exportando órdenes desde: ${url}`)
+      console.log(`Exportando órdenes desde: ${url}`)
       
       const response = await fetch(url, {
         method: 'GET',
@@ -295,7 +295,7 @@ export class StoreService {
       }
 
       const blob = await response.blob()
-      console.log('✅ Órdenes exportadas correctamente')
+      console.log('Órdenes exportadas correctamente')
       
       return {
         data: blob,
@@ -303,7 +303,7 @@ export class StoreService {
         message: 'Órdenes exportadas correctamente'
       }
     } catch (error) {
-      console.error('❌ Error exportando órdenes:', error)
+      console.error('Error exportando órdenes:', error)
       return {
         data: null as any,
         success: false,
