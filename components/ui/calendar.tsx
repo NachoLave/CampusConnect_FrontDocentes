@@ -14,16 +14,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
 const EventsContext = React.createContext<Record<string, any> | undefined>(undefined)
 
 // Componente para renderizar los puntos de eventos
+// Siempre reserva el espacio para los puntitos, incluso si no hay eventos
 function EventDots({ date }: { date: Date }) {
   const events = React.useContext(EventsContext)
   const dayKey = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const key = dayKey.trim()
   const meta = events?.[key] || {}
   
-  if (!meta.clase && !meta.examen && !meta.evento && !meta.comedor) {
-    return null
-  }
-  
+  // Siempre renderizar el contenedor para mantener el espacio reservado
   return (
     <div 
       className="flex items-center justify-center gap-0.5 mt-1 h-2 min-h-[8px] pointer-events-none"
@@ -44,7 +42,7 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
-  captionLayout = 'label',
+  captionLayout = 'label' as any,
   buttonVariant = 'ghost',
   formatters,
   components: externalComponents,
@@ -57,7 +55,7 @@ function Calendar({
   // Removed getDefaultClassNames as it's not available in this version
 
   // Extraer components de props para evitar que sobrescriba nuestra definición
-  const { components: propsComponents, ...restProps } = props
+  const { components: propsComponents, ...restProps } = props as any
 
   return (
     <EventsContext.Provider value={eventsByDay}>
@@ -71,10 +69,10 @@ function Calendar({
       )}
       captionLayout={captionLayout}
       formatters={{
-        formatMonthDropdown: (date) =>
+        formatMonthDropdown: (date: Date) =>
           date.toLocaleString('default', { month: 'short' }),
         ...formatters,
-      }}
+      } as any}
       classNames={{
         root: cn('w-fit'),
         months: cn(
@@ -84,11 +82,11 @@ function Calendar({
         nav: cn(
           'flex items-center gap-1 w-full absolute top-0 inset-x-0 justify-between'
         ),
-        button_previous: cn(
+        nav_button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
           'size-(--cell-size) aria-disabled:opacity-50 p-0 select-none'
         ),
-        button_next: cn(
+        nav_button_next: cn(
           buttonVariants({ variant: buttonVariant }),
           'size-(--cell-size) aria-disabled:opacity-50 p-0 select-none'
         ),
@@ -132,7 +130,7 @@ function Calendar({
       }}
       {...restProps}
       components={{
-        Root: ({ className, rootRef, ...props }) => {
+        Root: ({ className, rootRef, ...props }: any) => {
           return (
             <div
               data-slot="calendar"
@@ -142,7 +140,7 @@ function Calendar({
             />
           )
         },
-        Chevron: ({ className, orientation, ...props }) => {
+        Chevron: ({ className, orientation, ...props }: any) => {
           if (orientation === 'left') {
             return (
               <ChevronLeftIcon className={cn('size-4', className)} {...props} />
@@ -162,7 +160,7 @@ function Calendar({
             <ChevronDownIcon className={cn('size-4', className)} {...props} />
           )
         },
-        WeekNumber: ({ children, ...props }) => {
+        WeekNumber: ({ children, ...props }: any) => {
           return (
             <td {...props}>
               <div className="flex size-(--cell-size) items-center justify-center text-center">
@@ -188,7 +186,7 @@ function Calendar({
             <>
               <span
                 className={cn(
-                  'relative text-base font-bold',
+                  'relative text-base font-normal',
                   modifiers.outside
                     ? 'text-gray-400 opacity-60 dark:text-gray-500'
                     : 'text-gray-900 dark:text-gray-100'
@@ -227,7 +225,7 @@ function Calendar({
                 // Estilos para días fuera del mes
                 modifiers.outside && 'text-gray-400 opacity-60 dark:text-gray-500',
                 // Estilos para el día de hoy
-                modifiers.today && 'font-bold text-blue-600 dark:text-blue-400',
+                modifiers.today && 'text-blue-600 dark:text-blue-400',
                 // Estilos para el día seleccionado (si no es range)
                 modifiers.selected &&
                   !modifiers.range_start &&
@@ -317,7 +315,7 @@ function CalendarDayButton({
     >
       <span
         className={cn(
-          'relative text-base font-bold',
+          'relative text-base font-normal',
           modifiers.outside
             ? 'text-gray-400 opacity-60 dark:text-gray-500'
             : 'text-gray-900 dark:text-gray-100'
@@ -325,28 +323,19 @@ function CalendarDayButton({
       >
         {day.date.getDate()}
       </span>
-      {/* Render event dots - similar to dashboard weekly calendar */}
-      {/* Siempre renderizar el contenedor para mantener el layout, incluso si no hay eventos */}
-      {(() => {
-        const tieneEventos = !!(meta.clase || meta.examen || meta.evento || meta.comedor)
-        if (!tieneEventos) {
-          return null
-        }
-        return (
-          <div 
-            className="flex items-center justify-center gap-0.5 mt-1 h-2 min-h-[8px] pointer-events-none"
-            onClick={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-            }}
-          >
-            {meta.clase && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Clase" />}
-            {meta.examen && <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" title="Examen" />}
-            {meta.evento && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Evento" />}
-            {meta.comedor && <span className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" title="Comedor" />}
-          </div>
-        )
-      })()}
+      {/* Render event dots - Siempre renderizar el contenedor para mantener alineación */}
+      <div 
+        className="flex items-center justify-center gap-0.5 mt-1 h-2 min-h-[8px] pointer-events-none"
+        onClick={(e) => {
+          e.stopPropagation()
+          e.preventDefault()
+        }}
+      >
+        {meta.clase && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Clase" />}
+        {meta.examen && <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" title="Examen" />}
+        {meta.evento && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Evento" />}
+        {meta.comedor && <span className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" title="Comedor" />}
+      </div>
     </Button>
   )
 }

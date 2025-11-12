@@ -244,8 +244,9 @@ export default function CalendarioPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [backendEvents, setBackendEvents] = useState<BackendCalendarEvent[]>([])
-  const [loadingEvents, setLoadingEvents] = useState(false)
+  const [loadingEvents, setLoadingEvents] = useState(true) // Iniciar en true para mostrar skeleton desde el primer render
   const [eventsError, setEventsError] = useState<string | null>(null)
+  const [fetchedMonths, setFetchedMonths] = useState<Set<string>>(new Set()) // Track de meses ya fetched
   const [filters, setFilters] = useState({
     clases: true,
     examenes: true,
@@ -428,7 +429,26 @@ export default function CalendarioPage() {
   // Fetch backend events for the two-month window (currentMonth and next month)
   useEffect(() => {
     const fetchEvents = async () => {
-      setLoadingEvents(true)
+      // Generar claves de los meses que necesitamos
+      const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+      const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
+      const currentKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth()}`
+      const prevKey = `${prevMonth.getFullYear()}-${prevMonth.getMonth()}`
+      const nextKey = `${nextMonth.getFullYear()}-${nextMonth.getMonth()}`
+      
+      // Verificar si ya tenemos todos los meses necesarios
+      const hasAllMonths = fetchedMonths.has(prevKey) && fetchedMonths.has(currentKey) && fetchedMonths.has(nextKey)
+      
+      if (hasAllMonths) {
+        // Ya tenemos los datos, no hacer fetch
+        return
+      }
+      
+      // Solo mostrar loading en la primera carga
+      if (fetchedMonths.size === 0) {
+        setLoadingEvents(true)
+      }
+      
       setEventsError(null)
       try {
         // Fetch a slightly wider window (previous month -> next month) to avoid missing events
@@ -438,22 +458,47 @@ export default function CalendarioPage() {
         const toIso = to.toISOString().split('T')[0]
         const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
         if (res.success && Array.isArray(res.data)) {
-          setBackendEvents(res.data)
+          // Agregar nuevos eventos sin borrar los existentes
+          setBackendEvents(prevEvents => {
+            // Crear un mapa de eventos existentes por id
+            const eventsMap = new Map(prevEvents.map(e => [e.id, e]))
+            // Agregar/actualizar con los nuevos eventos
+            res.data.forEach((e: BackendCalendarEvent) => {
+              eventsMap.set(e.id, e)
+            })
+            return Array.from(eventsMap.values())
+          })
+          
+          // Marcar los meses como fetched
+          setFetchedMonths(prev => {
+            const newSet = new Set(prev)
+            newSet.add(prevKey)
+            newSet.add(currentKey)
+            newSet.add(nextKey)
+            return newSet
+          })
         } else {
-          setBackendEvents([])
-          setEventsError(res.message || 'No events')
+          // Solo establecer error si no hay eventos previos
+          if (fetchedMonths.size === 0) {
+            setBackendEvents([])
+            setEventsError(res.message || 'No events')
+          }
         }
       } catch (err: any) {
         console.error('Error fetching calendar events', err)
-        setBackendEvents([])
-        setEventsError(String(err?.message || err))
+        // Solo establecer error en la primera carga
+        if (fetchedMonths.size === 0) {
+          setBackendEvents([])
+          setEventsError(String(err?.message || err))
+        }
       } finally {
         setLoadingEvents(false)
       }
     }
 
     fetchEvents()
-  }, [currentMonth, selectedDate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth]) // Solo refetch cuando cambia el mes - fetchedMonths se lee pero no debe estar en deps para evitar loops
 
   const upcoming = useMemo(() => {
     // Show backend events for the current day only (no mocks)
@@ -489,6 +534,197 @@ export default function CalendarioPage() {
 
     return todays.map((e) => ({ id: e.id, title: e.title, location: e.location, color: e.color, time: `${todayLabel} • ${e.time}` }))
   }, [backendEvents, filters])
+
+  // Pre-calcular modifiers para ambos meses (antes del return condicional para no violar reglas de hooks)
+  const firstMonthModifiers = useMemo(() => {
+    const clase: Date[] = []
+    const examen: Date[] = []
+    const evento: Date[] = []
+    const comedor: Date[] = []
+    backendEvents.forEach((e) => {
+      const key = formatIsoToDdMmYyyy(e.date)
+      const parts = key.split('/')
+      if (parts.length !== 3) return
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
+      const t = mapBackendType(e.type, e.id, e.title)
+      if (!isEventVisible({ type: t })) return
+      if (t === 'clase') clase.push(d)
+      if (t === 'examen') examen.push(d)
+      if (t === 'evento') evento.push(d)
+      if (t === 'comedor') comedor.push(d)
+    })
+    return { clase, examen, evento, comedor }
+  }, [backendEvents, filters])
+
+  const secondMonthModifiers = useMemo(() => {
+    const clase: Date[] = []
+    const examen: Date[] = []
+    const evento: Date[] = []
+    const comedor: Date[] = []
+    backendEvents.forEach((e) => {
+      const key = formatIsoToDdMmYyyy(e.date)
+      const parts = key.split('/')
+      if (parts.length !== 3) return
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
+      const t = mapBackendType(e.type, e.id, e.title)
+      if (!isEventVisible({ type: t })) return
+      if (t === 'clase') clase.push(d)
+      if (t === 'examen') examen.push(d)
+      if (t === 'evento') evento.push(d)
+      if (t === 'comedor') comedor.push(d)
+    })
+    return { clase, examen, evento, comedor }
+  }, [backendEvents, filters])
+
+  const modifiersClassNames = useMemo(() => ({
+    clase: 'cc-clase',
+    examen: 'cc-examen',
+    evento: 'cc-evento',
+    comedor: 'cc-comedor'
+  }), [])
+
+  const firstMonthEventsByDay = useMemo(() => {
+    const map: Record<string, any> = {}
+    backendEvents.forEach((e) => {
+      const key = formatIsoToDdMmYyyy(e.date)
+      const mappedType = mapBackendType(e.type, e.id, e.title)
+      if (!isEventVisible({ type: mappedType })) {
+        return
+      }
+      map[key] = map[key] || {}
+      map[key][mappedType] = true
+    })
+    return map
+  }, [currentMonth, filters, backendEvents])
+
+  const secondMonthEventsByDay = useMemo(() => {
+    const map: Record<string, any> = {}
+    backendEvents.forEach((e) => {
+      const key = formatIsoToDdMmYyyy(e.date)
+      const mappedType = mapBackendType(e.type, e.id, e.title)
+      if (!isEventVisible({ type: mappedType })) {
+        return
+      }
+      map[key] = map[key] || {}
+      map[key][mappedType] = true
+    })
+    return map
+  }, [currentMonth, filters, backendEvents])
+
+  // Mostrar skeleton mientras carga
+  if (loadingEvents) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Calendario</h1>
+          <p className="text-sm md:text-base text-gray-600">Podes visualizar tus clases, eventos y turnos programados</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-8">
+          {/* Skeleton para móvil - Filters */}
+          <div className="lg:hidden space-y-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="h-5 w-16 bg-gray-200 rounded mb-3 animate-pulse"></div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center space-x-2">
+                    <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Skeleton principal del calendario */}
+          <div className="lg:col-span-3 space-y-4 md:space-y-6">
+            {/* Skeleton del calendario */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+              <div className="flex items-center justify-between mb-6 md:mb-8">
+                <div className="h-10 w-10 bg-gray-200 rounded-lg animate-pulse"></div>
+                <div className="h-10 w-20 bg-gray-200 rounded-lg animate-pulse"></div>
+                <div className="h-10 w-10 bg-gray-200 rounded-lg animate-pulse"></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
+                {[1, 2].map((month) => (
+                  <div key={month}>
+                    <div className="h-7 w-48 bg-gray-200 rounded mb-4 mx-auto animate-pulse"></div>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-7 gap-2">
+                        {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+                          <div key={day} className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                        ))}
+                      </div>
+                      {[1, 2, 3, 4, 5, 6].map((week) => (
+                        <div key={week} className="grid grid-cols-7 gap-2">
+                          {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+                            <div key={day} className="h-16 bg-gray-200 rounded animate-pulse"></div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Skeleton de eventos del día */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+              <div className="h-6 w-48 bg-gray-200 rounded mb-4 animate-pulse"></div>
+              <div className="h-4 w-64 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          </div>
+
+          {/* Skeleton para sidebar desktop */}
+          <div className="hidden lg:block space-y-4 md:space-y-6">
+            {/* Filtros */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+              <div className="h-5 w-16 bg-gray-200 rounded mb-4 animate-pulse"></div>
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center space-x-3">
+                    <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Próximos eventos */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+              <div className="h-5 w-32 bg-gray-200 rounded mb-4 animate-pulse"></div>
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-3 border-l-4 border-gray-200 bg-gray-50 rounded-r-lg">
+                    <div className="h-4 w-32 bg-gray-200 rounded mb-1 animate-pulse"></div>
+                    <div className="h-3 w-40 bg-gray-200 rounded mb-1 animate-pulse"></div>
+                    <div className="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Skeleton para móvil - Upcoming Events */}
+          <div className="lg:hidden">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="h-5 w-32 bg-gray-200 rounded mb-4 animate-pulse"></div>
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-2.5 border-l-4 border-gray-200 bg-gray-50 rounded-r-lg">
+                    <div className="h-3 w-28 bg-gray-200 rounded mb-1 animate-pulse"></div>
+                    <div className="h-3 w-36 bg-gray-200 rounded mb-0.5 animate-pulse"></div>
+                    <div className="h-3 w-20 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -618,49 +854,10 @@ export default function CalendarioPage() {
                 locale={es}
                 // Pass per-type modifiers computed from backendEvents so DayPicker
                 // marks days regardless of custom Day renderer.
-                modifiers={useMemo(() => {
-                  const clase: Date[] = []
-                  const examen: Date[] = []
-                  const evento: Date[] = []
-                  const comedor: Date[] = []
-                  backendEvents.forEach((e) => {
-                    const key = formatIsoToDdMmYyyy(e.date)
-                    // parse dd/mm/yyyy -> Date
-                    const parts = key.split('/')
-                    if (parts.length !== 3) return
-                    const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
-                    const t = mapBackendType(e.type, e.id, e.title)
-                    // Respect active filters: only add modifiers for visible event types
-                    if (!isEventVisible({ type: t })) return
-                    if (t === 'clase') clase.push(d)
-                    if (t === 'examen') examen.push(d)
-                    if (t === 'evento') evento.push(d)
-                    if (t === 'comedor') comedor.push(d)
-                  })
-                  return { clase, examen, evento, comedor }
-                }, [backendEvents, filters])}
-                modifiersClassNames={useMemo(() => ({
-                  clase: 'cc-clase',
-                  examen: 'cc-examen',
-                  evento: 'cc-evento',
-                  comedor: 'cc-comedor'
-                }), [])}
+                modifiers={firstMonthModifiers}
+                modifiersClassNames={modifiersClassNames}
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
-                eventsByDay={useMemo(() => {
-                  const map: Record<string, any> = {}
-                  
-                  backendEvents.forEach((e) => {
-                    const key = formatIsoToDdMmYyyy(e.date)
-                    const mappedType = mapBackendType(e.type, e.id, e.title)
-                    if (!isEventVisible({ type: mappedType })) {
-                      return
-                    }
-                    map[key] = map[key] || {}
-                    map[key][mappedType] = true
-                  })
-                  
-                  return map
-                }, [currentMonth, filters, backendEvents])}
+                eventsByDay={firstMonthEventsByDay}
               />
               </div>
 
@@ -684,48 +881,10 @@ export default function CalendarioPage() {
                   }}
                   month={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)}
                 locale={es}
-                modifiers={useMemo(() => {
-                  const clase: Date[] = []
-                  const examen: Date[] = []
-                  const evento: Date[] = []
-                  const comedor: Date[] = []
-                  backendEvents.forEach((e) => {
-                    const key = formatIsoToDdMmYyyy(e.date)
-                    const parts = key.split('/')
-                    if (parts.length !== 3) return
-                    const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
-                    const t = mapBackendType(e.type, e.id, e.title)
-                    // Respect active filters: only add modifiers for visible event types
-                    if (!isEventVisible({ type: t })) return
-                    if (t === 'clase') clase.push(d)
-                    if (t === 'examen') examen.push(d)
-                    if (t === 'evento') evento.push(d)
-                    if (t === 'comedor') comedor.push(d)
-                  })
-                  return { clase, examen, evento, comedor }
-                }, [backendEvents, filters])}
-                modifiersClassNames={useMemo(() => ({
-                  clase: 'cc-clase',
-                  examen: 'cc-examen',
-                  evento: 'cc-evento',
-                  comedor: 'cc-comedor'
-                }), [])}
+                modifiers={secondMonthModifiers}
+                modifiersClassNames={modifiersClassNames}
                 className="w-full [&_.rdp-nav]:hidden [&_.rdp-caption_button]:hidden"
-                eventsByDay={useMemo(() => {
-                  const map: Record<string, any> = {}
-                  
-                  backendEvents.forEach((e) => {
-                    const key = formatIsoToDdMmYyyy(e.date)
-                    const mappedType = mapBackendType(e.type, e.id, e.title)
-                    if (!isEventVisible({ type: mappedType })) {
-                      return
-                    }
-                    map[key] = map[key] || {}
-                    map[key][mappedType] = true
-                  })
-                  
-                  return map
-                }, [currentMonth, filters, backendEvents])}
+                eventsByDay={secondMonthEventsByDay}
               />
               </div>
             </div>
