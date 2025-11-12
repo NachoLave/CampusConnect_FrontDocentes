@@ -588,6 +588,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [attendanceData])
   const [isEditingGrades, setIsEditingGrades] = useState(false)
   const [gradesData, setGradesData] = useState<Record<string, Record<string, string>>>({})
+  // Estado para guardar las calificaciones originales del backend (para comparar cambios)
+  const [originalGradesData, setOriginalGradesData] = useState<Record<string, Record<string, string>>>({})
   const [loadingGrades, setLoadingGrades] = useState(false)
   // Estado para guardar los assessmentId de cada tipo de evaluación
   const [assessmentIds, setAssessmentIds] = useState<Record<string, number>>({})
@@ -691,6 +693,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           Object.keys(updated).forEach((sid) => {
             updated[sid]["CONDICIÓN FINAL"] = calculateFinalCondition(updated[sid])
           })
+
+          // Guardar una copia profunda de las calificaciones originales para comparar cambios
+          const originalCopy: Record<string, Record<string, string>> = {}
+          Object.keys(updated).forEach((sid) => {
+            originalCopy[sid] = { ...updated[sid] }
+          })
+          setOriginalGradesData(originalCopy)
 
           setGradesData(updated)
           setAssessmentIds(assessmentIdsMap)
@@ -877,17 +886,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     let mounted = true
     const loadPreview = async () => {
       try {
-        console.log('[CourseInfo] Loading acts preview for courseId:', courseId)
         const previewResp = await CoursesService.getCourseActsPreview(Number(courseId))
-        console.log('[CourseInfo] Acts preview response:', previewResp)
         
         if (mounted && previewResp && previewResp.success && previewResp.data) {
-          console.log('[CourseInfo] Acts preview loaded successfully:', previewResp.data)
-          console.log('[CourseInfo] Items count:', previewResp.data.items?.length || 0)
           setActsPreviewData(previewResp.data)
         } else if (mounted) {
           console.warn('[CourseInfo] Acts preview not available:', previewResp?.error || 'No data')
-          console.warn('[CourseInfo] Response details:', { success: previewResp?.success, hasData: !!previewResp?.data, error: previewResp?.error })
           // Si el preview falla, los estados de loading se actualizarán cuando se carguen los datos de calificaciones/asistencia
         }
       } catch (previewErr) {
@@ -924,18 +928,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   const computeAverageAttendance = (): number => {
     // 1) Preferir datos del preview del acta (más preciso)
-    console.log('[CourseInfo] computeAverageAttendance - actsPreviewData:', actsPreviewData)
     if (actsPreviewData && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
       const items = actsPreviewData.items
-      console.log('[CourseInfo] computeAverageAttendance - items count:', items.length)
       const validItems = items.filter((item: any) => 
         item.asistenciaPct !== null && item.asistenciaPct !== undefined && !isNaN(Number(item.asistenciaPct))
       )
-      console.log('[CourseInfo] computeAverageAttendance - validItems count:', validItems.length)
       if (validItems.length > 0) {
         const sum = validItems.reduce((acc: number, item: any) => acc + Number(item.asistenciaPct), 0)
         const avg = Math.round(sum / validItems.length)
-        console.log('[CourseInfo] computeAverageAttendance - calculated average:', avg)
         return avg
       }
     }
@@ -964,10 +964,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   const computeAverageGrade = (): number => {
     // 1) Preferir datos del preview del acta (más preciso, no considera ausentes)
-    console.log('[CourseInfo] computeAverageGrade - actsPreviewData:', actsPreviewData)
     if (actsPreviewData && actsPreviewData.items && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
       const items = actsPreviewData.items
-      console.log('[CourseInfo] computeAverageGrade - items count:', items.length)
       // Filtrar items con notaMateria válida (no null, no undefined, no NaN, excluir "A")
       const validItems = items.filter((item: any) => {
         const nota = item.notaMateria
@@ -978,18 +976,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         const numNota = Number(String(nota).replace(",", "."))
         return !isNaN(numNota) && Number.isFinite(numNota)
       })
-      console.log('[CourseInfo] computeAverageGrade - validItems count:', validItems.length)
       if (validItems.length > 0) {
         const sum = validItems.reduce((acc: number, item: any) => {
           const nota = Number(String(item.notaMateria).replace(",", "."))
           return acc + nota
         }, 0)
         const average = Math.round((sum / validItems.length) * 100) / 100
-        console.log('[CourseInfo] Average grade from preview:', average, 'from', validItems.length, 'students')
         return average
       }
       // Si hay items pero ninguno tiene nota válida, retornar 0
-      console.log('[CourseInfo] Preview has items but no valid grades')
       return 0
     }
 
@@ -2029,22 +2024,35 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         for (const k of keys) {
           const gradesArr: any[] = []
-          let hasAnyData = false
+          let hasChanges = false
           
           for (const s of students) {
             const sid = String(s.id)
-            const val = gradesData[sid]?.[k]
+            const currentVal = gradesData[sid]?.[k]
+            const originalVal = originalGradesData[sid]?.[k]
             
-            // Si el campo tiene algún valor (incluso vacío pero existe en gradesData)
-            if (val !== undefined) {
-              hasAnyData = true
+            // Comparar valor actual con el original
+            // Normalizar para comparación: tratar vacío/null como iguales
+            const currentNormalized = currentVal === null || currentVal === "" || currentVal === undefined 
+              ? null 
+              : String(currentVal).trim()
+            const originalNormalized = originalVal === null || originalVal === "" || originalVal === undefined 
+              ? null 
+              : String(originalVal).trim()
+            
+            // Solo incluir si el valor cambió o es nuevo (no existía en original)
+            const hasChanged = currentNormalized !== originalNormalized || 
+                              (currentVal !== undefined && originalVal === undefined)
+            
+            if (hasChanged) {
+              hasChanges = true
               
               // Si está vacío o es null, enviar null
-              if (val === null || val === "" || String(val).trim() === "") {
+              if (currentVal === null || currentVal === "" || String(currentVal).trim() === "") {
                 gradesArr.push({ studentId: Number(s.id), grade: null })
               } else {
                 // Si tiene valor, parsearlo y enviarlo
-                const parsed = Number.parseFloat(String(val))
+                const parsed = Number.parseFloat(String(currentVal))
                 if (Number.isFinite(parsed)) {
                   gradesArr.push({ studentId: Number(s.id), grade: String(parsed) })
                 } else {
@@ -2055,16 +2063,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             }
           }
 
-          // Solo incluir si hay algún dato modificado
-          if (hasAnyData && gradesArr.length > 0) {
+          // Solo incluir si hay cambios reales
+          if (hasChanges && gradesArr.length > 0) {
             const assessmentId = assessmentIds[k] || null
             assessments.push({ assessmentId, tipo: mapKeyToTipo(k), fecha: today, grades: gradesArr })
           }
         }
 
         if (assessments.length === 0) {
-          setGradesAlertType('error')
-          setGradesAlertMessage('No hay calificaciones para guardar')
+          setGradesAlertType('info')
+          setGradesAlertMessage('No hay cambios en las calificaciones para guardar')
           setShowGradesAlertModal(true)
           setSavingGrades(false)
           return
@@ -2073,15 +2081,83 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         // Ensure mock headers for dev env
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
         const resp = await CoursesService.saveCourseGrades(Number(courseId), assessments)
-        setSavingGrades(false)
+        
         if (resp && resp.success) {
-          // On success, stop editing and optionally refresh grades from backend
+          // Después de guardar exitosamente, publicar las calificaciones de cada evaluación
+          // IMPORTANTE: Solo se publica UNA evaluación a la vez (una columna por publicación)
+          const assessmentIdsToPublish: number[] = []
+          
+          // Recopilar los assessmentIds que se guardaron exitosamente desde los resultados
+          // El servicio devuelve los assessmentIds en resp.data
+          if (resp.data && Array.isArray(resp.data)) {
+            for (const result of resp.data) {
+              if (result && result.assessmentId && Number.isFinite(Number(result.assessmentId))) {
+                assessmentIdsToPublish.push(Number(result.assessmentId))
+              }
+            }
+          }
+          
+          // Si no hay resultados en resp.data, intentar obtenerlos del array assessments original
+          if (assessmentIdsToPublish.length === 0) {
+            for (const ass of assessments) {
+              const assessmentId = ass.assessmentId
+              if (assessmentId && Number.isFinite(Number(assessmentId))) {
+                assessmentIdsToPublish.push(Number(assessmentId))
+              }
+            }
+          }
+
+          // Publicar calificaciones para cada evaluación guardada
+          // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
+          
+          let publishedCount = 0
+          let noChangesCount = 0
+
+          for (const assessmentId of assessmentIdsToPublish) {
+            try {
+              // Delay antes de publicar para asegurar que el backend haya procesado el guardado
+              // El backend necesita tiempo para actualizar la base de datos y estar listo para generar el evento
+              await new Promise(resolve => setTimeout(resolve, 500))
+              
+              // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
+              // publishGrades ya establece solo X-Teacher-Id internamente
+              const publishResp = await CoursesService.publishGrades(assessmentId)
+              if (publishResp && publishResp.success && publishResp.data) {
+                if (publishResp.data.publishedCount > 0 && publishResp.data.publishedAt) {
+                  publishedCount++
+                } else {
+                  noChangesCount++
+                }
+              } else if (publishResp && !publishResp.success) {
+                // Si hay un error, loguearlo pero continuar
+                console.warn(`Error publicando evaluación ${assessmentId}:`, publishResp.error)
+                // No incrementar contadores si falla
+              }
+            } catch (publishErr) {
+              console.warn(`Excepción al publicar evaluación ${assessmentId}:`, publishErr)
+              // Continuar con las demás evaluaciones aunque una falle
+            }
+          }
+
+          // Actualizar las calificaciones originales después de guardar exitosamente
+          // Esto asegura que solo se envíen cambios futuros, no las que ya se guardaron
+          const updatedOriginal: Record<string, Record<string, string>> = {}
+          Object.keys(gradesData).forEach((sid) => {
+            updatedOriginal[sid] = { ...gradesData[sid] }
+          })
+          setOriginalGradesData(updatedOriginal)
+
+          setSavingGrades(false)
           setIsEditingGrades(false)
           setGradesAlertType('success')
-          // Usar el mensaje del servicio que incluye detalles de cuántas se guardaron
-          setGradesAlertMessage(resp.message || 'Calificaciones guardadas correctamente')
+          
+          // Mensaje simple de éxito
+          const message = 'Evaluación(es) guardada(s) correctamente'
+          
+          setGradesAlertMessage(message)
           setShowGradesAlertModal(true)
         } else {
+          setSavingGrades(false)
           setGradesAlertType('error')
           setGradesAlertMessage(resp?.error || 'Error guardando calificaciones')
           setShowGradesAlertModal(true)

@@ -376,6 +376,74 @@ export class CoursesService {
     }
   }
 
+  // Publicar calificaciones de una evaluación
+  // POST /teaching/assessments/{assessmentId}:publish (sin body)
+  // Responde con { assessmentId, publishedCount, publishedAt }
+  // Si publishedCount > 0 y publishedAt no es null, hubo cambios y se publicaron
+  // Si publishedCount === 0 y publishedAt === null, no hubo cambios y no se hizo nada en la BD
+  // El backend guarda el ID del profesor (del header X-Teacher-Id) y la fecha de publicación
+  static async publishGrades(assessmentId: number): Promise<ApiResponse<{
+    assessmentId: number
+    publishedCount: number
+    publishedAt: string | null
+  }>> {
+    try {
+      const endpoint = typeof API_CONFIG.ENDPOINTS.PUBLISH_GRADES === 'function'
+        ? API_CONFIG.ENDPOINTS.PUBLISH_GRADES(assessmentId)
+        : `/teaching/assessments/${assessmentId}:publish`
+
+      // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
+      // Limpiar otros headers y solo dejar X-Teacher-Id
+      apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, '', '')
+      
+
+      // El endpoint usa POST sin body (el ID del profesor viene en el header X-Teacher-Id)
+      // Enviar null para que no se incluya body en el request
+      const resp = await apiClient.post<{
+        assessmentId: number
+        publishedCount: number
+        publishedAt: string | null
+      }>(endpoint, null as any)
+
+      if (!resp || !resp.success) {
+        console.error('[publishGrades] Error en la respuesta:', resp)
+        return {
+          data: null as any,
+          success: false,
+          error: resp?.error || 'Error publicando calificaciones'
+        }
+      }
+
+      const publishData = resp.data
+      
+      // Verificar si hubo cambios publicados
+      if (publishData && publishData.publishedCount > 0 && publishData.publishedAt) {
+        return {
+          data: publishData,
+          success: true,
+          message: `Se publicaron ${publishData.publishedCount} calificación(es) correctamente`
+        }
+      } else {
+        // No hubo cambios, pero la operación fue exitosa
+        return {
+          data: publishData || {
+            assessmentId,
+            publishedCount: 0,
+            publishedAt: null
+          },
+          success: true,
+          message: 'No hay cambios en las calificaciones para publicar'
+        }
+      }
+    } catch (error) {
+      return {
+        data: null as any,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al publicar calificaciones'
+      }
+    }
+  }
+
   // Guardar/actualizar calificaciones de un curso
   static async saveCourseGrades(courseId: number, assessments: any[]): Promise<ApiResponse<any>> {
     try {
@@ -408,6 +476,7 @@ export class CoursesService {
         let aid = Number(ass.assessmentId || ass.assessmentId === 0 ? ass.assessmentId : NaN)
         
         // Si no tiene assessmentId, buscar en las evaluaciones existentes por tipo
+        // Obtener desde GET /teaching/courses/{courseId}/assessments
         if (!Number.isFinite(aid)) {
           const matchingAssessment = existingAssessments.find((ea: any) => {
             const eaType = String(ea.type || ea.tipo || '').toUpperCase()
@@ -417,22 +486,27 @@ export class CoursesService {
           
           if (matchingAssessment) {
             aid = Number(matchingAssessment.assessmentId || matchingAssessment.id)
+          } else {
+            console.warn(`[saveCourseGrades] No se encontró assessmentId para tipo ${ass.tipo} en las evaluaciones del curso`)
           }
         }
         
         // If assessmentId provided or found -> update grades via PUT to /teaching/assessments/{id}/grades
+        // IMPORTANTE: Solo se envía UNA evaluación a la vez (una columna por PUT)
         if (Number.isFinite(aid)) {
           const endpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
             ? API_CONFIG.ENDPOINTS.GRADES(aid)
             : `/teaching/assessments/${aid}/grades`
 
+          // Body con solo esta evaluación (una columna)
           const body = { courseId, grades: gradesPayload }
           
           try {
             const resp = await apiClient.put<any>(endpoint, body)
             
             if (resp && resp.success) {
-              results.push(resp.data)
+              // Guardar el assessmentId para poder publicarlo después
+              results.push({ ...resp.data, assessmentId: aid, tipo: ass.tipo })
             } else {
               const errorMsg = `Error en ${ass.tipo}: ${resp?.error || 'Error desconocido'}`
               errors.push(errorMsg)
@@ -448,7 +522,8 @@ export class CoursesService {
         }
       }
 
-      // Retornar resultado final
+      // Retornar resultado final con los assessmentIds que se guardaron exitosamente
+      // Esto permite que el componente sepa qué evaluaciones publicar
       if (errors.length > 0 && results.length === 0) {
         // Todos fallaron
         return { 
@@ -464,7 +539,7 @@ export class CoursesService {
           message: `${results.length} evaluación(es) guardada(s). ${errors.length} error(es):\n${errors.join('\n')}` 
         }
       } else {
-        // Todos exitosos
+        // Todos exitosos - results contiene los assessmentIds guardados
         return { 
           data: results, 
           success: true, 

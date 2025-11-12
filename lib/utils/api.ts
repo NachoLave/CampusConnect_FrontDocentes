@@ -25,9 +25,20 @@ class ApiClient {
   }
 
   // Método para establecer headers de desarrollo (mock mode)
-  setMockHeaders(teacherId: string, roles: string) {
+  setMockHeaders(teacherId: string, roles: string, teacherEmail?: string) {
     this.headers['X-Teacher-Id'] = teacherId
-    this.headers['X-Teacher-Roles'] = roles
+    // Solo establecer X-Teacher-Roles si se proporciona un valor no vacío
+    if (roles && roles.trim() !== '') {
+      this.headers['X-Teacher-Roles'] = roles
+    } else {
+      delete this.headers['X-Teacher-Roles']
+    }
+    // Solo establecer X-Teacher-Email si se proporciona un valor no vacío
+    if (teacherEmail && teacherEmail.trim() !== '') {
+      this.headers['X-Teacher-Email'] = teacherEmail
+    } else {
+      delete this.headers['X-Teacher-Email']
+    }
   }
 
   // Método para hacer requests GET
@@ -69,14 +80,59 @@ class ApiClient {
         await mockDelay()
       }
 
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
+      // Si el body está vacío o es null, no enviar body en el request
+      const hasBody = body !== null && body !== undefined && Object.keys(body).length > 0
+      
+      // Crear headers - remover Content-Type si no hay body (algunos backends lo requieren así)
+      let headers: Record<string, string> = { ...this.headers }
+      if (!hasBody) {
+        const { 'Content-Type': _, ...headersWithoutContentType } = headers
+        headers = headersWithoutContentType
+      }
+      
+      const requestOptions: RequestInit = {
         method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(body)
-      })
+        headers
+      }
+
+      if (hasBody) {
+        requestOptions.body = JSON.stringify(body)
+      }
+
+      const response = await fetch(`${this.baseURL}${endpoint}`, requestOptions)
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Intentar leer el cuerpo de la respuesta de error
+        let errorDetail = `HTTP error! status: ${response.status}`
+        let errorBody: any = null
+        try {
+          errorBody = await response.json()
+          errorDetail = errorBody.message || errorBody.error || errorBody.detail || JSON.stringify(errorBody)
+        } catch {
+          // Si no se puede parsear como JSON, intentar leer como texto
+          try {
+            const errorText = await response.text()
+            if (errorText) {
+              errorDetail += ` - ${errorText}`
+              // Intentar parsear como JSON si es texto
+              try {
+                errorBody = JSON.parse(errorText)
+                errorDetail = errorBody.message || errorBody.error || errorBody.detail || errorDetail
+              } catch {}
+            }
+          } catch {}
+        }
+        
+        // Log detallado del error para debugging
+        console.error(`[apiClient.post] Error ${response.status} en ${endpoint}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          errorDetail,
+          errorBody,
+          headers: Object.fromEntries(response.headers.entries())
+        })
+        
+        throw new Error(errorDetail)
       }
 
       // Manejar respuestas 204 No Content (sin body)
@@ -111,25 +167,67 @@ class ApiClient {
         await mockDelay()
       }
 
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
+      // Si el body está vacío o es null, no enviar body en el request
+      const hasBody = body !== null && body !== undefined && Object.keys(body).length > 0
+      
+      // Crear headers - remover Content-Type si no hay body (algunos backends lo requieren así)
+      let headers: Record<string, string> = { ...this.headers }
+      if (!hasBody) {
+        const { 'Content-Type': _, ...headersWithoutContentType } = headers
+        headers = headersWithoutContentType
+      }
+      
+      const requestOptions: RequestInit = {
         method: 'PUT',
-        headers: this.headers,
-        body: JSON.stringify(body)
-      })
+        headers
+      }
+
+      if (hasBody) {
+        requestOptions.body = JSON.stringify(body)
+      }
+
+      const fullUrl = `${this.baseURL}${endpoint}`
+      const response = await fetch(fullUrl, requestOptions)
 
       if (!response.ok) {
         // Intentar leer el cuerpo de la respuesta de error
         let errorDetail = `HTTP error! status: ${response.status}`
+        let errorBody: any = null
         try {
-          const errorBody = await response.json()
-          errorDetail = errorBody.message || errorBody.error || JSON.stringify(errorBody)
+          errorBody = await response.json()
+          errorDetail = errorBody.message || errorBody.error || errorBody.detail || JSON.stringify(errorBody)
         } catch {
           // Si no se puede parsear como JSON, intentar leer como texto
           try {
             const errorText = await response.text()
-            if (errorText) errorDetail += ` - ${errorText}`
+            if (errorText) {
+              errorDetail += ` - ${errorText}`
+              // Intentar parsear como JSON si es texto
+              try {
+                errorBody = JSON.parse(errorText)
+                errorDetail = errorBody.message || errorBody.error || errorBody.detail || errorDetail
+              } catch {}
+            }
           } catch {}
         }
+        
+        // Log detallado del error para debugging
+        const responseHeaders: Record<string, string> = {}
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value
+        })
+        
+        console.error(`[apiClient.put] Error ${response.status} en ${endpoint}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          errorDetail,
+          errorBody,
+          responseHeaders,
+          url: fullUrl,
+          method: 'PUT',
+          requestHeaders: headersForLog
+        })
+        
         throw new Error(errorDetail)
       }
 

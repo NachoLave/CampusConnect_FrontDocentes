@@ -9,8 +9,8 @@ export const APP_CONFIG = {
   // ID del docente para modo mock
   MOCK_TEACHER_ID: '1010',
   
-  // Email del docente para modo mock
-  MOCK_TEACHER_EMAIL: 'docente@campus.com',
+  // Email del docente para modo mock (debe coincidir con el usado en Postman)
+  MOCK_TEACHER_EMAIL: 'ada@campusconnect.edu',
   
   // Nombre del docente para modo mock
   MOCK_TEACHER_NAME: 'Docente Test',
