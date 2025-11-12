@@ -8,6 +8,7 @@ import {
   Search,
   Filter,
   CheckCircle,
+  Info,
   X,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 import { CardSkeleton, Skeleton, ButtonSkeleton, CircleSkeleton } from "@/components/ui/loaders/skeleton"
 import { useState, useEffect, useMemo } from "react"
+import { useAuth } from '@/lib/hooks/useAuth'
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { CoursesService, mapBackendCourseToFrontend } from '@/lib/api/services/courses'
@@ -528,7 +530,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [showGradesSaveModal, setShowGradesSaveModal] = useState(false)
   const [showGradesAlertModal, setShowGradesAlertModal] = useState(false)
   const [gradesAlertMessage, setGradesAlertMessage] = useState("")
-  const [gradesAlertType, setGradesAlertType] = useState<'success' | 'error'>('error')
+  const [gradesAlertType, setGradesAlertType] = useState<'success' | 'error' | 'info'>('error')
   const [savingGrades, setSavingGrades] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
@@ -750,6 +752,51 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null)
   const [courseNotFound, setCourseNotFound] = useState(false)
   const students = course.studentsData || []
+
+  // Determine if the current logged-in teacher is an Auxiliar in this course
+  const { getProfile } = useAuth()
+  const isUserAuxiliarInCourse = useMemo(() => {
+    try {
+      const profile: any = getProfile ? getProfile() : null
+      // If we have an auth profile, match by profile id
+      if (profile && course && Array.isArray((course as any).teachers)) {
+        const myId = Number(profile.id)
+        return (course as any).teachers.some((t: any) => {
+          const tid = Number(t.teacherId ?? t.id ?? 0)
+          const role = String(t.role || t.rol || t.roleName || '').toLowerCase()
+          return tid === myId && role.includes('aux')
+        })
+      }
+
+      // Fallback: use apiClient mock headers when profile is not available
+      try {
+        const mh: any = apiClient.getMockHeaders ? apiClient.getMockHeaders() : null
+        if (mh && mh.teacherId) {
+          const myId = Number(mh.teacherId)
+          const rolesCsv = String(mh.roles || '')
+          const hasAuxRoleGlobally = rolesCsv.split(',').map((s: string) => s.trim().toUpperCase()).includes('AUXILIAR') || rolesCsv.toUpperCase().includes('AUX')
+          if (!hasAuxRoleGlobally) return false
+          if (course && Array.isArray((course as any).teachers)) {
+            return (course as any).teachers.some((t: any) => Number(t.teacherId ?? t.id ?? 0) === myId && String(t.role || '').toUpperCase().includes('AUX'))
+          }
+        }
+      } catch {}
+
+      return false
+    } catch (err) {
+      return false
+    }
+  }, [course, getProfile])
+
+  // Debug: log role detection info to help QA (remove in production)
+  useEffect(() => {
+    try {
+      const profile = getProfile ? getProfile() : null
+      const mh = apiClient.getMockHeaders ? apiClient.getMockHeaders() : null
+      // eslint-disable-next-line no-console
+      console.debug('[CourseInfo] role-detect:', { profile, mockHeaders: mh, isUserAuxiliarInCourse })
+    } catch {}
+  }, [course, getProfile, isUserAuxiliarInCourse])
 
   // Helper to normalize condition/status values (function declaration so it's available to earlier code)
   function formatConditionKey(raw?: string | null): string {
@@ -3060,17 +3107,21 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
                 <button
                   onClick={() => {
-                    if (isCourseLocked) return
+                    if (isCourseLocked || isUserAuxiliarInCourse) return
                     if (isEditingGrades) {
                       handleSaveGradesClick()
                     } else {
                       setIsEditingGrades(true)
                     }
                   }}
-                  disabled={isCourseLocked}
-                  title={isCourseLocked ? 'Curso cerrado: no se permiten modificaciones' : isEditingGrades ? 'Guardar' : 'Editar'}
+                  disabled={isCourseLocked || isUserAuxiliarInCourse}
+                  title={
+                    isCourseLocked ? 'Curso cerrado: no se permiten modificaciones' :
+                    isUserAuxiliarInCourse ? 'Rol Auxiliar: no permitido editar calificaciones' :
+                    isEditingGrades ? 'Guardar' : 'Editar'
+                  }
                   className={`flex items-center space-x-1 px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm rounded-md transition-colors ${
-                    isCourseLocked
+                    (isCourseLocked || isUserAuxiliarInCourse)
                       ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                       : isEditingGrades
                         ? "bg-green-600 text-white hover:bg-green-700"
@@ -3893,10 +3944,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             {/* Icono de alerta */}
             <div className="flex justify-center mb-4">
               <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                gradesAlertType === 'success' ? 'bg-green-100' : 'bg-red-100'
+                gradesAlertType === 'success' ? 'bg-green-100' : gradesAlertType === 'info' ? 'bg-blue-100' : 'bg-red-100'
               }`}>
                 {gradesAlertType === 'success' ? (
                   <CheckCircle className="h-8 w-8 text-green-600" />
+                ) : gradesAlertType === 'info' ? (
+                  <Info className="h-8 w-8 text-blue-600" />
                 ) : (
                   <X className="h-8 w-8 text-red-600" />
                 )}
@@ -3906,7 +3959,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             {/* Contenido */}
             <div className="text-center">
               <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3">
-                {gradesAlertType === 'success' ? 'Operación Exitosa' : 'Error de Validación'}
+                {gradesAlertType === 'success' ? 'Operación Exitosa' : gradesAlertType === 'info' ? 'Información' : 'Error de Validación'}
               </h2>
               <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">
                 {gradesAlertMessage}
@@ -3918,7 +3971,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 className={`w-full font-medium py-3 px-6 rounded-lg transition-colors duration-200 ${
                   gradesAlertType === 'success' 
                     ? 'bg-green-600 hover:bg-green-700 active:bg-green-800' 
-                    : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
+                    : gradesAlertType === 'info'
+                      ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+                      : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
                 } text-white`}
               >
                 Entendido
