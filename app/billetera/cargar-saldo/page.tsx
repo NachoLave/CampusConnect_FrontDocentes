@@ -16,6 +16,8 @@ export default function CargarSaldoPage() {
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvc, setCardCvc] = useState("")
   const [amount, setAmount] = useState("")
+  const AMOUNT_MAX = 1000000
+  const [amountErrorMessage, setAmountErrorMessage] = useState<string | null>(null)
   const [cardType, setCardType] = useState<"VISA" | "MASTERCARD" | "">("")
   const [focusCvc, setFocusCvc] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -71,20 +73,32 @@ export default function CargarSaldoPage() {
 
   const handleLoadSaldo = async () => {
     // Validación
+    const parsedAmount = parseFloat(amount || '0')
+    let amountErr = false
+    let amountMsg: string | null = null
+    if (!amount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+      amountErr = true
+      amountMsg = 'Completá el monto a acreditar'
+    } else if (parsedAmount > AMOUNT_MAX) {
+      amountErr = true
+      amountMsg = `El monto máximo permitido es $${AMOUNT_MAX.toLocaleString()}`
+    }
+
     const newErrors = {
       cardNumber: !cardNumber.trim(),
       cardName: !cardName.trim(),
       cardExpiry: !cardExpiry.trim(),
       cardCvc: !cardCvc.trim(),
-      amount: !amount.trim() || parseFloat(amount) <= 0,
+      amount: amountErr,
     }
     setErrors(newErrors)
+    setAmountErrorMessage(amountMsg)
 
-    // Si hay algún error, no continuar
-    if (Object.values(newErrors).some(Boolean)) return
+  // Si hay algún error, no continuar
+  if (Object.values(newErrors).some(Boolean)) return
 
     // Acreditar saldo usando el método del servicio
-    const result = await creditBalance(parseFloat(amount), 1010)
+  const result = await creditBalance(parsedAmount, 1010)
     
     if (result) {
       // Animación de éxito y redirección
@@ -198,11 +212,14 @@ export default function CargarSaldoPage() {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                min={0}
+                max={AMOUNT_MAX}
+                step={0.01}
                 placeholder="$0.00"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               />
               {errors.amount && (
-                <p className="text-red-500 text-xs mt-1">Completá el monto a acreditar</p>
+                <p className="text-red-500 text-xs mt-1">{amountErrorMessage || 'Completá el monto a acreditar'}</p>
               )}
             </div>
           </div>

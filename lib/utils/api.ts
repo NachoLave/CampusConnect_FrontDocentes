@@ -41,6 +41,15 @@ class ApiClient {
     }
   }
 
+  // Obtener los headers de mock actualmente configurados (helper para UI/tests)
+  getMockHeaders() {
+    return {
+      teacherId: this.headers['X-Teacher-Id'],
+      roles: this.headers['X-Teacher-Roles'],
+      teacherEmail: this.headers['X-Teacher-Email']
+    }
+  }
+
   // Método para hacer requests GET
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
@@ -225,7 +234,8 @@ class ApiClient {
           responseHeaders,
           url: fullUrl,
           method: 'PUT',
-          requestHeaders: headersForLog
+          // Log the request headers actually sent with this ApiClient instance
+          requestHeaders: headers
         })
         
         throw new Error(errorDetail)
