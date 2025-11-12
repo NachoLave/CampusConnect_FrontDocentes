@@ -38,36 +38,90 @@ export function useNotifications() {
   }, [])
 
   const markAsRead = useCallback(async (notificationId: string) => {
+    // Optimistic UI: actualizar inmediatamente
+    setNotifications(prev => 
+      prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, isRead: true }
+          : notification
+      )
+    )
+
     try {
       const response = await NotificationsService.markAsRead(notificationId)
       
-      if (response.success) {
+      if (!response.success) {
+        // Revertir en caso de error
         setNotifications(prev => 
           prev.map(notification => 
             notification.id === notificationId 
-              ? { ...notification, isRead: true }
+              ? { ...notification, isRead: false }
               : notification
           )
         )
+        console.error('Error marcando notificación como leída:', response.error)
       }
     } catch (error) {
+      // Revertir en caso de error
+      setNotifications(prev => 
+        prev.map(notification => 
+          notification.id === notificationId 
+            ? { ...notification, isRead: false }
+            : notification
+        )
+      )
       console.error('Error marcando notificación como leída:', error)
     }
   }, [])
 
   const markAllAsRead = useCallback(async () => {
+    // Guardar estado anterior para rollback
+    const previousNotifications = notifications.filter(n => !n.isRead)
+    
+    // Optimistic UI: marcar todas como leídas inmediatamente
+    setNotifications(prev => 
+      prev.map(notification => ({ ...notification, isRead: true }))
+    )
+
     try {
-      const response = await NotificationsService.markAllAsRead()
+      // Hacer una request individual por cada notificación no leída
+      const unreadNotifications = previousNotifications
+      const promises = unreadNotifications.map(notification => 
+        NotificationsService.markAsRead(notification.id)
+      )
       
-      if (response.success) {
+      const results = await Promise.allSettled(promises)
+      
+      // Verificar si hubo errores
+      const failedIds: string[] = []
+      results.forEach((result, index) => {
+        if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success)) {
+          failedIds.push(unreadNotifications[index].id)
+        }
+      })
+      
+      // Revertir solo las que fallaron
+      if (failedIds.length > 0) {
         setNotifications(prev => 
-          prev.map(notification => ({ ...notification, isRead: true }))
+          prev.map(notification => 
+            failedIds.includes(notification.id)
+              ? { ...notification, isRead: false }
+              : notification
+          )
         )
+        console.error(`Error marcando ${failedIds.length} notificaciones como leídas`)
       }
     } catch (error) {
+      // Revertir todas en caso de error catastrófico
+      setNotifications(prev => 
+        prev.map(notification => {
+          const wasUnread = previousNotifications.find(n => n.id === notification.id)
+          return wasUnread ? { ...notification, isRead: false } : notification
+        })
+      )
       console.error('Error marcando todas las notificaciones como leídas:', error)
     }
-  }, [])
+  }, [notifications])
 
   useEffect(() => {
     fetchNotifications()

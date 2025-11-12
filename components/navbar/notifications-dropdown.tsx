@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 interface Notification {
   id: string
@@ -12,6 +13,7 @@ interface Notification {
   message: string
   time?: string
   actionText?: string
+  link?: string | null
   isRead?: boolean // Added read state for each notification
 }
 
@@ -64,7 +66,7 @@ export function NotificationsDropdown({
       <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] max-w-80 lg:max-w-96 lg:w-96 p-0 max-h-[70vh] lg:max-h-96 overflow-y-auto mr-2">
         <div className="p-3 lg:p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
           <h3 className="font-semibold text-gray-900 text-sm lg:text-base">Notificaciones</h3>
-          {notifications.length > 0 && (
+          {unreadCount > 0 && (
             <Button
               variant="ghost"
               size="sm"
@@ -107,10 +109,14 @@ export function NotificationsDropdown({
                         <h4 className="font-semibold text-gray-900 text-xs lg:text-sm mb-1 leading-tight">{notification.title}</h4>
                         <p className="text-gray-700 text-xs lg:text-sm leading-relaxed">{notification.message}</p>
                         {notification.time && <p className="text-gray-500 text-xs mt-1 lg:mt-2">{notification.time}</p>}
-                        {notification.actionText && (
-                          <button className="text-yellow-600 hover:text-yellow-700 text-xs lg:text-sm font-medium mt-1 lg:mt-2">
+                        {notification.link && notification.actionText && (
+                          <Link
+                            href={notification.link}
+                            onClick={() => onMarkAsRead && onMarkAsRead(notification.id)}
+                            className="text-blue-600 hover:text-blue-700 text-xs lg:text-sm font-medium mt-1 lg:mt-2 inline-block hover:underline"
+                          >
                             {notification.actionText}
-                          </button>
+                          </Link>
                         )}
                       </div>
                       {onMarkAsRead && (

@@ -10,6 +10,7 @@ export interface Notification {
   message: string
   time?: string
   actionText?: string
+  link?: string | null
   isRead?: boolean
 }
 
@@ -57,6 +58,7 @@ export class NotificationsService {
       message: backendNotif.message,
       time,
       actionText: backendNotif.link ? "Ver más" : undefined,
+      link: backendNotif.link,
       isRead: backendNotif.read
     }
   }
@@ -180,7 +182,7 @@ export class NotificationsService {
     }
 
     try {
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${notificationId}/read`
+      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${notificationId}:read`
       
       const headers = {
         'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
@@ -191,7 +193,7 @@ export class NotificationsService {
       }
 
       const response = await fetch(url, {
-        method: 'PUT',
+        method: 'POST',
         headers: headers
       })
 
@@ -214,49 +216,4 @@ export class NotificationsService {
     }
   }
 
-  // Marcar todas las notificaciones como leídas
-  static async markAllAsRead(): Promise<ApiResponse<void>> {
-    if (APP_CONFIG.USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      return {
-        data: undefined,
-        success: true,
-        message: 'Todas las notificaciones marcadas como leídas'
-      }
-    }
-
-    try {
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/read-all`
-      
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Content-Type': 'application/json'
-      }
-
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: headers
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
-      }
-
-      return {
-        data: undefined,
-        success: true,
-        message: 'Todas las notificaciones marcadas como leídas'
-      }
-    } catch (error) {
-      console.error('❌ Error marcando todas las notificaciones como leídas:', error)
-      return {
-        data: undefined,
-        success: false,
-        error: 'Error al marcar todas las notificaciones como leídas'
-      }
-    }
-  }
 }
