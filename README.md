@@ -8,8 +8,6 @@
 - [Tecnologías](#-tecnologías)
 - [Instalación](#-instalación)
 - [Desarrollo](#-desarrollo)
-- [Changelog](#-changelog)
-- [Tareas Pendientes](#-tareas-pendientes)
 
 ## ✨ Características
 
@@ -85,76 +83,10 @@ npm start
 npm run lint
 ```
 
-## 📝 Changelog
-
-### Versión 1.0.0 - 03/10/2025
-
-#### ✅ Completado
-
-##### Layout y Navegación
-- [x] Navbar y sidebar fijos (no se mueven al hacer scroll)
-- [x] Eliminado mensaje de bienvenida del navbar
-- [x] Modal de aviso para usuarios móviles
-- [x] Sistema de navegación responsive completo
-
-##### Mis Cursos
-- [x] Filtros funcionales (Período, Sede, Días)
-- [x] Contador de cursos dinámico ("Mostrando X de Y cursos")
-- [x] Tags de filtros aplicados con opción de eliminar individualmente
-- [x] Botón "Limpiar filtros" general
-- [x] Dropdown de filtros mejorado (cierre al hacer click fuera)
-- [x] Días en formato Title Case (Lunes, Martes, etc.)
-
-##### Asistencia
-- [x] Botón "Guardar" que aparece al modificar asistencia
-- [x] Ancho fijo del selector de fecha
-- [x] Navegación día a día entre clases (flechas)
-- [x] Modal de confirmación al guardar
-- [x] Filtros por estado de asistencia
-- [x] Separador visual entre mes y fecha
-
-##### Calificaciones
-- [x] Filtros integrados en el panel
-- [x] Eliminado botón "Restaurar" externo
-- [x] Botón "Limpiar" dentro de los dropdowns
-- [x] Tags de filtros con colores por condición
-
-##### Comedor y Tienda
-- [x] Filtros alineados y espaciados correctamente
-- [x] Eliminados botones "Aplicar" y "Restaurar filtros"
-- [x] Date picker personalizado (dos campos: Desde/Hasta)
-- [x] Filtrado automático al seleccionar opciones
-- [x] Tags de filtros con colores diferenciados
-- [x] Títulos y subtítulos con formato consistente
-- [x] Botones "Visitar" responsive
-
-##### Diseño y UX
-- [x] **Responsive completo**: Mobile, Tablet y Desktop
-- [x] Favicon con logo de CampusConnect
-- [x] Animación de "respiración" en imágenes del carousel
-- [x] Scroll automático al inicio al cambiar de página
-- [x] Sidebar con menú hamburguesa en móvil
-- [x] Date picker custom con diseño coherente
-- [x] Dropdowns que se cierran al hacer click fuera
-- [x] Estados visuales claros en filtros
-
-## 📋 Tareas Pendientes
-
-- revisar el tema de que cuando cambia la nota si el recuperatorio tiene nota, volarlo o hacer algo 
-- pensar otro nombre en vez de preview en el genera acta 
-- sacar el cancelar de generar acta
-- hacer funcionar el botón de generar acta y que bloquee el curso  
-- que el botón generar acta solo se habilite en la fecha que termina el curso 
-- que el botón anteriores de mis cursos cambiarlo a Todas
-
-## 📄 Licencia
-
-Proyecto privado - Todos los derechos reservados
-
 ## 👥 Equipo
 
 Desarrollado por el equipo de CampusConnect
 
 ---
 
-**Última actualización**: 03/10/2025
+**Última actualización**: 12/11/2025 12:29 ART
