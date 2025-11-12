@@ -34,6 +34,7 @@ interface Course {
   credits?: number
   description?: string
   status?: string
+  promocionable?: boolean
   // Información automática agregada por el frontend
   horarioInicio?: string
   horarioFin?: string
@@ -121,6 +122,32 @@ function getTeacherColor(teacherId: number): string {
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [hasActa, setHasActa] = useState(false)
+  const [promocionable, setPromocionable] = useState<boolean | null>(() => {
+    // Intentar cargar desde localStorage al inicio
+    if (typeof window !== 'undefined' && course?.id) {
+      try {
+        const stored = localStorage.getItem(`course_${course.id}_promocionable`)
+        if (stored !== null) {
+          return stored === 'true'
+        }
+      } catch (e) {
+        // Ignorar errores de localStorage
+      }
+    }
+    return null
+  })
+  const [loadingPromocionable, setLoadingPromocionable] = useState(() => {
+    // Si no hay valor en localStorage, necesita cargar
+    if (typeof window !== 'undefined' && course?.id) {
+      try {
+        const stored = localStorage.getItem(`course_${course.id}_promocionable`)
+        return stored === null
+      } catch (e) {
+        return true
+      }
+    }
+    return true
+  })
   const router = useRouter()
 
   const handleInfoClick = () => {
@@ -161,6 +188,67 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     return () => { mounted = false }
   }, [course?.id])
 
+  // Obtener información de promocionable del endpoint de detalle
+  useEffect(() => {
+    let mounted = true
+    const fetchCourseDetail = async () => {
+      try {
+        if (!course?.id) return
+        
+        // Si ya viene en el curso, usarlo directamente y guardar en localStorage
+        if (course.promocionable !== undefined) {
+          setPromocionable(course.promocionable)
+          setLoadingPromocionable(false)
+          try {
+            localStorage.setItem(`course_${course.id}_promocionable`, String(course.promocionable))
+          } catch (e) {
+            // Ignorar errores de localStorage
+          }
+          return
+        }
+
+        // Verificar si ya está en localStorage
+        try {
+          const stored = localStorage.getItem(`course_${course.id}_promocionable`)
+          if (stored !== null) {
+            setPromocionable(stored === 'true')
+            setLoadingPromocionable(false)
+            return
+          }
+        } catch (e) {
+          // Continuar si hay error con localStorage
+        }
+
+        // Si no está en localStorage, obtener del endpoint de detalle
+        setLoadingPromocionable(true)
+        const resp = await CoursesService.getCourseById(Number(course.id))
+        if (!mounted) return
+        if (resp && resp.success && resp.data) {
+          const courseDetail = resp.data as any
+          const promocionableValue = courseDetail.promocionable ?? null
+          setPromocionable(promocionableValue)
+          // Guardar en localStorage
+          try {
+            if (promocionableValue !== null) {
+              localStorage.setItem(`course_${course.id}_promocionable`, String(promocionableValue))
+            }
+          } catch (e) {
+            // Ignorar errores de localStorage
+          }
+        }
+      } catch (err) {
+        // ignore errors - don't block UI
+      } finally {
+        if (mounted) {
+          setLoadingPromocionable(false)
+        }
+      }
+    }
+
+    fetchCourseDetail()
+    return () => { mounted = false }
+  }, [course?.id, course?.promocionable])
+
   return (
     <div
       className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-md"
@@ -193,14 +281,32 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
 
       {/* Course Content */}
       <div className="p-3 lg:p-4">
-        <h3 className="font-semibold text-gray-900 text-base lg:text-lg mb-2 lg:mb-3 line-clamp-2 flex items-center">
-          <span className="flex-1">{course.title}</span>
-          {(hasActa || (course.status || '').toUpperCase().includes('ACTA')) && (
-            <span title="Acta generada - curso cerrado" className="ml-2 flex items-center">
-              <Lock className="h-4 w-4 text-gray-500 flex-shrink-0" aria-hidden />
-            </span>
-          )}
-        </h3>
+        <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
+          <h3 className="font-semibold text-gray-900 text-base lg:text-lg line-clamp-2 flex-1">
+            {course.title}
+          </h3>
+          {/* Badge y candado alineados a la derecha */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Promocionable o Examen Final */}
+            {loadingPromocionable ? (
+              <div className="h-5 w-24 bg-gray-200 rounded animate-pulse"></div>
+            ) : promocionable !== null ? (
+              <div className={`flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-semibold transition-opacity duration-300 ${
+                promocionable 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-orange-100 text-orange-800'
+              }`}>
+                <span>{promocionable ? 'PROMOCIONABLE' : 'EXAMEN FINAL'}</span>
+              </div>
+            ) : null}
+            {/* Candado cuando el curso está cerrado */}
+            {(hasActa || (course.status || '').toUpperCase().includes('ACTA')) && (
+              <span title="Acta generada - curso cerrado" className="flex items-center">
+                <Lock className="h-4 w-4 text-gray-500 flex-shrink-0" aria-hidden />
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Course Details */}
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4 text-xs lg:text-sm text-gray-600">
