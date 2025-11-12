@@ -244,9 +244,13 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     <div className="space-y-4 lg:space-y-6">
       {/* Results count and clear filters */}
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs lg:text-sm text-gray-600">
-          Mostrando {filteredAndSortedCourses.length} de {coursesInPeriod.length} cursos
-        </div>
+        {isLoading ? (
+          <div className="h-5 w-48 bg-gray-200 rounded animate-pulse"></div>
+        ) : (
+          <div className="text-xs lg:text-sm text-gray-600">
+            Mostrando {filteredAndSortedCourses.length} de {coursesInPeriod.length} cursos
+          </div>
+        )}
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}

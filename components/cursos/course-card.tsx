@@ -122,6 +122,7 @@ function getTeacherColor(teacherId: number): string {
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [hasActa, setHasActa] = useState(false)
+  const [loadingActa, setLoadingActa] = useState(true)
   const [promocionable, setPromocionable] = useState<boolean | null>(() => {
     // Intentar cargar desde localStorage al inicio
     if (typeof window !== 'undefined' && course?.id) {
@@ -172,6 +173,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     const fetchActs = async () => {
       try {
         if (!course?.id) return
+        setLoadingActa(true)
         const resp = await CoursesService.getActs(Number(course.id))
         if (!mounted) return
         if (resp && resp.success) {
@@ -181,6 +183,10 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         }
       } catch (err) {
         // ignore errors - don't block UI
+      } finally {
+        if (mounted) {
+          setLoadingActa(false)
+        }
       }
     }
 
@@ -255,34 +261,34 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Course Image with Day Badge overlay */}
+      {/* Course Image */}
       <div
-        className="relative h-32 lg:h-40 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-95 transition-opacity overflow-hidden"
+        className="relative h-24 lg:h-32 bg-gradient-to-br from-slate-700 to-slate-900 cursor-pointer hover:opacity-95 transition-opacity overflow-hidden"
         onClick={handleInfoClick}
       >
-        {/* Imagen de fondo con blur */}
-        <div className="absolute inset-0">
-          <img
-            src="/courseimage.png"
-            alt={course.title}
-            className="w-full h-full object-cover blur-sm opacity-40"
-          />
-          {/* Overlay oscuro para mejor contraste */}
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-900/50 to-slate-800/50"></div>
-        </div>
-        
-        {/* Tag del día - estilo badge minimalista */}
-        <div className="absolute top-3 left-3">
-          <div className="bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-lg">
-            {course.day}
+          {/* Imagen de fondo con blur */}
+          <div className="absolute inset-0">
+            <img
+              src="/courseimage.png"
+              alt={course.title}
+              className="w-full h-full object-cover blur-sm opacity-40"
+            />
+            {/* Overlay oscuro para mejor contraste */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900/50 to-slate-800/50"></div>
+          </div>
+          
+          {/* Badge del día - esquina superior izquierda */}
+          <div className="absolute top-2 left-2 lg:top-3 lg:left-3">
+            <div className="bg-slate-900/80 backdrop-blur-md text-white text-xs lg:text-sm font-semibold px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-full shadow-md">
+              {course.day}
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Course Content */}
       <div className="p-3 lg:p-4">
         <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
-          <h3 className="font-semibold text-gray-900 text-base lg:text-lg line-clamp-2 flex-1">
+          <h3 className="font-semibold text-gray-900 text-base lg:text-lg line-clamp-2 flex-1 min-w-0">
             {course.title}
           </h3>
           {/* Badge y candado alineados a la derecha */}
@@ -300,7 +306,9 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
               </div>
             ) : null}
             {/* Candado cuando el curso está cerrado */}
-            {(hasActa || (course.status || '').toUpperCase().includes('ACTA')) && (
+            {loadingActa ? (
+              <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+            ) : (hasActa || (course.status || '').toUpperCase().includes('ACTA')) && (
               <span title="Acta generada - curso cerrado" className="flex items-center">
                 <Lock className="h-4 w-4 text-gray-500 flex-shrink-0" aria-hidden />
               </span>
@@ -346,45 +354,33 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
 
         {/* Schedule and Location */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-3 lg:mb-4">
-          <div className="flex items-center flex-wrap gap-2 lg:gap-3">
-            {/* Turno con color según horario */}
-            <div className={`${getShiftColor(course.shift)} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
-              {course.turnoAbreviacion || course.shift}
-            </div>
-            
-            {/* Horario automático */}
-            {course.horarioInicio && course.horarioFin && (
-              <span className="text-xs lg:text-sm font-medium whitespace-nowrap bg-gray-100 px-2 py-1 rounded">
-                {course.horarioInicio} - {course.horarioFin}
-              </span>
-            )}
-            
-            {/* Schedule original como fallback */}
-            <span className="text-xs lg:text-sm font-medium whitespace-nowrap">{course.schedule}</span>
-            
-            {/* Fechas automáticas */}
-            {course.fechaInicio && course.fechaFin && (
-              <span className="text-xs lg:text-sm text-gray-500 truncate bg-gray-50 px-2 py-1 rounded">
-                {course.fechaInicio} - {course.fechaFin}
-              </span>
-            )}
-            
-            {/* Fechas originales como fallback */}
-            {course.dates && (
-              <span className="text-xs lg:text-sm text-gray-500 truncate">{course.dates}</span>
-            )}
-          </div>
+           <div className="flex items-center flex-wrap gap-2 lg:gap-3">
+             {/* Turno con color según horario */}
+             <div className={`${getShiftColor(course.shift)} text-white text-xs font-semibold px-2 py-0.5 lg:py-1 rounded flex-shrink-0`}>
+               {course.turnoAbreviacion || course.shift}
+             </div>
+             
+             {/* Horario automático */}
+             {course.horarioInicio && course.horarioFin && (
+               <span className="text-xs lg:text-sm font-medium whitespace-nowrap bg-gray-100 px-2 py-1 rounded">
+                 {course.horarioInicio} - {course.horarioFin}
+               </span>
+             )}
+             
+             {/* Schedule original como fallback */}
+             <span className="text-xs lg:text-sm font-medium whitespace-nowrap">{course.schedule}</span>
+           </div>
           
-          <div className="flex items-center space-x-1 text-xs lg:text-sm text-gray-600">
+          <div className="flex items-center space-x-1 text-xs lg:text-sm text-gray-700">
             {course.isVirtual ? (
               <>
                 <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-                <span>VIRTUAL</span>
+                <span className="font-bold">VIRTUAL</span>
               </>
             ) : (
               <>
                 <MapPin className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-                <span className="truncate">{course.classroom || course.location || course.sede}</span>
+                <span className="font-bold truncate">{course.classroom || course.location || course.sede}</span>
               </>
             )}
           </div>
