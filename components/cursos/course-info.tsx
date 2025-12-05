@@ -534,8 +534,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [savingGrades, setSavingGrades] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState("Septiembre")
   const [selectedDate, setSelectedDate] = useState(21)
-  const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: number]: "P" | "1/2" | "A" } }>({})
+  // studentId es UUID string, no número
+  const [attendanceData, setAttendanceData] = useState<{ [key: string]: { [key: string]: "P" | "1/2" | "A" } }>({})
   const [hasUnsavedAttendance, setHasUnsavedAttendance] = useState(false)
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false)
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false)
 
   // Bloquear scroll del body cuando el modal de preview está abierto
   useEffect(() => {
@@ -840,13 +843,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 // eslint-disable-next-line no-console
                 console.debug('[CourseInfo] backendCourse raw', backendCourse)
               } catch {}
+            // Mapear estudiantes - Backend devuelve studentId como UUID string
             const rawStudents: any[] = Array.isArray(partsResp.data.students) ? partsResp.data.students : []
-            const studentsData: any[] = rawStudents.map((s: any, idx: number) => ({
-              id: Number(s.studentId ?? s.id ?? idx + 1),
-              name: s.studentName || s.name || s.fullName || 'Alumno',
+            const studentsData: any[] = rawStudents.map((s: any) => ({
+              id: s.studentId || s.id,  // Backend devuelve studentId como UUID string
+              name: s.studentName || s.name || 'Alumno',
               legajo: s.legajo?.toString?.() || '',
               email: s.email || '',
-              condition: formatConditionKey(s.status ?? s.condition ?? ''),
+              condition: formatConditionKey(s.condition || s.status || ''),
               attendance: s.attendance || ''
             }))
             const teachersFromBackend: any[] = Array.isArray(partsResp.data.teachers) ? partsResp.data.teachers : []
@@ -1006,7 +1010,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     }
 
     // 2) Fallback: usar asistencias reales cargadas (attendanceData)
-    const dateEntries = Object.values(attendanceData || {}) as Array<Record<number, "P" | "1/2" | "A">>
+    const dateEntries = Object.values(attendanceData || {}) as Array<Record<string, "P" | "1/2" | "A">>
     let counted = 0
     let score = 0
     for (const perDate of dateEntries) {
@@ -1142,23 +1146,22 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   // --- CSV Preview (export) helpers ---
-  const computeAttendancePercentByStudent = (): Record<number, number> => {
-    const totals: Record<number, { score: number; count: number }> = {}
-    const dateEntries = Object.values(attendanceData || {}) as Array<Record<number, "P" | "1/2" | "A">>
+  // studentId es UUID string
+  const computeAttendancePercentByStudent = (): Record<string, number> => {
+    const totals: Record<string, { score: number; count: number }> = {}
+    const dateEntries = Object.values(attendanceData || {}) as Array<Record<string, "P" | "1/2" | "A">>
     for (const perDate of dateEntries) {
-      for (const [idStr, status] of Object.entries(perDate)) {
-        const id = Number(idStr)
-        const current = totals[id] ?? { score: 0, count: 0 }
+      for (const [studentId, status] of Object.entries(perDate)) {
+        const current = totals[studentId] ?? { score: 0, count: 0 }
         current.count += 1
         if (status === "P") current.score += 1
         else if (status === "1/2") current.score += 0.5
-        totals[id] = current
+        totals[studentId] = current
       }
     }
-    const result: Record<number, number> = {}
-    for (const [idStr, { score, count }] of Object.entries(totals)) {
-      const id = Number(idStr)
-      result[id] = count > 0 ? Math.round((score / count) * 100) : 0
+    const result: Record<string, number> = {}
+    for (const [studentId, { score, count }] of Object.entries(totals)) {
+      result[studentId] = count > 0 ? Math.round((score / count) * 100) : 0
     }
     return result
   }
@@ -1466,16 +1469,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               if (attendanceResp && attendanceResp.success && attendanceResp.data) {
                 const items = attendanceResp.data.items || []
                 const dateKey = dateStr
-                const dateData: Record<number, "P" | "1/2" | "A"> = {}
+                // studentId es UUID string
+                const dateData: Record<string, "P" | "1/2" | "A"> = {}
                 for (const item of items) {
                   if (item.studentId && item.status) {
                     const status = item.status.toUpperCase()
+                    const sid = String(item.studentId)  // UUID string
                     if (status === 'P' || status === 'PRESENTE') {
-                      dateData[item.studentId] = "P"
-                    } else if (status === '1/2' || status === 'MEDIA') {
-                      dateData[item.studentId] = "1/2"
+                      dateData[sid] = "P"
+                    } else if (status === '1/2' || status === 'MEDIA' || status === 'M') {
+                      dateData[sid] = "1/2"
                     } else if (status === 'A' || status === 'AUSENTE' || status === 'FALTA') {
-                      dateData[item.studentId] = "A"
+                      dateData[sid] = "A"
                     }
                   }
                 }
@@ -1555,6 +1560,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       if (activeTab !== 'Asistencia') return
       if (!selectedDateObj) return
       
+      // Mostrar loading
+      setIsLoadingAttendance(true)
+      
       try {
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
         const yyyy = selectedDateObj.getFullYear()
@@ -1575,14 +1583,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           return null
         }
 
-        const nextForDate: { [key: number]: "P" | "1/2" | "A" } = {}
+        // studentId es UUID string, no número
+        const nextForDate: { [key: string]: "P" | "1/2" | "A" } = {}
         if (resp && resp.success && resp.data) {
           const payload = resp.data as any
           const items: any[] = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload.flatMap((r: any) => r?.items || []) : []
+          
           for (const it of items) {
             const mapped = normalize((it as any).status)
-            const sid = Number((it as any).studentId)
-            if (mapped && Number.isFinite(sid)) {
+            const sid = String((it as any).studentId)  // studentId es UUID string
+            if (mapped && sid) {
               nextForDate[sid] = mapped
             }
           }
@@ -1595,6 +1605,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         setHasUnsavedAttendance(false)
       } catch (err) {
         console.warn('Error cargando asistencia por fecha:', err)
+      } finally {
+        if (mounted) {
+          setIsLoadingAttendance(false)
+        }
       }
     }
 
@@ -1681,7 +1695,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setAttendanceInit(true)
   }, [allCourseDates, attendanceInit])
 
-  const setAttendance = (studentId: number, status: "P" | "1/2" | "A") => {
+  // studentId es UUID string
+  const setAttendance = (studentId: string, status: "P" | "1/2" | "A") => {
     // Prevent edits when the course is locked (has acta / closed)
     if (isCourseLocked) return
     if (!isDateSelectable(selectedMonth, selectedDate)) return
@@ -1709,8 +1724,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const monthIdx = monthToIndex[selectedMonth] ?? 0
     const dateIso = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(selectedDate).padStart(2, '0')}`
     
-    // Mapear P/A/1/2 a los valores del backend: P -> "P", A -> "A", 1/2 -> "M"
-    // Solo enviar alumnos que tienen un estado marcado (el backend requiere status obligatorio)
+    // Mapear UI status a valores del backend
+    // NOTA: El backend devuelve studentId como UUID string, NO como número
+    // EstadoAsistencia: PRESENTE | AUSENTE | MEDIA_FALTA | P | A | M
     const items = students
       .map((student) => {
         const uiStatus = dataForDate[student.id] || null
@@ -1719,21 +1735,35 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         else if (uiStatus === 'A') backendStatus = 'A'
         else if (uiStatus === '1/2') backendStatus = 'M'
         
+        // studentId viene del backend como UUID string, NO convertir a número
+        if (!student.id) {
+          console.warn('[saveAttendance] Estudiante sin ID, omitiendo:', student)
+          return null
+        }
+        
         return {
-          studentId: student.id,
+          studentId: student.id,  // Mantener como string (UUID)
           status: backendStatus
         }
       })
-      .filter((item) => item.status !== null) // Solo enviar los que tienen estado
+      .filter((item): item is { studentId: string; status: string } => 
+        item !== null && item.status !== null
+      )
     
     if (items.length === 0) {
       alert('Debe marcar al menos un alumno antes de guardar')
       return
     }
     
+    // Activar loader de pantalla completa
+    setIsSavingAttendance(true)
+    
     try {
       apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
       const resp = await CoursesService.saveAttendanceByDate(Number(courseId), dateIso, items)
+      
+      // Desactivar loader
+      setIsSavingAttendance(false)
       
       if (resp && resp.success) {
         setHasUnsavedAttendance(false)
@@ -1742,11 +1772,14 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         alert(`Error al guardar: ${resp?.error || resp?.message || 'Error desconocido'}`)
       }
     } catch (err) {
+      // Desactivar loader en caso de error
+      setIsSavingAttendance(false)
       alert(`Error al guardar: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  const getAttendance = (studentId: number): "P" | "1/2" | "A" | null => {
+  // studentId es UUID string
+  const getAttendance = (studentId: string): "P" | "1/2" | "A" | null => {
     const key = `${selectedMonth}-${selectedDate}`
     return attendanceData[key]?.[studentId] || null
   }
@@ -3021,62 +3054,92 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAttendanceStudents.map((student, index) => (
-                      <tr
-                        key={student.id}
-                        className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                      >
-                        <td className="py-2 lg:py-3 px-3 lg:px-4">
-                          <div className="flex items-center space-x-2 lg:space-x-3">
-                            <div
-                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
-                            >
-                              <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
+                    {/* Shimmer loading effect mientras carga la asistencia */}
+                    {isLoadingAttendance ? (
+                      Array.from({ length: 5 }).map((_, index) => (
+                        <tr
+                          key={`attendance-skeleton-${index}`}
+                          className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                        >
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <div className="flex items-center space-x-2 lg:space-x-3">
+                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                              <Skeleton className="h-4 w-32" />
                             </div>
-                            <span className="font-medium text-xs lg:text-sm">{student.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
-                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
-                        <td className="py-2 lg:py-3 px-3 lg:px-4">
-                          <div className="flex space-x-1.5 lg:space-x-2">
-                            <button
-                              onClick={() => setAttendance(student.id, "P")}
-                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                getAttendance(student.id) === "P"
-                                  ? "bg-green-500 text-white shadow-md"
-                                  : "bg-gray-200 text-gray-600 hover:bg-green-100"
-                              }`}
-                              title="Presente"
-                            >
-                              P
-                            </button>
-                            <button
-                              onClick={() => setAttendance(student.id, "1/2")}
-                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                getAttendance(student.id) === "1/2"
-                                  ? "bg-yellow-500 text-white shadow-md"
-                                  : "bg-gray-200 text-gray-600 hover:bg-yellow-100"
-                              }`}
-                              title="Media falta"
-                            >
-                              1/2
-                            </button>
-                            <button
-                              onClick={() => setAttendance(student.id, "A")}
-                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                getAttendance(student.id) === "A"
-                                  ? "bg-red-500 text-white shadow-md"
-                                  : "bg-gray-200 text-gray-600 hover:bg-red-100"
-                              }`}
-                              title="Ausente"
-                            >
-                              A
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <Skeleton className="h-4 w-20" />
+                          </td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <Skeleton className="h-4 w-40" />
+                          </td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <div className="flex space-x-1.5 lg:space-x-2">
+                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      filteredAttendanceStudents.map((student, index) => (
+                        <tr
+                          key={student.id}
+                          className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                        >
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <div className="flex items-center space-x-2 lg:space-x-3">
+                              <div
+                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
+                              >
+                                <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
+                              </div>
+                              <span className="font-medium text-xs lg:text-sm">{student.name}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <div className="flex space-x-1.5 lg:space-x-2">
+                              <button
+                                onClick={() => setAttendance(student.id, "P")}
+                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                  getAttendance(student.id) === "P"
+                                    ? "bg-green-500 text-white shadow-md"
+                                    : "bg-gray-200 text-gray-600 hover:bg-green-100"
+                                }`}
+                                title="Presente"
+                              >
+                                P
+                              </button>
+                              <button
+                                onClick={() => setAttendance(student.id, "1/2")}
+                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                  getAttendance(student.id) === "1/2"
+                                    ? "bg-yellow-500 text-white shadow-md"
+                                    : "bg-gray-200 text-gray-600 hover:bg-yellow-100"
+                                }`}
+                                title="Media falta"
+                              >
+                                1/2
+                              </button>
+                              <button
+                                onClick={() => setAttendance(student.id, "A")}
+                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                  getAttendance(student.id) === "A"
+                                    ? "bg-red-500 text-white shadow-md"
+                                    : "bg-gray-200 text-gray-600 hover:bg-red-100"
+                                }`}
+                                title="Ausente"
+                              >
+                                A
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -3843,6 +3906,35 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         </div>
       )}
 
+      {/* Overlay de Loading - Guardando Asistencia */}
+      {isSavingAttendance && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 transform"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            <div className="flex flex-col items-center">
+              {/* Spinner animado */}
+              <div className="relative w-16 h-16 mb-6">
+                <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-slate-700 rounded-full border-t-transparent animate-spin"></div>
+              </div>
+              
+              {/* Texto */}
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                Guardando asistencias
+              </h2>
+              <p className="text-sm text-gray-500 text-center">
+                Por favor espere mientras se registran las asistencias...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Confirmación - Asistencia Guardada */}
       {showAttendanceSavedModal && (
         <div 
@@ -3880,6 +3972,35 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               >
                 Entendido
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay de Loading - Guardando Calificaciones */}
+      {savingGrades && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          style={{ animation: 'fadeIn 0.15s ease-out' }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 transform"
+            style={{ animation: 'scaleIn 0.15s ease-out' }}
+          >
+            <div className="flex flex-col items-center">
+              {/* Spinner animado */}
+              <div className="relative w-16 h-16 mb-6">
+                <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-slate-700 rounded-full border-t-transparent animate-spin"></div>
+              </div>
+              
+              {/* Texto */}
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                Guardando calificaciones
+              </h2>
+              <p className="text-sm text-gray-500 text-center">
+                Por favor espere mientras se registran las calificaciones...
+              </p>
             </div>
           </div>
         </div>

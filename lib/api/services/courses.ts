@@ -25,7 +25,8 @@ export class CoursesService {
     try {
       // Asegurar headers requeridos por backend (docente mock, roles)
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
-      return await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.ATTENDANCE_RECORDS(courseId))
+      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE_RECORDS(courseId)
+      return await apiClient.get<any[]>(endpoint)
     } catch (err) {
       return { data: [] as any[], success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
@@ -35,14 +36,16 @@ export class CoursesService {
   static async getAttendanceByDate(courseId: number, dateIso: string): Promise<ApiResponse<any>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
-      return await apiClient.get<any>(API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso))
+      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
+      return await apiClient.get<any>(endpoint)
     } catch (err) {
       return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
   }
 
   // Guardar asistencia para una fecha específica (PUT)
-  static async saveAttendanceByDate(courseId: number, dateIso: string, items: Array<{ studentId: number; status: string | null }>): Promise<ApiResponse<any>> {
+  // NOTA: studentId puede ser string (UUID) o number según el backend
+  static async saveAttendanceByDate(courseId: number, dateIso: string, items: Array<{ studentId: string | number; status: string | null }>): Promise<ApiResponse<any>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
@@ -111,21 +114,23 @@ export class CoursesService {
   }
 
   // Obtener listado de alumnos de un curso (roster)
+  // Backend devuelve: { studentId (UUID string), studentName, status, legajo, email, dni, activo }
   static async getCourseRoster(courseId: number): Promise<ApiResponse<any[]>> {
-    // Prefer using the shared apiClient and configured endpoint
     try {
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ROSTER === 'function'
         ? API_CONFIG.ENDPOINTS.COURSE_ROSTER(courseId)
         : `/teaching/courses/${courseId}/roster`
 
       const resp = await apiClient.get<any[]>(endpoint)
+      
       if (!resp || !resp.success) {
         return { data: [], success: false, error: resp?.error || 'Error obteniendo roster' }
       }
 
       // Response may be { value: [...] } or array directly
-  const dataAny: any = resp.data
-  const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
+      const dataAny: any = resp.data
+      const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
+      
       return { data: list, success: true, message: 'Roster obtenido' }
     } catch (error) {
       return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
@@ -220,12 +225,16 @@ export class CoursesService {
       }
 
       // Map roster to students shape
-      const students = (Array.isArray(roster) ? roster : []).map((s: any, idx: number) => ({
-        id: Number(s.studentId ?? s.id ?? idx + 1),
-        name: s.studentName || s.name || s.fullName || 'Alumno',
-        legajo: s.legajo?.toString?.() || '',
+      // Backend devuelve: { studentId (UUID string), studentName, status, legajo, email, dni, activo }
+      const students = (Array.isArray(roster) ? roster : []).map((s: any) => ({
+        id: s.studentId,           // Backend devuelve studentId como UUID string
+        studentId: s.studentId,    // Mantener también como studentId
+        name: s.studentName,       // Backend devuelve studentName
+        legajo: s.legajo || '',
         email: s.email || '',
-        condition: s.status || s.condition || '',
+        condition: s.status || '', // Backend devuelve status (REGULAR, LIBRE, ACTIVA, BAJA)
+        dni: s.dni,
+        activo: s.activo
       }))
 
   return { data: { teachers: teachersFromBackend, students, course: backendCourse }, success: true, message: 'Participants obtained' }
@@ -307,6 +316,7 @@ export class CoursesService {
         : `/teaching/courses/${courseId}/assessments`
 
       const assessmentsResp = await apiClient.get<any[]>(assessmentsEndpoint)
+      
       if (!assessmentsResp || !assessmentsResp.success) {
         return { data: [], success: false, error: assessmentsResp?.error || 'Error obteniendo evaluaciones' }
       }

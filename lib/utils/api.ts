@@ -58,13 +58,39 @@ class ApiClient {
         await mockDelay()
       }
 
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
+      const url = `${this.baseURL}${endpoint}`
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: this.headers
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Capturar detalles del error del servidor
+        let errorDetail = `HTTP error! status: ${response.status}`
+        let errorBody: any = null
+        try {
+          const text = await response.text()
+          if (text) {
+            try {
+              errorBody = JSON.parse(text)
+              errorDetail = errorBody.message || errorBody.error || errorBody.detail || errorDetail
+            } catch {
+              errorDetail += ` - ${text}`
+            }
+          }
+        } catch {}
+        
+        console.error('🔴 [apiClient.get] Error:', {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          errorDetail,
+          errorBody,
+          headers: Object.fromEntries(response.headers.entries())
+        })
+        
+        throw new Error(errorDetail)
       }
 
       const data = await response.json()
