@@ -7,15 +7,16 @@ interface UseProposalsReturn {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
-  createProposal: (subjectId: number) => Promise<boolean>
-  deleteProposal: (subjectId: number) => Promise<boolean>
-  resendProposal: (proposalId: number) => Promise<boolean>
-  toggleProposalAvailability: (proposalId: number) => Promise<boolean>
+  createProposal: (subjectId: number | string) => Promise<boolean>
+  deleteProposal: (subjectId: number | string) => Promise<boolean>
+  resendProposal: (proposalId: number | string) => Promise<boolean>
+  toggleProposalAvailability: (proposalId: number | string) => Promise<boolean>
 }
 
 /**
  * Hook para gestionar las propuestas de materias del docente
  * Consume los endpoints GET/POST/DELETE /teachers/me/proposals
+ * Ahora soporta tanto IDs numéricos (legacy) como UUIDs (nuevo)
  */
 export function useProposals(): UseProposalsReturn {
   const [proposals, setProposals] = useState<Proposal[]>([])
@@ -41,7 +42,7 @@ export function useProposals(): UseProposalsReturn {
     }
   }
 
-  const createProposal = async (subjectId: number): Promise<boolean> => {
+  const createProposal = async (subjectId: number | string): Promise<boolean> => {
     try {
       const request: CreateProposalRequest = { subjectId }
       const response = await TeacherService.createProposal(request)
@@ -59,7 +60,7 @@ export function useProposals(): UseProposalsReturn {
     }
   }
 
-  const deleteProposal = async (subjectId: number): Promise<boolean> => {
+  const deleteProposal = async (subjectId: number | string): Promise<boolean> => {
     try {
       const response = await TeacherService.deleteProposal(subjectId)
       
@@ -76,7 +77,7 @@ export function useProposals(): UseProposalsReturn {
     }
   }
 
-  const resendProposal = async (proposalId: number): Promise<boolean> => {
+  const resendProposal = async (proposalId: number | string): Promise<boolean> => {
     try {
       const response = await TeacherService.resendProposal(proposalId)
       
@@ -93,7 +94,7 @@ export function useProposals(): UseProposalsReturn {
     }
   }
 
-  const toggleProposalAvailability = async (proposalId: number): Promise<boolean> => {
+  const toggleProposalAvailability = async (proposalId: number | string): Promise<boolean> => {
     try {
       const response = await TeacherService.toggleProposalAvailability(proposalId)
       
@@ -125,4 +126,3 @@ export function useProposals(): UseProposalsReturn {
     toggleProposalAvailability
   }
 }
-

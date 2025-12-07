@@ -11,6 +11,7 @@ import { EditAvailabilityModal } from "@/components/modals/edit-availability-mod
 import { DeleteConfirmationModal } from "@/components/modals/delete-confirmation-modal"
 import { ConfirmationModal } from "@/components/modals/confirmation-modal"
 import { useTeacherProfile, useProposals, useAvailability } from "@/lib/hooks"
+import type { AvailabilityBlock } from "@/lib/types"
 
 // Función para obtener iniciales del nombre
 function getInitials(name: string): string {
@@ -22,10 +23,19 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
+// Genera un hash numérico simple a partir de un string (para UUIDs)
+function hashString(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return Math.abs(hash)
+}
+
 // Paleta estandarizada de colores para avatares
-function getUserColor(teacherId?: number): string {
-  if (!teacherId) return 'bg-gray-500'
-  
+function getUserColor(uuid?: string, teacherId?: number): string {
   const colors = [
     'bg-rose-500',      // Rosa
     'bg-blue-500',      // Azul
@@ -38,7 +48,19 @@ function getUserColor(teacherId?: number): string {
     'bg-orange-500',    // Naranja
     'bg-purple-500',    // Púrpura
   ]
-  return colors[teacherId % colors.length]
+  
+  // Priorizar UUID si está disponible
+  if (uuid) {
+    const hash = hashString(uuid)
+    return colors[hash % colors.length]
+  }
+  
+  // Fallback a teacherId numérico
+  if (teacherId) {
+    return colors[teacherId % colors.length]
+  }
+  
+  return 'bg-gray-500'
 }
 
 // Componente skeleton para Profile Header
@@ -180,13 +202,39 @@ function getShiftTime(shift: string): string {
 }
 
 // Función para obtener el nombre completo del campus
-function getCampusName(code: string): string {
-  const campusMap: Record<string, string> = {
+// Maneja tanto códigos legacy como UUIDs
+function getCampusName(codeOrUUID: string): string {
+  // Mapeo de códigos legacy (para compatibilidad)
+  const legacyMap: Record<string, string> = {
     'MON': 'Monserrat',
     'BEL': 'Belgrano',
+    'REC': 'Recoleta',
+    'PIN': 'Pinamar',
+    'FLO': 'Flores',
     'VIR': 'Virtual'
   }
-  return campusMap[code] || code
+  
+  // Si es un código legacy, devolver el nombre
+  if (legacyMap[codeOrUUID]) {
+    return legacyMap[codeOrUUID]
+  }
+  
+  // Si parece un UUID (contiene guiones), devolver un placeholder o el UUID corto
+  if (codeOrUUID.includes('-')) {
+    return codeOrUUID.substring(0, 8) + '...' // Mostrar primeros 8 caracteres del UUID
+  }
+  
+  return codeOrUUID
+}
+
+// Función helper para obtener el nombre de una sede desde un bloque de disponibilidad
+function getCampusDisplayName(block: AvailabilityBlock, index: number, campusId: string): string {
+  // Si tenemos nombres enriquecidos, usarlos
+  if (block.campusNames && block.campusNames[index]) {
+    return block.campusNames[index]
+  }
+  // Fallback a la función de mapeo
+  return getCampusName(campusId)
 }
 
 // Función para formatear el día
@@ -458,13 +506,13 @@ export default function PerfilPage() {
     }
   }, [showFilterDropdown, showAvailabilityFilterDropdown])
 
-  const handleAddSubject = (subjectId: number) => {
+  const handleAddSubject = (subjectId: number | string) => {
     // Cerrar modal primero
     setShowSubjectModal(false)
     
     // Optimistic Update: Agregar inmediatamente a la UI
     const optimisticProposal = {
-      proposalId: Date.now(), // ID temporal
+      proposalId: `temp-${Date.now()}`, // ID temporal (string para UUIDs)
       subjectId,
       subjectName: null, // null indica que debe mostrar shimmer
       status: 'PENDIENTE' as const,
@@ -1239,12 +1287,12 @@ export default function PerfilPage() {
         <Card className="bg-white">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className={`w-20 h-20 flex-shrink-0 rounded-full ${getUserColor(profile.teacherId)} flex items-center justify-center text-white font-bold text-3xl shadow-lg`}>
+              <div className={`w-20 h-20 flex-shrink-0 rounded-full ${getUserColor(profile.uuid, profile.teacherId)} flex items-center justify-center text-white font-bold text-3xl shadow-lg`}>
                 {getInitials(profile.name)}
               </div>
               <div className="flex-1">
                 <h1 className="text-2xl font-bold text-gray-900">{profile.name}</h1>
-                <p className="text-gray-600">LEGAJO {profile.legajo}</p>
+                <p className="text-gray-600">{profile.email}</p>
                 <div className="mt-2">
                   <Badge className={profile.activo ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"}>
                     Estado: {profile.activo ? "Activo" : "Inactivo"}
@@ -1280,12 +1328,12 @@ export default function PerfilPage() {
                 <div className="bg-gray-100 px-3 py-2 rounded-md text-gray-900">{profile.name}</div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Legajo</label>
-                <div className="bg-gray-100 px-3 py-2 rounded-md text-gray-900">{profile.legajo}</div>
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Correo institucional</label>
                 <div className="bg-gray-100 px-3 py-2 rounded-md text-gray-900">{profile.email}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
+                <div className="bg-gray-100 px-3 py-2 rounded-md text-gray-900">{profile.role}</div>
               </div>
             </div>
           </CardContent>
@@ -1843,15 +1891,19 @@ export default function PerfilPage() {
                         <div className="flex flex-wrap gap-2">
                           {block.campuses
                             .filter(campus => campus !== 'VIR')
-                            .map((campus, idx) => (
-                              <span 
-                                key={idx}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-medium"
-                              >
-                                <MapPin className="w-3.5 h-3.5" />
-                                {getCampusName(campus)}
-                              </span>
-                            ))}
+                            .map((campus, idx) => {
+                              // Buscar el índice real en el array original de campuses
+                              const originalIndex = block.campuses.indexOf(campus)
+                              return (
+                                <span 
+                                  key={idx}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-medium"
+                                >
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  {getCampusDisplayName(block, originalIndex, campus)}
+                                </span>
+                              )
+                            })}
                           {/* Si es AMBAS y tiene VIR, mostrar chip especial */}
                           {block.modality === 'AMBAS' && block.campuses.includes('VIR') && (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">

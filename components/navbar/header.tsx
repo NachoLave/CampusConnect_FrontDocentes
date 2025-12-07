@@ -111,7 +111,8 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
                 name: profile.name,
                 id: profile.legajo,
                 email: profile.email,
-                teacherId: profile.teacherId
+                teacherId: profile.teacherId,
+                uuid: profile.uuid
               }} 
             />
           ) : null}

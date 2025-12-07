@@ -1,8 +1,36 @@
 import { TeacherProfile, ApiResponse, Proposal, CreateProposalRequest, AvailabilityBlock, CreateAvailabilityBlockRequest, UpdateAvailabilityRequest } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
+import { authService } from './auth'
+import { SubjectsService } from './subjects'
+import { AdminService } from './admin'
 
 export class TeacherService {
+  /**
+   * Obtiene el UUID del docente autenticado
+   * @throws Error si no hay docente autenticado
+   */
+  private static getTeacherUUID(): string {
+    const uuid = authService.getTeacherUUID()
+    if (!uuid) {
+      throw new Error('No hay docente autenticado')
+    }
+    return uuid
+  }
+
+  /**
+   * Headers base para requests al backend del módulo docente
+   * Solo usa X-Teacher-Id con el UUID (sin Authorization)
+   */
+  private static getHeaders(): Record<string, string> {
+    const teacherUUID = this.getTeacherUUID()
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Teacher-Id': teacherUUID
+    }
+  }
+
   /**
    * Obtiene el perfil completo del docente autenticado
    * GET /teachers/me
@@ -33,20 +61,35 @@ export class TeacherService {
   /**
    * Obtiene las propuestas de materias del docente
    * GET /teachers/me/proposals
+   * Envía el UUID del docente en el header X-Teacher-Id
    */
   static async getProposals(): Promise<ApiResponse<Proposal[]>> {
     try {
-      const response = await apiClient.get<Proposal[]>(API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS)
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Propuestas obtenidas correctamente'
-        }
+      const headers = this.getHeaders()
+      console.log(`📋 Obteniendo propuestas para docente ${headers['X-Teacher-Id']}...`)
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`, {
+        method: 'GET',
+        headers
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Error response:', response.status, errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al obtener las propuestas')
+      const proposals: Proposal[] = await response.json()
+      console.log(`📋 Propuestas obtenidas: ${proposals.length}`)
+
+      // Enriquecer propuestas con nombres de materias
+      const enrichedProposals = await this.enrichProposalsWithSubjectNames(proposals)
+      
+      return {
+        data: enrichedProposals,
+        success: true,
+        message: 'Propuestas obtenidas correctamente'
+      }
     } catch (error) {
       console.error('Error obteniendo propuestas:', error)
       return {
@@ -58,22 +101,57 @@ export class TeacherService {
   }
 
   /**
+   * Enriquece las propuestas con los nombres de las materias desde la API externa
+   */
+  private static async enrichProposalsWithSubjectNames(proposals: Proposal[]): Promise<Proposal[]> {
+    if (proposals.length === 0) return proposals
+
+    // Obtener UUIDs únicos de materias
+    const subjectUUIDs = [...new Set(proposals.map(p => String(p.subjectId)))]
+    
+    console.log(`🎓 Enriqueciendo ${proposals.length} propuestas con nombres de ${subjectUUIDs.length} materias...`)
+
+    // Obtener todas las materias en paralelo
+    const materiasMap = await SubjectsService.getSubjectsByUUIDs(subjectUUIDs)
+
+    // Enriquecer cada propuesta con el nombre de la materia
+    return proposals.map(proposal => {
+      const materia = materiasMap.get(String(proposal.subjectId))
+      return {
+        ...proposal,
+        subjectName: materia?.nombre || null
+      }
+    })
+  }
+
+  /**
    * Crea una nueva propuesta de materia
    * POST /teachers/me/proposals
    */
   static async createProposal(request: CreateProposalRequest): Promise<ApiResponse<Proposal>> {
     try {
-      const response = await apiClient.post<Proposal>(API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS, request)
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Propuesta creada correctamente'
-        }
+      const headers = this.getHeaders()
+      console.log(`📝 Creando propuesta para materia ${request.subjectId}...`)
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al crear la propuesta')
+      const proposal: Proposal = await response.json()
+      console.log(`✅ Propuesta creada: ${proposal.proposalId}`)
+      
+      return {
+        data: proposal,
+        success: true,
+        message: 'Propuesta creada correctamente'
+      }
     } catch (error) {
       console.error('Error creando propuesta:', error)
       return {
@@ -88,10 +166,24 @@ export class TeacherService {
    * Elimina una propuesta pendiente
    * DELETE /teachers/me/proposals?subjectId=X
    */
-  static async deleteProposal(subjectId: number): Promise<ApiResponse<void>> {
+  static async deleteProposal(subjectId: number | string): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.delete<void>(`${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}?subjectId=${subjectId}`)
+      const headers = this.getHeaders()
+      console.log(`🗑️ Eliminando propuesta de materia ${subjectId}...`)
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}?subjectId=${subjectId}`,
+        {
+          method: 'DELETE',
+          headers
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
       
+      console.log(`✅ Propuesta eliminada`)
       return {
         data: undefined,
         success: true,
@@ -111,22 +203,32 @@ export class TeacherService {
    * Reenvía una propuesta rechazada actualizando su estado
    * PUT /teachers/me/proposals/{proposalId}
    */
-  static async resendProposal(proposalId: number): Promise<ApiResponse<Proposal>> {
+  static async resendProposal(proposalId: number | string): Promise<ApiResponse<Proposal>> {
     try {
-      const response = await apiClient.put<Proposal>(
-        `${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}`,
-        { decision: 'PENDIENTE' }
-      )
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Propuesta reenviada correctamente'
+      const headers = this.getHeaders()
+      console.log(`🔄 Reenviando propuesta ${proposalId}...`)
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ decision: 'PENDIENTE' })
         }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al reenviar la propuesta')
+      const proposal: Proposal = await response.json()
+      console.log(`✅ Propuesta reenviada`)
+      
+      return {
+        data: proposal,
+        success: true,
+        message: 'Propuesta reenviada correctamente'
+      }
     } catch (error) {
       console.error('Error reenviando propuesta:', error)
       return {
@@ -141,21 +243,31 @@ export class TeacherService {
    * Cambia la disponibilidad (activa/inactiva) de una propuesta aprobada
    * PATCH /teachers/me/proposals/{proposalId}/toggle-availability
    */
-  static async toggleProposalAvailability(proposalId: number): Promise<ApiResponse<Proposal>> {
+  static async toggleProposalAvailability(proposalId: number | string): Promise<ApiResponse<Proposal>> {
     try {
-      const response = await apiClient.patch<Proposal>(
-        `${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}/toggle-availability`
-      )
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Disponibilidad actualizada correctamente'
+      const headers = this.getHeaders()
+      console.log(`🔄 Cambiando disponibilidad de propuesta ${proposalId}...`)
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}/toggle-availability`,
+        {
+          method: 'PATCH',
+          headers
         }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al cambiar la disponibilidad')
+      const proposal: Proposal = await response.json()
+      console.log(`✅ Disponibilidad actualizada`)
+      
+      return {
+        data: proposal,
+        success: true,
+        message: 'Disponibilidad actualizada correctamente'
+      }
     } catch (error) {
       console.error('Error cambiando disponibilidad de propuesta:', error)
       return {
@@ -169,20 +281,33 @@ export class TeacherService {
   /**
    * Obtiene la disponibilidad horaria del docente
    * GET /teachers/me/availability
+   * Enriquece cada bloque con los nombres de las sedes desde la API externa
    */
   static async getAvailability(): Promise<ApiResponse<AvailabilityBlock[]>> {
     try {
-      const response = await apiClient.get<AvailabilityBlock[]>(API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY)
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Disponibilidad obtenida correctamente'
-        }
+      const headers = this.getHeaders()
+      console.log(`📅 Obteniendo disponibilidad para docente ${headers['X-Teacher-Id']}...`)
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`, {
+        method: 'GET',
+        headers
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al obtener la disponibilidad')
+      const availability: AvailabilityBlock[] = await response.json()
+      console.log(`📅 Disponibilidad obtenida: ${availability.length} bloques`)
+      
+      // Enriquecer con nombres de sedes
+      const enrichedAvailability = await this.enrichAvailabilityWithCampusNames(availability)
+      
+      return {
+        data: enrichedAvailability,
+        success: true,
+        message: 'Disponibilidad obtenida correctamente'
+      }
     } catch (error) {
       console.error('Error obteniendo disponibilidad:', error)
       return {
@@ -194,22 +319,80 @@ export class TeacherService {
   }
 
   /**
+   * Enriquece los bloques de disponibilidad con los nombres de las sedes desde la API externa
+   */
+  private static async enrichAvailabilityWithCampusNames(blocks: AvailabilityBlock[]): Promise<AvailabilityBlock[]> {
+    if (blocks.length === 0) return blocks
+
+    // Obtener UUIDs únicos de sedes de todos los bloques
+    const allCampusUUIDs = new Set<string>()
+    blocks.forEach(block => {
+      block.campuses.forEach(uuid => allCampusUUIDs.add(uuid))
+    })
+
+    if (allCampusUUIDs.size === 0) {
+      console.log('📅 No hay sedes para enriquecer')
+      return blocks
+    }
+
+    console.log(`🏢 Enriqueciendo ${blocks.length} bloques con nombres de ${allCampusUUIDs.size} sedes...`)
+
+    // Obtener todas las sedes de la API externa
+    const sedesResponse = await AdminService.getAllCampuses()
+    
+    if (!sedesResponse.success || !sedesResponse.data) {
+      console.warn('⚠️ No se pudieron obtener las sedes para enriquecer')
+      return blocks
+    }
+
+    // Crear mapa UUID -> nombre
+    const sedesMap = new Map<string, string>()
+    sedesResponse.data.forEach(sede => {
+      sedesMap.set(sede.id_sede, sede.nombre)
+    })
+
+    console.log(`🏢 Mapa de sedes creado: ${sedesMap.size} sedes`)
+
+    // Enriquecer cada bloque
+    return blocks.map(block => {
+      const campusNames = block.campuses
+        .map(uuid => sedesMap.get(uuid) || uuid) // Si no encuentra, muestra el UUID
+        .filter(name => name) // Filtrar nulls
+
+      return {
+        ...block,
+        campusNames
+      }
+    })
+  }
+
+  /**
    * Agrega un bloque individual de disponibilidad horaria
    * POST /teachers/me/availability
    */
   static async addAvailabilityBlock(request: CreateAvailabilityBlockRequest): Promise<ApiResponse<AvailabilityBlock>> {
     try {
-      const response = await apiClient.post<AvailabilityBlock>(API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY, request)
-      
-      if (response.success && response.data) {
-        return {
-          data: response.data,
-          success: true,
-          message: 'Bloque de disponibilidad agregado correctamente'
-        }
+      const headers = this.getHeaders()
+      console.log(`➕ Agregando bloque de disponibilidad...`)
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request)
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      throw new Error(response.error || 'Error al agregar el bloque')
+      const block: AvailabilityBlock = await response.json()
+      console.log(`✅ Bloque agregado: ${block.id}`)
+      
+      return {
+        data: block,
+        success: true,
+        message: 'Bloque de disponibilidad agregado correctamente'
+      }
     } catch (error) {
       console.error('Error agregando bloque de disponibilidad:', error)
       return {
@@ -226,8 +409,22 @@ export class TeacherService {
    */
   static async deleteAvailabilityBlock(blockId: number): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.delete<void>(`${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`)
-      
+      const headers = this.getHeaders()
+      console.log(`🗑️ Eliminando bloque ${blockId}...`)
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
+        {
+          method: 'DELETE',
+          headers
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      console.log(`✅ Bloque eliminado`)
       return {
         data: undefined,
         success: true,
@@ -252,11 +449,23 @@ export class TeacherService {
     data: { campuses: string[], modality?: string }
   ): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.patch<void>(
-        `${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
-        data
+      const headers = this.getHeaders()
+      console.log(`✏️ Actualizando bloque ${blockId}...`)
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify(data)
+        }
       )
-      
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      console.log(`✅ Bloque actualizado`)
       return {
         data: undefined,
         success: true,
@@ -272,4 +481,3 @@ export class TeacherService {
     }
   }
 }
-

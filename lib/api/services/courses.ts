@@ -1,27 +1,366 @@
-import { Course, ApiResponse, PaginatedResponse } from '@/lib/types'
+import { Course, ApiResponse, PaginatedResponse, ExternalInscripcion, ExternalCursoDetalle, InscripcionesResponse, CursoDetalleResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
+import { authService } from './auth'
 import coursesData from '@/lib/data/courses.json'
 
+// URL base de la API externa de cursos
+const CURSOS_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api'
+
 export class CoursesService {
-  // Obtener todos los cursos
+  /**
+   * Obtiene el UUID del docente autenticado
+   */
+  private static getTeacherUUID(): string | null {
+    return authService.getTeacherUUID()
+  }
+
+  /**
+   * Normaliza el periodo al formato del frontend
+   * API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
+   */
+  private static normalizePeriodToFrontend(rawPeriod: string): string {
+    if (!rawPeriod) return 'Todos'
+    
+    const yearMatch = rawPeriod.match(/\d{4}/)
+    const year = yearMatch ? yearMatch[0] : new Date().getFullYear().toString()
+    
+    const lower = rawPeriod.toLowerCase()
+    if (lower.includes('1er') || lower.includes('primer')) {
+      return `1er Cuatr. ${year}`
+    }
+    if (lower.includes('2do') || lower.includes('segundo')) {
+      return `2do Cuatr. ${year}`
+    }
+    if (lower.includes('q1')) {
+      return `1er Cuatr. ${year}`
+    }
+    if (lower.includes('q2')) {
+      return `2do Cuatr. ${year}`
+    }
+    
+    return rawPeriod
+  }
+
+  /**
+   * Obtiene todos los cursos del docente desde la API externa
+   * Flujo:
+   * 1. GET /api/inscripciones?user_uuid=UUID -> Obtiene inscripciones del docente
+   * 2. Para cada curso, obtiene detalles de /api/cursos/:id
+   * 3. Para cada curso, obtiene inscripciones de /api/inscripciones?uuid_curso=id para contar alumnos
+   */
   static async getCourses(): Promise<ApiResponse<Course[]>> {
-    if (USE_MOCK_DATA) {
-      // Simulamos delay para hacer más realista
-      await new Promise(resolve => setTimeout(resolve, 500))
+    const teacherUUID = this.getTeacherUUID()
+    
+    if (!teacherUUID) {
+      console.error('❌ No hay docente autenticado')
       return {
-        data: coursesData as Course[],
-        success: true,
-        message: 'Cursos obtenidos correctamente'
+        data: [],
+        success: false,
+        error: 'No hay docente autenticado'
       }
     }
 
-    return apiClient.get<Course[]>(API_CONFIG.ENDPOINTS.COURSES)
+    try {
+      console.log(`📚 Obteniendo cursos del docente ${teacherUUID}...`)
+
+      // Paso 1: Obtener inscripciones del docente
+      const inscripciones = await this.getDocenteInscripciones(teacherUUID)
+      
+      if (!inscripciones || inscripciones.length === 0) {
+        console.log('📚 No se encontraron cursos para este docente')
+        return {
+          data: [],
+          success: true,
+          message: 'No hay cursos asignados'
+        }
+      }
+
+      console.log(`📚 Inscripciones encontradas: ${inscripciones.length}`)
+
+      // Paso 2: Para cada inscripción, obtener detalles del curso y conteo de alumnos
+      const cursosPromises = inscripciones.map(async (inscripcion) => {
+        const cursoUUID = inscripcion.uuid_curso
+        
+        // Obtener detalles completos del curso
+        const cursoDetalle = await this.getCursoDetalle(cursoUUID)
+        
+        // Obtener inscripciones del curso para contar alumnos y docentes
+        const cursoInscripciones = await this.getCursoInscripciones(cursoUUID)
+        
+        // Convertir a formato Course del frontend
+        return this.mapExternalToCourse(inscripcion, cursoDetalle, cursoInscripciones)
+      })
+
+      const cursos = await Promise.all(cursosPromises)
+      
+      console.log(`✅ Cursos obtenidos: ${cursos.length}`)
+      
+      return {
+        data: cursos,
+        success: true,
+        message: 'Cursos obtenidos correctamente'
+      }
+    } catch (error) {
+      console.error('❌ Error obteniendo cursos:', error)
+      return {
+        data: [],
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
+    }
+  }
+
+  /**
+   * Obtiene las inscripciones del docente (cursos que dicta)
+   * GET /api/inscripciones?user_uuid=UUID
+   */
+  private static async getDocenteInscripciones(teacherUUID: string): Promise<ExternalInscripcion[]> {
+    try {
+      console.log(`📋 Obteniendo inscripciones del docente ${teacherUUID}...`)
+      
+      const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: InscripcionesResponse = await response.json()
+      
+      if (data.success && data.data) {
+        console.log(`📋 Inscripciones obtenidas: ${data.data.length}`)
+        return data.data
+      }
+
+      return []
+    } catch (error) {
+      console.error('❌ Error obteniendo inscripciones del docente:', error)
+      return []
+    }
+  }
+
+  /**
+   * Obtiene los detalles completos de un curso
+   * GET /api/cursos/:cursoId
+   */
+  private static async getCursoDetalle(cursoUUID: string): Promise<ExternalCursoDetalle | null> {
+    try {
+      const url = `${CURSOS_API_URL}/cursos/${cursoUUID}`
+      console.log(`📖 Obteniendo detalle del curso ${cursoUUID}...`)
+      console.log(`📖 URL: ${url}`)
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+
+      console.log(`📖 Response status: ${response.status}`)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`❌ HTTP error! status: ${response.status}, body: ${errorText}`)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: CursoDetalleResponse = await response.json()
+      console.log(`📖 Response data:`, data)
+      
+      if (data.success && data.data) {
+        console.log(`✅ Detalle del curso obtenido: ${data.data.materia?.nombre || cursoUUID}`)
+        return data.data
+      }
+
+      console.warn(`⚠️ Respuesta sin success o sin data:`, data)
+      return null
+    } catch (error) {
+      console.error(`❌ Error obteniendo detalle del curso ${cursoUUID}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * Obtiene las inscripciones de un curso (para contar alumnos y docentes)
+   * GET /api/inscripciones?uuid_curso=cursoId
+   */
+  private static async getCursoInscripciones(cursoUUID: string): Promise<ExternalInscripcion[]> {
+    try {
+      const response = await fetch(`${CURSOS_API_URL}/inscripciones?uuid_curso=${cursoUUID}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: InscripcionesResponse = await response.json()
+      
+      if (data.success && data.data) {
+        return data.data
+      }
+
+      return []
+    } catch (error) {
+      console.error(`❌ Error obteniendo inscripciones del curso ${cursoUUID}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * Convierte datos de API externa a formato Course del frontend
+   */
+  private static mapExternalToCourse(
+    inscripcion: ExternalInscripcion, 
+    cursoDetalle: ExternalCursoDetalle | null,
+    cursoInscripciones: ExternalInscripcion[]
+  ): Course {
+    const curso = cursoDetalle || inscripcion.curso
+    
+    // Contar alumnos (rol === 'ALUMNO')
+    const alumnos = cursoInscripciones.filter(i => i.rol === 'ALUMNO')
+    
+    // Obtener docentes (rol === 'TITULAR' o 'AUXILIAR')
+    const docentes = cursoInscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR')
+    
+    // Mapear docentes al formato Teacher
+    const teachers = docentes.map(d => ({
+      id: 0,
+      uuid: d.user.uuid,
+      name: `${d.user.nombre} ${d.user.apellido}`.trim(),
+      email: d.user.email,
+      legajo: d.user.legajo,
+      role: d.rol,
+      avatar: '/placeholder-user.jpg'
+    }))
+
+    // Mapear turno
+    const turnoMap: Record<string, string> = {
+      'MAÑANA': 'TM',
+      'MANANA': 'TM',
+      'TARDE': 'TT',
+      'NOCHE': 'TN'
+    }
+    const shift = turnoMap[curso.turno?.toUpperCase()] || 'TM'
+
+    // Mapear horarios por turno
+    const scheduleMap: Record<string, string> = {
+      'MAÑANA': '8:00 - 12:00',
+      'MANANA': '8:00 - 12:00',
+      'TARDE': '14:00 - 18:00',
+      'NOCHE': '18:00 - 22:00'
+    }
+    const schedule = scheduleMap[curso.turno?.toUpperCase()] || '8:00 - 12:00'
+
+    // Mapear día
+    const dayMap: Record<string, string> = {
+      'LUNES': 'Lunes',
+      'MARTES': 'Martes',
+      'MIERCOLES': 'Miércoles',
+      'MIÉRCOLES': 'Miércoles',
+      'JUEVES': 'Jueves',
+      'VIERNES': 'Viernes',
+      'SABADO': 'Sábado',
+      'SÁBADO': 'Sábado',
+      'DOMINGO': 'Domingo'
+    }
+    const day = dayMap[curso.dia?.toUpperCase()] || 'Lunes'
+
+    // Formatear fechas
+    const formatDate = (isoDate: string) => {
+      try {
+        const date = new Date(isoDate)
+        return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      } catch {
+        return ''
+      }
+    }
+
+    const desde = curso.desde ? formatDate(curso.desde) : ''
+    const hasta = curso.hasta ? formatDate(curso.hasta) : ''
+    const dates = desde && hasta ? `${desde} - ${hasta}` : undefined
+
+    // Normalizar el periodo al formato del frontend
+    // API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
+    // API: "2do Cuatrimestre 2025" → Frontend: "2do Cuatr. 2025"
+    const normalizePeriod = (rawPeriod: string): string => {
+      if (!rawPeriod) return 'Todos'
+      
+      // Extraer el año
+      const yearMatch = rawPeriod.match(/\d{4}/)
+      const year = yearMatch ? yearMatch[0] : new Date().getFullYear().toString()
+      
+      // Detectar cuatrimestre
+      const lower = rawPeriod.toLowerCase()
+      if (lower.includes('1er') || lower.includes('primer')) {
+        return `1er Cuatr. ${year}`
+      }
+      if (lower.includes('2do') || lower.includes('segundo')) {
+        return `2do Cuatr. ${year}`
+      }
+      
+      // Si tiene Q1 o Q2 (formato backend antiguo)
+      if (lower.includes('q1')) {
+        return `1er Cuatr. ${year}`
+      }
+      if (lower.includes('q2')) {
+        return `2do Cuatr. ${year}`
+      }
+      
+      // Fallback: devolver el periodo original
+      return rawPeriod
+    }
+
+    const period = normalizePeriod(curso.periodo)
+
+    return {
+      id: 0, // Ya no usamos ID numérico
+      uuid: curso.uuid,
+      title: cursoDetalle?.materia?.nombre || 'Curso sin nombre',
+      day,
+      code: curso.comision,
+      students: alumnos.length,
+      teachers,
+      shift,
+      schedule,
+      dates,
+      period,
+      location: curso.aula,
+      sede: curso.sede,
+      isVirtual: curso.modalidad?.toUpperCase() === 'VIRTUAL',
+      image: '/images/course-background.png',
+      modality: curso.modalidad,
+      status: curso.estado,
+      // Determinar si es promocionable basado en approval_method de la materia
+      // "final" → requiere examen final (no promocionable)
+      // "promocion" o cualquier otro → promocionable
+      promocionable: cursoDetalle?.materia?.approval_method?.toLowerCase() !== 'final',
+      // Campos adicionales
+      subjectName: cursoDetalle?.materia?.nombre,
+      subjectUuid: curso.uuid_materia,
+      careerName: cursoDetalle?.carrera?.name,
+      careerUuid: cursoDetalle?.carrera?.uuid,
+      examen: curso.examen,
+      cantidadMax: curso.cantidad_max,
+      cantidadMin: curso.cantidad_min,
+      desde: curso.desde,
+      hasta: curso.hasta,
+      teacherRole: inscripcion.rol,
+      teacherInscriptionStatus: inscripcion.estado
+    }
   }
 
   // Obtener todos los registros de asistencia del curso
-  static async getAttendanceRecords(courseId: number): Promise<ApiResponse<any[]>> {
+  static async getAttendanceRecords(courseId: number | string): Promise<ApiResponse<any[]>> {
     try {
       // Asegurar headers requeridos por backend (docente mock, roles)
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
@@ -33,7 +372,7 @@ export class CoursesService {
   }
 
   // Obtener asistencia por fecha (YYYY-MM-DD)
-  static async getAttendanceByDate(courseId: number, dateIso: string): Promise<ApiResponse<any>> {
+  static async getAttendanceByDate(courseId: number | string, dateIso: string): Promise<ApiResponse<any>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
@@ -44,8 +383,8 @@ export class CoursesService {
   }
 
   // Guardar asistencia para una fecha específica (PUT)
-  // NOTA: studentId puede ser string (UUID) o number según el backend
-  static async saveAttendanceByDate(courseId: number, dateIso: string, items: Array<{ studentId: string | number; status: string | null }>): Promise<ApiResponse<any>> {
+  // NOTA: courseId puede ser UUID (string) o number. studentId siempre es UUID string.
+  static async saveAttendanceByDate(courseId: number | string, dateIso: string, items: Array<{ studentId: string; status: string | null }>): Promise<ApiResponse<any>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
@@ -57,7 +396,7 @@ export class CoursesService {
   }
 
   // Confirmar/Generar acta oficial para un curso
-  static async confirmAct(courseId: number): Promise<ApiResponse<any>> {
+  static async confirmAct(courseId: number | string): Promise<ApiResponse<any>> {
     try {
       // Build endpoint like /teaching/courses/{id}/acts:confirm
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
@@ -93,7 +432,7 @@ export class CoursesService {
   }
 
   // Obtener actas (acts) asociadas a un curso
-  static async getActs(courseId: number): Promise<ApiResponse<any[]>> {
+  static async getActs(courseId: number | string): Promise<ApiResponse<any[]>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
@@ -138,7 +477,7 @@ export class CoursesService {
   }
 
   // Obtener preview del acta de un curso
-  static async getCourseActsPreview(courseId: number): Promise<ApiResponse<any>> {
+  static async getCourseActsPreview(courseId: number | string): Promise<ApiResponse<any>> {
     try {
       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
@@ -165,11 +504,16 @@ export class CoursesService {
     }
   }
 
-  // Obtener curso por ID
-  static async getCourseById(id: number): Promise<ApiResponse<Course>> {
+  // Obtener curso por ID o UUID
+  static async getCourseById(idOrUuid: number | string): Promise<ApiResponse<Course>> {
+    // Si es un UUID (string con guiones), usar API externa
+    if (typeof idOrUuid === 'string' && idOrUuid.includes('-')) {
+      return this.getCourseByUUID(idOrUuid)
+    }
+
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 300))
-      const course = coursesData.find(c => c.id === id)
+      const course = coursesData.find(c => c.id === idOrUuid)
       if (!course) {
         return {
           data: null as any,
@@ -184,7 +528,205 @@ export class CoursesService {
       }
     }
 
-    return apiClient.get<Course>(API_CONFIG.ENDPOINTS.COURSE_DETAIL(id))
+    return apiClient.get<Course>(API_CONFIG.ENDPOINTS.COURSE_DETAIL(idOrUuid as number))
+  }
+
+  /**
+   * Obtiene un curso por UUID desde la API externa
+   */
+  static async getCourseByUUID(cursoUUID: string): Promise<ApiResponse<Course>> {
+    try {
+      console.log(`📖 Obteniendo curso por UUID ${cursoUUID}...`)
+      
+      // Obtener detalles del curso
+      const cursoDetalle = await this.getCursoDetalle(cursoUUID)
+      
+      if (!cursoDetalle) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'Curso no encontrado'
+        }
+      }
+
+      // Obtener inscripciones del curso
+      const cursoInscripciones = await this.getCursoInscripciones(cursoUUID)
+      
+      // Crear una inscripción dummy para mapear
+      const dummyInscripcion: ExternalInscripcion = {
+        uuid: '',
+        uuid_curso: cursoUUID,
+        user_uuid: '',
+        estado: '',
+        rol: '',
+        razon: '',
+        fecha_baja: null,
+        created_at: '',
+        updated_at: '',
+        user: {} as any,
+        curso: cursoDetalle as any
+      }
+      
+      const course = this.mapExternalToCourse(dummyInscripcion, cursoDetalle, cursoInscripciones)
+      
+      return {
+        data: course,
+        success: true,
+        message: 'Curso obtenido correctamente'
+      }
+    } catch (error) {
+      console.error(`❌ Error obteniendo curso ${cursoUUID}:`, error)
+      return {
+        data: null as any,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
+    }
+  }
+
+  /**
+   * Obtiene participantes de un curso por UUID desde la API externa
+   * Retorna el formato esperado por course-info.tsx: { teachers, students, course }
+   */
+  static async getCourseParticipantsByUUID(cursoUUID: string): Promise<ApiResponse<{ teachers: any[]; students: any[]; course?: any }>> {
+    try {
+      console.log(`📖 Obteniendo participantes del curso ${cursoUUID}...`)
+      
+      // Obtener detalles del curso y las inscripciones en paralelo
+      const [cursoDetalle, inscripciones] = await Promise.all([
+        this.getCursoDetalle(cursoUUID),
+        this.getCursoInscripciones(cursoUUID)
+      ])
+      
+      if (!cursoDetalle) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'Curso no encontrado'
+        }
+      }
+
+      // Separar inscripciones por rol
+      const docentesInscripciones = inscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR')
+      const alumnosInscripciones = inscripciones.filter(i => i.rol === 'ALUMNO')
+
+      // Mapear docentes
+      const teachers = docentesInscripciones.map(d => ({
+        id: d.user.uuid,
+        uuid: d.user.uuid,
+        teacherId: d.user.uuid,
+        name: `${d.user.nombre} ${d.user.apellido}`.trim(),
+        legajo: d.user.legajo || '',
+        email: d.user.email || '',
+        role: d.rol === 'TITULAR' ? 'Titular' : 'Auxiliar',
+        dni: d.user.dni
+      }))
+
+      // Mapear alumnos
+      const students = alumnosInscripciones.map(a => ({
+        id: a.user.uuid,
+        uuid: a.user.uuid,
+        studentId: a.user.uuid,
+        name: `${a.user.nombre} ${a.user.apellido}`.trim(),
+        legajo: a.user.legajo || '',
+        email: a.user.email || '',
+        condition: a.estado?.toUpperCase() === 'CONFIRMADA' ? 'ACTIVA' : 'REGULAR',
+        dni: a.user.dni,
+        telefono: a.user.telefono_personal,
+        carreraUuid: a.user.carrera_uuid,
+        inscripcionEstado: a.estado,
+        activo: a.user.status === 'activo'
+      }))
+
+      // Mapear turno
+      const turnoMap: Record<string, string> = {
+        'MAÑANA': 'TM',
+        'MANANA': 'TM',
+        'TARDE': 'TT',
+        'NOCHE': 'TN'
+      }
+      const shift = turnoMap[cursoDetalle.turno?.toUpperCase()] || cursoDetalle.turno || 'TM'
+
+      // Mapear horarios por turno
+      const scheduleMap: Record<string, string> = {
+        'MAÑANA': '8:00 - 12:00',
+        'MANANA': '8:00 - 12:00',
+        'TARDE': '14:00 - 18:00',
+        'NOCHE': '18:00 - 22:00'
+      }
+      const schedule = scheduleMap[cursoDetalle.turno?.toUpperCase()] || '8:00 - 12:00'
+
+      // Formatear fechas
+      const formatDate = (dateStr: string | null | undefined): string => {
+        if (!dateStr) return ''
+        try {
+          const date = new Date(dateStr)
+          return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        } catch { return '' }
+      }
+
+      const fechaInicio = formatDate(cursoDetalle.desde)
+      const fechaFin = formatDate(cursoDetalle.hasta)
+      const dates = fechaInicio && fechaFin ? `${fechaInicio} - ${fechaFin}` : ''
+
+      // Construir objeto course con todos los datos
+      const course = {
+        id: 0,
+        uuid: cursoDetalle.uuid,
+        title: cursoDetalle.materia?.nombre || 'Curso sin nombre',
+        code: cursoDetalle.comision || '',
+        day: cursoDetalle.dia || '',
+        diaSemana: cursoDetalle.dia || '',
+        shift,
+        turno: cursoDetalle.turno || '',
+        schedule,
+        horario: schedule,
+        dates,
+        fechaInicio,
+        fechaFin,
+        desde: cursoDetalle.desde,
+        hasta: cursoDetalle.hasta,
+        location: cursoDetalle.aula || '',
+        aula: cursoDetalle.aula || '',
+        sede: cursoDetalle.sede || '',
+        isVirtual: cursoDetalle.modalidad?.toUpperCase() === 'VIRTUAL',
+        modalidad: cursoDetalle.modalidad || 'PRESENCIAL',
+        status: cursoDetalle.estado || 'activo',
+        students: students.length,
+        teachers,
+        // Datos de la materia
+        materia: cursoDetalle.materia?.nombre || '',
+        materiaUuid: cursoDetalle.uuid_materia,
+        materiaDescription: cursoDetalle.materia?.description || '',
+        approvalMethod: cursoDetalle.materia?.approval_method || '',
+        promocionable: cursoDetalle.materia?.approval_method?.toLowerCase() !== 'final',
+        // Datos de la carrera
+        carrera: cursoDetalle.carrera?.name || '',
+        carreraUuid: cursoDetalle.carrera?.uuid || '',
+        carreraDescription: cursoDetalle.carrera?.description || '',
+        faculty: cursoDetalle.carrera?.faculty || '',
+        // Otros datos del curso
+        examen: cursoDetalle.examen || '',
+        cantidadMax: cursoDetalle.cantidad_max || 0,
+        cantidadMin: cursoDetalle.cantidad_min || 0,
+        period: CoursesService.normalizePeriodToFrontend(cursoDetalle.periodo || '')
+      }
+
+      console.log(`✅ Participantes obtenidos: ${teachers.length} docentes, ${students.length} alumnos`)
+
+      return {
+        data: { teachers, students, course },
+        success: true,
+        message: 'Participantes obtenidos correctamente'
+      }
+    } catch (error) {
+      console.error(`❌ Error obteniendo participantes del curso ${cursoUUID}:`, error)
+      return {
+        data: null as any,
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
+    }
   }
 
   // Obtener both teachers and students in one call (helpful convenience)
@@ -307,7 +849,7 @@ export class CoursesService {
   }
 
   // Obtener calificaciones de un curso (todas las evaluaciones y notas)
-  static async getCourseGrades(courseId: number): Promise<ApiResponse<any[]>> {
+  static async getCourseGrades(courseId: number | string): Promise<ApiResponse<any[]>> {
     try {
       // Paso 1: Obtener la lista de evaluaciones del curso
       // GET /teaching/courses/{courseId}/assessments
@@ -455,7 +997,7 @@ export class CoursesService {
   }
 
   // Guardar/actualizar calificaciones de un curso
-  static async saveCourseGrades(courseId: number, assessments: any[]): Promise<ApiResponse<any>> {
+  static async saveCourseGrades(courseId: number | string, assessments: any[]): Promise<ApiResponse<any>> {
     try {
       // Paso 1: Obtener las evaluaciones existentes del curso
       const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
@@ -583,76 +1125,32 @@ export class CoursesService {
   }
 
   // Obtener cursos por período
+  // Ahora usa la API externa y filtra por período si es necesario
   static async getCoursesByPeriod(term: string, includePrevious: boolean = false): Promise<ApiResponse<Course[]>> {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Filtrar cursos por período
-      let filteredCourses = coursesData as Course[]
-      
-      if (!includePrevious) {
-        // Convertir el término del backend al formato de los datos mock
-        let mockTerm = term
-        if (term.includes('Q1')) {
-          const year = term.match(/\d{4}/)?.[0] || '2025'
-          mockTerm = `1er Cuatr. ${year}`
-        } else if (term.includes('Q2')) {
-          const year = term.match(/\d{4}/)?.[0] || '2025'
-          mockTerm = `2do Cuatr. ${year}`
-        }
-        
-        // Solo cursos del período específico
-        filteredCourses = filteredCourses.filter(course => course.period === mockTerm)
-      } else {
-        // Incluir cursos anteriores también
-        const currentYear = new Date().getFullYear().toString()
-        filteredCourses = filteredCourses.filter(course => {
-          const courseYear = course.period.match(/\d{4}/)?.[0]
-          return courseYear === currentYear || parseInt(courseYear || '0') < parseInt(currentYear)
-        })
-      }
-      
-      return {
-        data: filteredCourses,
-        success: true,
-        message: 'Cursos del período obtenidos correctamente'
-      }
+    // Usar la API externa para obtener todos los cursos del docente
+    const result = await this.getCourses()
+    
+    if (!result.success || !result.data) {
+      return result
     }
 
-    // Producción: llamar al endpoint real de "mis cursos" y mapear la respuesta
-    try {
-      const queryParams = new URLSearchParams()
-      queryParams.append('term', term)
-      queryParams.append('includePrevious', includePrevious ? 'true' : 'false')
+    let filteredCourses = result.data
 
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?${queryParams.toString()}`
-      const headers: Record<string, string> = {
-        'Accept': 'application/json',
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES
-      }
+    if (!includePrevious && term) {
+      // Normalizar término para comparar
+      const normalizedTerm = term.toLowerCase()
+      
+      filteredCourses = filteredCourses.filter(course => {
+        const coursePeriod = (course.period || '').toLowerCase()
+        return coursePeriod.includes(normalizedTerm) || 
+               coursePeriod.includes(term)
+      })
+    }
 
-      const response = await fetch(url, { method: 'GET', headers })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const backendCourses = await response.json()
-
-      // Mapear cursos del backend al tipo Course del frontend
-      const mapped: Course[] = (backendCourses || []).map((c: any) => mapBackendCourseToFrontend(c))
-
-      return {
-        data: mapped,
-        success: true,
-        message: 'Cursos del período obtenidos correctamente (backend)'
-      }
-    } catch (error) {
-      return {
-        data: [] as Course[],
-        success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido obteniendo cursos del backend'
-      }
+    return {
+      data: filteredCourses,
+      success: true,
+      message: 'Cursos del período obtenidos correctamente'
     }
   }
 }

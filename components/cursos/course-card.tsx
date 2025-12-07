@@ -103,20 +103,24 @@ function getShiftColor(shift: string): string {
 }
 
 // Paleta estandarizada de colores para avatares de docentes
-function getTeacherColor(teacherId: number): string {
+function getTeacherColor(teacherId: number | string): string {
   const colors = [
-    'bg-rose-500',      // Rosa
-    'bg-blue-500',      // Azul
-    'bg-emerald-500',   // Verde esmeralda
-    'bg-violet-500',    // Violeta
-    'bg-amber-500',     // Ámbar
-    'bg-pink-500',      // Rosa fucsia
-    'bg-cyan-500',      // Cian
-    'bg-teal-500',      // Verde azulado
-    'bg-orange-500',    // Naranja
-    'bg-purple-500',    // Púrpura
+    'bg-rose-500',
+    'bg-blue-500',
+    'bg-emerald-500',
+    'bg-violet-500',
+    'bg-amber-500',
+    'bg-pink-500',
+    'bg-cyan-500',
+    'bg-teal-500',
+    'bg-orange-500',
+    'bg-purple-500',
   ]
-  return colors[teacherId % colors.length]
+  // Si es string (UUID), convertir a numero usando hash
+  const numericId = typeof teacherId === 'string' 
+    ? teacherId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    : teacherId
+  return colors[numericId % colors.length]
 }
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
@@ -124,10 +128,15 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
   const [hasActa, setHasActa] = useState(false)
   const [loadingActa, setLoadingActa] = useState(true)
   const [promocionable, setPromocionable] = useState<boolean | null>(() => {
+    // Si ya viene en el curso, usarlo
+    if (course?.promocionable !== undefined) {
+      return course.promocionable
+    }
     // Intentar cargar desde localStorage al inicio
-    if (typeof window !== 'undefined' && course?.id) {
+    const storageKey = course?.uuid || course?.id
+    if (typeof window !== 'undefined' && storageKey) {
       try {
-        const stored = localStorage.getItem(`course_${course.id}_promocionable`)
+        const stored = localStorage.getItem(`course_${storageKey}_promocionable`)
         if (stored !== null) {
           return stored === 'true'
         }
@@ -138,33 +147,41 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     return null
   })
   const [loadingPromocionable, setLoadingPromocionable] = useState(() => {
-    // Si no hay valor en localStorage, necesita cargar
-    if (typeof window !== 'undefined' && course?.id) {
+    // Si ya viene en el curso, no necesita cargar
+    if (course?.promocionable !== undefined) {
+      return false
+    }
+    // Si hay valor en localStorage, no necesita cargar
+    const storageKey = course?.uuid || course?.id
+    if (typeof window !== 'undefined' && storageKey) {
       try {
-        const stored = localStorage.getItem(`course_${course.id}_promocionable`)
+        const stored = localStorage.getItem(`course_${storageKey}_promocionable`)
         return stored === null
       } catch (e) {
-        return true
+        return false
       }
     }
-    return true
+    return false
   })
   const router = useRouter()
 
+  // Obtener el identificador del curso (preferir UUID, fallback a ID)
+  const courseIdentifier = course.uuid || course.id
+
   const handleInfoClick = () => {
-    router.push(`/cursos/${course.id}`)
+    router.push(`/cursos/${courseIdentifier}`)
   }
 
   const handleAttendanceClick = () => {
-    router.push(`/cursos/${course.id}?tab=asistencia`)
+    router.push(`/cursos/${courseIdentifier}?tab=asistencia`)
   }
 
   const handleGradesClick = () => {
-    router.push(`/cursos/${course.id}?tab=calificaciones`)
+    router.push(`/cursos/${courseIdentifier}?tab=calificaciones`)
   }
 
   const handleStudentsClick = () => {
-    router.push(`/cursos/${course.id}?tab=alumnos`)
+    router.push(`/cursos/${courseIdentifier}?tab=alumnos`)
   }
 
   // Check backend for acts for this course and show a lock if an acta exists / is closed
@@ -194,66 +211,25 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     return () => { mounted = false }
   }, [course?.id])
 
-  // Obtener información de promocionable del endpoint de detalle
+  // Obtener información de promocionable del curso
+  // Si ya viene en el curso (de la API externa), usarlo directamente
   useEffect(() => {
-    let mounted = true
-    const fetchCourseDetail = async () => {
+    // Si ya viene en el curso, usarlo directamente
+    if (course?.promocionable !== undefined) {
+      setPromocionable(course.promocionable)
+      setLoadingPromocionable(false)
+      // Guardar en localStorage para cache
+      const storageKey = `course_${course.uuid || course.id}_promocionable`
       try {
-        if (!course?.id) return
-        
-        // Si ya viene en el curso, usarlo directamente y guardar en localStorage
-        if (course.promocionable !== undefined) {
-          setPromocionable(course.promocionable)
-          setLoadingPromocionable(false)
-          try {
-            localStorage.setItem(`course_${course.id}_promocionable`, String(course.promocionable))
-          } catch (e) {
-            // Ignorar errores de localStorage
-          }
-          return
-        }
-
-        // Verificar si ya está en localStorage
-        try {
-          const stored = localStorage.getItem(`course_${course.id}_promocionable`)
-          if (stored !== null) {
-            setPromocionable(stored === 'true')
-            setLoadingPromocionable(false)
-            return
-          }
-        } catch (e) {
-          // Continuar si hay error con localStorage
-        }
-
-        // Si no está en localStorage, obtener del endpoint de detalle
-        setLoadingPromocionable(true)
-        const resp = await CoursesService.getCourseById(Number(course.id))
-        if (!mounted) return
-        if (resp && resp.success && resp.data) {
-          const courseDetail = resp.data as any
-          const promocionableValue = courseDetail.promocionable ?? null
-          setPromocionable(promocionableValue)
-          // Guardar en localStorage
-          try {
-            if (promocionableValue !== null) {
-              localStorage.setItem(`course_${course.id}_promocionable`, String(promocionableValue))
-            }
-          } catch (e) {
-            // Ignorar errores de localStorage
-          }
-        }
-      } catch (err) {
-        // ignore errors - don't block UI
-      } finally {
-        if (mounted) {
-          setLoadingPromocionable(false)
-        }
+        localStorage.setItem(storageKey, String(course.promocionable))
+      } catch (e) {
+        // Ignorar errores de localStorage
       }
+    } else {
+      // Si no viene, marcar como no cargando para no bloquear UI
+      setLoadingPromocionable(false)
     }
-
-    fetchCourseDetail()
-    return () => { mounted = false }
-  }, [course?.id, course?.promocionable])
+  }, [course?.uuid, course?.id, course?.promocionable])
 
   return (
     <div
@@ -319,10 +295,6 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         {/* Course Details */}
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4 text-xs lg:text-sm text-gray-600">
           <div className="flex items-center space-x-1">
-            <BookOpen className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
-            <span className="truncate">{course.code}</span>
-          </div>
-          <div className="flex items-center space-x-1">
             <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
             <span className="whitespace-nowrap">{course.students} alumnos</span>
           </div>
@@ -339,10 +311,10 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
           )}
           <div className="flex items-center space-x-1">
             <div className="flex -space-x-1">
-              {course.teachers.map((teacher) => (
+              {course.teachers.map((teacher, index) => (
                 <div
-                  key={teacher.id}
-                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
+                  key={teacher.uuid || teacher.id || index}
+                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.uuid || teacher.id || index)}`}
                   title={teacher.name}
                 >
                   <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>

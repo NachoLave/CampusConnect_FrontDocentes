@@ -1,5 +1,6 @@
 import { API_CONFIG, DEFAULT_HEADERS } from '@/lib/config/api'
 import { ApiResponse } from '@/lib/types'
+import { APP_CONFIG } from '@/lib/config/app'
 
 // Simulación de delay para hacer más realista la experiencia mock
 const mockDelay = (ms: number = 500) => new Promise(resolve => setTimeout(resolve, ms))
@@ -8,24 +9,55 @@ const mockDelay = (ms: number = 500) => new Promise(resolve => setTimeout(resolv
 class ApiClient {
   private baseURL: string
   private headers: Record<string, string>
+  private authToken: string | null = null
+  private teacherUUID: string | null = null
 
   constructor() {
     this.baseURL = API_CONFIG.BASE_URL
     this.headers = { ...DEFAULT_HEADERS }
   }
 
-  // Método para establecer el token de autenticación
+  // Método para establecer el token de autenticación JWT
   setAuthToken(token: string) {
+    this.authToken = token
     this.headers['Authorization'] = `Bearer ${token}`
+    // Limpiar headers mock cuando se usa JWT real
+    delete this.headers['X-Teacher-Id']
+    delete this.headers['X-Teacher-Roles']
+    delete this.headers['X-Teacher-Email']
+  }
+
+  // Método para establecer el UUID del docente (desde JWT)
+  setTeacherUUID(uuid: string) {
+    this.teacherUUID = uuid
+  }
+
+  // Obtener el UUID del docente actual
+  getTeacherUUID(): string | null {
+    return this.teacherUUID
   }
 
   // Método para limpiar el token de autenticación
   clearAuthToken() {
+    this.authToken = null
+    this.teacherUUID = null
     delete this.headers['Authorization']
   }
 
+  // Verificar si estamos autenticados con JWT real
+  hasAuthToken(): boolean {
+    return !!this.authToken
+  }
+
   // Método para establecer headers de desarrollo (mock mode)
+  // DEPRECATED: Solo usar cuando USE_MOCK_AUTH es true
   setMockHeaders(teacherId: string, roles: string, teacherEmail?: string) {
+    // Si ya tenemos un token JWT real, no sobrescribir con mock
+    if (this.authToken && !APP_CONFIG.USE_MOCK_AUTH) {
+      console.warn('⚠️ setMockHeaders llamado pero hay JWT real activo, ignorando...')
+      return
+    }
+
     this.headers['X-Teacher-Id'] = teacherId
     // Solo establecer X-Teacher-Roles si se proporciona un valor no vacío
     if (roles && roles.trim() !== '') {
@@ -41,7 +73,19 @@ class ApiClient {
     }
   }
 
-  // Obtener los headers de mock actualmente configurados (helper para UI/tests)
+  // Obtener los headers actualmente configurados
+  getCurrentHeaders() {
+    return {
+      hasJWT: !!this.authToken,
+      teacherUUID: this.teacherUUID,
+      authorization: this.headers['Authorization'],
+      // Legacy mock headers (solo si no hay JWT)
+      mockTeacherId: this.headers['X-Teacher-Id'],
+      mockRoles: this.headers['X-Teacher-Roles'],
+    }
+  }
+
+  // DEPRECATED: Mantener por compatibilidad, usar getCurrentHeaders
   getMockHeaders() {
     return {
       teacherId: this.headers['X-Teacher-Id'],

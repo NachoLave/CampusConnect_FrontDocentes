@@ -148,8 +148,8 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
     return colorMap[color] || 'bg-gray-100 text-gray-700'
   }
 
-  // Filtrar sedes para no mostrar Virtual en modalidad Presencial
-  const filteredCampuses = campuses.filter(campus => campus.code !== 'VIR')
+  // Filtrar sedes que tengan UUID (las reales de la API externa)
+  const filteredCampuses = campuses.filter(campus => campus.uuid)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -286,17 +286,24 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg">
                   {filteredCampuses.map((campus) => (
                     <label
-                      key={campus.code}
+                      key={campus.uuid}
                       className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white transition-colors"
                     >
                       <Checkbox
-                        id={campus.code}
-                        checked={locations.includes(campus.code)}
-                        onCheckedChange={(checked) => handleLocationChange(campus.code, checked as boolean)}
+                        id={campus.uuid}
+                        checked={locations.includes(campus.uuid!)}
+                        onCheckedChange={(checked) => handleLocationChange(campus.uuid!, checked as boolean)}
                       />
-                      <span className="text-sm font-medium text-gray-900 flex-1">
-                        {campus.name}
-                      </span>
+                      <div className="flex flex-col flex-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          {campus.name}
+                        </span>
+                        {campus.ubicacion && (
+                          <span className="text-xs text-gray-500">
+                            {campus.ubicacion}
+                          </span>
+                        )}
+                      </div>
                     </label>
                   ))}
                 </div>

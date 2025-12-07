@@ -4,10 +4,9 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
-import { MainLayout } from "@/components/layout/main-layout"
 import { Suspense } from "react"
 import { ScrollToTop } from "@/components/scroll-to-top"
-import { MockAuthProvider } from "@/components/auth/MockAuthProvider"
+import { AuthWrapper } from "@/components/auth/AuthWrapper"
 
 export const metadata: Metadata = {
   title: "CampusConnect | Portal del Docente",
@@ -28,12 +27,16 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}>
       <body className="font-sans">
-        <MockAuthProvider>
-          <ScrollToTop />
-          <Suspense fallback={<div>Loading...</div>}>
-            <MainLayout>{children}</MainLayout>
-          </Suspense>
-        </MockAuthProvider>
+        <Suspense fallback={
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        }>
+          <AuthWrapper>
+            <ScrollToTop />
+            {children}
+          </AuthWrapper>
+        </Suspense>
         <Analytics />
       </body>
     </html>

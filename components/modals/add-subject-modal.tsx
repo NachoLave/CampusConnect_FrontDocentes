@@ -11,7 +11,7 @@ import { Subject } from "@/lib/types"
 interface AddSubjectModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAddSubject: (subjectId: number) => void
+  onAddSubject: (subjectId: number | string) => void  // Puede ser UUID (string) o número
 }
 
 export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubjectModalProps) {
@@ -20,7 +20,7 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [existingProposal, setExistingProposal] = useState<{ status: string; subjectName: string } | null>(null)
   
-  // Obtener materias del backend
+  // Obtener materias del backend (ahora usa API externa)
   const { subjects, isLoading, error } = useSubjects()
   
   // Obtener propuestas existentes
@@ -36,10 +36,22 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
     )
   }, [subjects, searchTerm])
 
+  // Obtener el ID/UUID de la materia seleccionada (priorizar uuid sobre subjectId)
+  const getSubjectIdentifier = (subject: Subject): string | number => {
+    return subject.uuid || subject.subjectId
+  }
+
   const handleAddSubject = () => {
     if (selectedSubject) {
+      const subjectIdentifier = getSubjectIdentifier(selectedSubject)
+      
       // Verificar si ya existe una propuesta para esta materia
-      const existing = proposals.find(p => p.subjectId === selectedSubject.subjectId)
+      // Comparar tanto por uuid como por subjectId (para compatibilidad)
+      const existing = proposals.find(p => {
+        const proposalSubjectId = String(p.subjectId)
+        const selectedId = String(subjectIdentifier)
+        return proposalSubjectId === selectedId
+      })
       
       if (existing) {
         setExistingProposal({
@@ -54,7 +66,8 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
 
   const handleConfirmSubmit = () => {
     if (selectedSubject) {
-      onAddSubject(selectedSubject.subjectId)
+      const subjectIdentifier = getSubjectIdentifier(selectedSubject)
+      onAddSubject(subjectIdentifier)
       setShowConfirmation(false)
       onOpenChange(false)
       setSelectedSubject(null)
@@ -157,7 +170,7 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
               <div>
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Carrera</span>
                 <p className="text-sm text-gray-700 mt-1">
-                  {selectedSubject.careerName} ({selectedSubject.careerCode})
+                  {selectedSubject.careerName} {selectedSubject.careerCode && `(${selectedSubject.careerCode})`}
                 </p>
               </div>
             </div>
@@ -230,39 +243,44 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
               </div>
             ) : (
               <div>
-                {filteredSubjects.map((subject) => (
-                  <div
-                    key={subject.subjectId}
-                    className={`p-4 cursor-pointer transition-colors border-b last:border-b-0 ${
-                      selectedSubject?.subjectId === subject.subjectId 
-                        ? 'bg-slate-50 hover:bg-slate-50' 
-                        : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => handleSelectSubject(subject)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="mb-2">
-                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Materia</span>
-                          <h4 className="font-semibold text-gray-900 text-base mt-0.5">{subject.subjectName}</h4>
-                        </div>
-                        <div>
-                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Carrera</span>
-                          <p className="text-sm text-gray-700 mt-0.5">
-                            {subject.careerName} <span className="text-gray-500">({subject.careerCode})</span>
-                          </p>
-                        </div>
-                      </div>
-                      {selectedSubject?.subjectId === subject.subjectId && (
-                        <div className="ml-4 shrink-0">
-                          <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center">
-                            <Check className="w-4 h-4 text-white" />
+                {filteredSubjects.map((subject) => {
+                  const subjectKey = subject.uuid || subject.subjectId
+                  const isSelected = selectedSubject && getSubjectIdentifier(selectedSubject) === subjectKey
+                  
+                  return (
+                    <div
+                      key={subjectKey}
+                      className={`p-4 cursor-pointer transition-colors border-b last:border-b-0 ${
+                        isSelected
+                          ? 'bg-slate-50 hover:bg-slate-50' 
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
+                      onClick={() => handleSelectSubject(subject)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="mb-2">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Materia</span>
+                            <h4 className="font-semibold text-gray-900 text-base mt-0.5">{subject.subjectName}</h4>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Carrera</span>
+                            <p className="text-sm text-gray-700 mt-0.5">
+                              {subject.careerName} {subject.careerCode && <span className="text-gray-500">({subject.careerCode})</span>}
+                            </p>
                           </div>
                         </div>
-                      )}
+                        {isSelected && (
+                          <div className="ml-4 shrink-0">
+                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center">
+                              <Check className="w-4 h-4 text-white" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

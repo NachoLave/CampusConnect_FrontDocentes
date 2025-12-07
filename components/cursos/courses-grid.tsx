@@ -3,10 +3,9 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Filter, Building, Calendar, X, ChevronDown, RotateCcw } from "lucide-react"
 import { CourseCard } from "./course-card"
-import { useCoursesByPeriod } from "@/lib/hooks/useCourses"
+import { useCourses } from "@/lib/hooks/useCourses"
 import { useCourseFilters } from "@/lib/hooks/useCourseFilters"
 import { CoursesGridSkeleton } from "@/components/ui/loaders/course-card-skeleton"
-import coursesData from "@/lib/data/courses.json"
 
 const dayOrder = {
   Lunes: 1,
@@ -45,46 +44,22 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   const selectedSedes = externalSelectedSedes ?? []
   const selectedDays = externalSelectedDays ?? []
 
-  // Obtener filtros dinámicos del backend basados en el período seleccionado
+  // Obtener todos los cursos del docente desde la API externa
+  const { courses: allCourses, isLoading, error, refetch } = useCourses()
+  
+  // Obtener filtros dinámicos basados en los cursos del docente
   const { sedes: availableSedes, days: availableDays } = useCourseFilters(selectedPeriod)
   
-  // Convertir período seleccionado a formato del backend
-  const getBackendTerm = (period: string): string => {
-    if (period === "Todos") return "2025Q2" // Por defecto
-    if (period.includes("1er")) {
-      const year = period.match(/\d{4}/)?.[0] || "2025"
-      return `${year}Q1`
-    }
-    if (period.includes("2do")) {
-      const year = period.match(/\d{4}/)?.[0] || "2025"
-      return `${year}Q2`
-    }
-    return "2025Q2" // Por defecto
-  }
-
-  // Determinar si incluir períodos anteriores (solo en "Todos")
-  const includePrevious = selectedPeriod === "Todos"
-  
-  // Usar el hook para obtener cursos del backend
-  const { courses: backendCourses, isLoading, error } = useCoursesByPeriod(
-    getBackendTerm(selectedPeriod), 
-    includePrevious
-  )
-
-  // Usar cursos del backend o fallback a datos mock
-  // Si hay error pero tenemos datos mock, usar los mock sin mostrar error
-  const allCourses = backendCourses.length > 0 ? backendCourses : coursesData
-  const shouldShowError = error && backendCourses.length === 0
+  // Mostrar error solo si hay error y no hay cursos
+  const shouldShowError = error && allCourses.length === 0
   
   // Debug logs
   console.log('CoursesGrid Debug:', {
     selectedPeriod,
-    backendCourses: backendCourses.length,
     allCourses: allCourses.length,
     isLoading,
     error,
-    shouldShowError,
-    includePrevious
+    shouldShowError
   })
   
   // Usar sedes y días dinámicos del backend
@@ -312,7 +287,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       {!isLoading && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           {filteredAndSortedCourses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseCard key={course.uuid || course.id} course={course} />
           ))}
         </div>
       )}

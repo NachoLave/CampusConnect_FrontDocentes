@@ -98,7 +98,7 @@ export function useCoursesFiltered(filters: CourseFilters) {
   }
 }
 
-export function useCourse(id: number) {
+export function useCourse(idOrUuid: number | string) {
   const [course, setCourse] = useState<Course | null>(null)
   const [loadingState, setLoadingState] = useState<LoadingState>({
     isLoading: true,
@@ -106,12 +106,12 @@ export function useCourse(id: number) {
   })
 
   const fetchCourse = useCallback(async () => {
-    if (!id) return
+    if (!idOrUuid) return
 
     setLoadingState({ isLoading: true, error: null })
     
     try {
-      const response = await CoursesService.getCourseById(id)
+      const response = await CoursesService.getCourseById(idOrUuid)
       
       if (response.success) {
         setCourse(response.data)
@@ -131,7 +131,7 @@ export function useCourse(id: number) {
     }
 
     setLoadingState({ isLoading: false, error: null })
-  }, [id])
+  }, [idOrUuid])
 
   useEffect(() => {
     fetchCourse()

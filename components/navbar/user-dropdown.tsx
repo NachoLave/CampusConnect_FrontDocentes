@@ -1,5 +1,5 @@
 "use client"
-import { ChevronDown, User, LogOut } from "lucide-react"
+import { ChevronDown, User, LogOut, Clock } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,19 +8,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
+import { useAuthContext } from "@/components/auth/AuthProvider"
+import { APP_CONFIG } from "@/lib/config/app"
 
 interface UserDropdownProps {
   user: {
     name: string
-    id: string
+    id: string           // Puede ser legajo o UUID
     email: string
-    teacherId?: number
+    teacherId?: number   // Legacy: ID numérico del backend
+    uuid?: string        // Nuevo: UUID del docente desde JWT
   }
 }
 
 /**
  * Extrae las iniciales del nombre completo del docente.
- * NO está hardcodeado - el nombre viene dinámicamente desde el endpoint GET /teachers/me
+ * NO está hardcodeado - el nombre viene dinámicamente desde el JWT o endpoint
  * 
  * Ejemplos:
  * - "Ada Lovelace" → "AL"
@@ -37,21 +40,26 @@ function getInitials(name: string): string {
 }
 
 /**
- * Asigna un color consistente basado en el teacherId.
- * El color se determina usando módulo (%) para que siempre sea el mismo para cada docente.
- * 
- * Fórmula: teacherId % 10 = índice en el array de colores
- * 
- * Ejemplo:
- * - teacherId 1010 → 1010 % 10 = 0 → bg-rose-500 (Rosa)
- * - teacherId 1015 → 1015 % 10 = 5 → bg-pink-500 (Rosa fucsia)
- * - teacherId 1023 → 1023 % 10 = 3 → bg-violet-500 (Violeta)
- * 
- * Esto garantiza que el mismo docente siempre tenga el mismo color en toda la aplicación.
+ * Genera un hash numérico simple a partir de un string (para UUIDs)
  */
-function getUserColor(teacherId?: number): string {
-  if (!teacherId) return 'bg-gray-500'
-  
+function hashString(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return Math.abs(hash)
+}
+
+/**
+ * Asigna un color consistente basado en el UUID o teacherId.
+ * - Si hay UUID, usa un hash del string
+ * - Si hay teacherId numérico, usa módulo
+ * 
+ * Esto garantiza que el mismo docente siempre tenga el mismo color.
+ */
+function getUserColor(uuid?: string, teacherId?: number): string {
   const colors = [
     'bg-rose-500',      // 0: Rosa
     'bg-blue-500',      // 1: Azul
@@ -64,12 +72,48 @@ function getUserColor(teacherId?: number): string {
     'bg-orange-500',    // 8: Naranja
     'bg-purple-500',    // 9: Púrpura
   ]
-  return colors[teacherId % colors.length]
+
+  // Priorizar UUID si está disponible
+  if (uuid) {
+    const hash = hashString(uuid)
+    return colors[hash % colors.length]
+  }
+  
+  // Fallback a teacherId numérico
+  if (teacherId) {
+    return colors[teacherId % colors.length]
+  }
+  
+  return 'bg-gray-500'
+}
+
+
+/**
+ * Formatea el tiempo restante en formato legible
+ */
+function formatTimeRemaining(seconds: number): string {
+  if (seconds <= 0) return 'Expirado'
+  
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  return `${minutes}m`
 }
 
 export function UserDropdown({ user }: UserDropdownProps) {
+  const { logout, tokenTimeRemaining } = useAuthContext()
   const initials = getInitials(user.name)
-  const colorClass = getUserColor(user.teacherId)
+  const colorClass = getUserColor(user.uuid, user.teacherId)
+
+  const handleLogout = () => {
+    logout()
+  }
+
+  // Determinar si el token está por expirar (menos de 10 minutos)
+  const isTokenExpiringSoon = tokenTimeRemaining > 0 && tokenTimeRemaining < 600
 
   return (
     <DropdownMenu modal={false}>
@@ -90,12 +134,22 @@ export function UserDropdown({ user }: UserDropdownProps) {
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 text-sm lg:text-lg truncate">{user.name}</h3>
-            <div className="bg-slate-700 text-white px-2 py-0.5 lg:py-1 rounded text-xs lg:text-sm font-medium inline-block mb-1">
-              {user.id}
-            </div>
             <p className="text-gray-600 text-xs lg:text-sm truncate">{user.email}</p>
           </div>
         </div>
+
+        {/* Token Time Remaining (solo si no es mock) */}
+        {!APP_CONFIG.USE_MOCK_AUTH && tokenTimeRemaining > 0 && (
+          <>
+            <div className={`flex items-center gap-2 px-2 py-2 rounded-lg text-xs ${isTokenExpiringSoon ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-600'}`}>
+              <Clock className="w-3.5 h-3.5" />
+              <span>
+                Sesión expira en: <strong>{formatTimeRemaining(tokenTimeRemaining)}</strong>
+              </span>
+            </div>
+            <DropdownMenuSeparator className="my-2" />
+          </>
+        )}
 
         <DropdownMenuSeparator />
 
@@ -109,9 +163,12 @@ export function UserDropdown({ user }: UserDropdownProps) {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem className="flex items-center space-x-2 lg:space-x-3 py-2 lg:py-3 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50">
+        <DropdownMenuItem 
+          className="flex items-center space-x-2 lg:space-x-3 py-2 lg:py-3 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50"
+          onClick={handleLogout}
+        >
           <LogOut className="h-4 w-4 lg:h-5 lg:w-5 flex-shrink-0" />
-          <span className="font-medium text-sm lg:text-base">Cerrar Sesion</span>
+          <span className="font-medium text-sm lg:text-base">Cerrar Sesión</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

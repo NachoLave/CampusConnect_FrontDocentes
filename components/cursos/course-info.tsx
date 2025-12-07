@@ -410,7 +410,7 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
-function getTeacherColor(teacherId: number): string {
+function getTeacherColor(teacherId: number | string): string {
   const colors = [
     "bg-red-500",
     "bg-blue-500",
@@ -421,10 +421,14 @@ function getTeacherColor(teacherId: number): string {
     "bg-indigo-500",
     "bg-teal-500",
   ]
-  return colors[teacherId % colors.length]
+  // Si es string (UUID), convertir a numero usando hash
+  const numericId = typeof teacherId === 'string' 
+    ? teacherId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    : teacherId
+  return colors[numericId % colors.length]
 }
 
-function getStudentColor(studentId: number): string {
+function getStudentColor(studentId: number | string): string {
   const colors = [
     "bg-blue-500",
     "bg-green-500",
@@ -435,7 +439,11 @@ function getStudentColor(studentId: number): string {
     "bg-teal-500",
     "bg-red-500",
   ]
-  return colors[studentId % colors.length]
+  // Si es string (UUID), convertir a numero usando hash
+  const numericId = typeof studentId === 'string' 
+    ? studentId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    : studentId
+  return colors[numericId % colors.length]
 }
 
 function getDayShiftColors(day: string, shift: string) {
@@ -451,6 +459,11 @@ function getDayShiftColors(day: string, shift: string) {
 export default function CourseInfo({ courseId }: { courseId: string }) {
   const router = useRouter()
   const searchParams = useSearchParams() // Added to read URL parameters
+  
+  // Detectar si courseId es un UUID (contiene guiones)
+  const isUUIDCourse = courseId.includes('-')
+  // Obtener courseId en formato correcto para llamadas API
+  const getCourseIdForApi = () => isUUIDCourse ? courseId : Number(courseId)
 
   const getInitialTab = () => {
     const tabParam = searchParams.get("tab")
@@ -571,7 +584,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     let mounted = true
     const loadActs = async () => {
       try {
-        const resp = await CoursesService.getActs(Number(courseId))
+        const resp = await CoursesService.getActs(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success) {
           const acts = Array.isArray(resp.data) ? resp.data : []
@@ -643,7 +656,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       setLoadingGrades(true)
       try {
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-        const resp = await CoursesService.getCourseGrades(Number(courseId))
+        const resp = await CoursesService.getCourseGrades(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success && Array.isArray(resp.data)) {
           const assessments: any[] = resp.data
@@ -728,7 +741,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   // Start with a minimal placeholder (do NOT show full mock data)
   const placeholderCourse = {
-    id: Number(courseId),
+    id: isUUIDCourse ? 0 : Number(courseId),
+    uuid: isUUIDCourse ? courseId : undefined,
     title: 'MISSING',
     code: '',
     students: 0,
@@ -827,98 +841,135 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const load = async () => {
         setLoadingCourse(true)
         try {
-          // Ensure apiClient includes mock headers when running without auth
-          apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-
-          // Get course + participants (teachers + students) using the service helper
-          const partsResp = await CoursesService.getCourseParticipants(Number(courseId))
+          // Detectar si courseId es un UUID (contiene guiones)
+          const isUUID = courseId.includes('-')
+          
+          let partsResp: any
+          
+          if (isUUID) {
+            // Usar API externa para cursos con UUID
+            console.log(`[CourseInfo] Cargando curso por UUID: ${courseId}`)
+            partsResp = await CoursesService.getCourseParticipantsByUUID(courseId)
+          } else {
+            // Usar API interna para cursos con ID numérico (legacy)
+            apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+            partsResp = await CoursesService.getCourseParticipants(Number(courseId))
+          }
+          
           if (!mounted) return
 
           if (partsResp && partsResp.success && partsResp.data) {
             const backendCourse: any = partsResp.data.course || {}
-              // Debug: log raw backend response to help diagnose missing fields (remove in production)
-              try {
-                // eslint-disable-next-line no-console
-                console.debug('[CourseInfo] getCourseParticipants response', partsResp)
-                // eslint-disable-next-line no-console
-                console.debug('[CourseInfo] backendCourse raw', backendCourse)
-              } catch {}
-            // Mapear estudiantes - Backend devuelve studentId como UUID string
+            
+            // Debug: log raw backend response
+            console.debug('[CourseInfo] getCourseParticipants response', partsResp)
+            console.debug('[CourseInfo] backendCourse raw', backendCourse)
+            
+            // Mapear estudiantes - Ahora viene uuid/studentId
             const rawStudents: any[] = Array.isArray(partsResp.data.students) ? partsResp.data.students : []
             const studentsData: any[] = rawStudents.map((s: any) => ({
-              id: s.studentId || s.id,  // Backend devuelve studentId como UUID string
-              name: s.studentName || s.name || 'Alumno',
+              id: s.uuid || s.studentId || s.id,
+              uuid: s.uuid || s.studentId || s.id,
+              name: s.name || s.studentName || 'Alumno',
               legajo: s.legajo?.toString?.() || '',
               email: s.email || '',
               condition: formatConditionKey(s.condition || s.status || ''),
-              attendance: s.attendance || ''
+              attendance: s.attendance || '',
+              dni: s.dni,
+              telefono: s.telefono,
+              carreraUuid: s.carreraUuid,
+              activo: s.activo
             }))
+            
             const teachersFromBackend: any[] = Array.isArray(partsResp.data.teachers) ? partsResp.data.teachers : []
+            
+            // Normalizar docentes
+            const normalizedTeachers = teachersFromBackend.map((t: any) => ({
+              id: t.uuid || t.teacherId || t.id,
+              uuid: t.uuid || t.teacherId || t.id,
+              name: t.name || t.fullName || '',
+              legajo: t.legajo?.toString?.() || '',
+              email: t.email || '',
+              role: t.role || 'Docente',
+              dni: t.dni
+            }))
 
-            // Normalize backend course fields to the shape used by the header and cards
-            const rawDay = String(backendCourse.diaSemana || backendCourse.day || '').toUpperCase()
-            const dayLabel = rawDay ? (rawDay[0] + rawDay.slice(1).toLowerCase()) : placeholderCourse.day
-
-            const turno = String(backendCourse.turno || backendCourse.shift || '').toUpperCase()
-            const shiftMap: Record<string, string> = { 'MANIANA': 'TM', 'MAÑANA': 'TM', 'TARDE': 'TT', 'NOCHE': 'TN', 'TN': 'TN', 'TT': 'TT', 'TM': 'TM' }
-            const shiftAbbr = shiftMap[turno] || (turno || placeholderCourse.shift)
-
-            const schedule = backendCourse.horario || backendCourse.schedule || backendCourse.horarioAgenda || backendCourse.scheduleRange || placeholderCourse.schedule
-
-            const datesStr = backendCourse.dates || (backendCourse.fechaInicio && backendCourse.fechaFin ? `${backendCourse.fechaInicio} - ${backendCourse.fechaFin}` : placeholderCourse.dates)
-
-            const location = backendCourse.aula || backendCourse.location || backendCourse.sede || backendCourse.campus || placeholderCourse.location
-            const isVirtual = (String(backendCourse.modalidad || backendCourse.isVirtual || '') || '').toUpperCase().includes('VIRTUAL') || Boolean(backendCourse.isVirtual)
-
-            // Prefer using the shared mapping used by course cards when possible
-            const mapped = mapBackendCourseToFrontend(backendCourse)
-            try {
-              // eslint-disable-next-line no-console
-              console.debug('[CourseInfo] mapped course (from mapBackendCourseToFrontend)', mapped)
-            } catch {}
-            // Determine final dates and horario using the mapped result first, then fallback to backend raw values
-            const finalDates = (mapped as any).dates || datesStr || placeholderCourse.dates
-            let fechaInicio: string | undefined = undefined
-            let fechaFin: string | undefined = undefined
-            if (finalDates && typeof finalDates === 'string' && finalDates.includes('-')) {
-              const parts = finalDates.split('-').map((p: string) => p.trim())
-              if (parts.length >= 2) {
-                fechaInicio = parts[0]
-                fechaFin = parts[1]
+            // Para cursos con UUID, los datos ya vienen normalizados
+            if (isUUID) {
+              const merged = {
+                ...placeholderCourse,
+                ...backendCourse,
+                uuid: courseId,
+                title: backendCourse.title || backendCourse.materia || placeholderCourse.title,
+                teachers: normalizedTeachers,
+                studentsData,
+                students: studentsData.length,
+                stats: placeholderCourse.stats,
               }
-            }
+              
+              setCourse(merged)
+              setCourseLoadError(null)
+              setCourseNotFound(false)
+            } else {
+              // Flujo legacy para IDs numericos
+              const rawDay = String(backendCourse.diaSemana || backendCourse.day || '').toUpperCase()
+              const dayLabel = rawDay ? (rawDay[0] + rawDay.slice(1).toLowerCase()) : placeholderCourse.day
 
-            const finalSchedule = (mapped as any).schedule || schedule || placeholderCourse.schedule
-            let horarioInicio: string | undefined = undefined
-            let horarioFin: string | undefined = undefined
-            if (finalSchedule && typeof finalSchedule === 'string' && finalSchedule.includes('-')) {
-              const hp = finalSchedule.split('-').map((h: string) => h.trim())
-              if (hp.length >= 2) {
-                horarioInicio = hp[0]
-                horarioFin = hp[1]
+              const turno = String(backendCourse.turno || backendCourse.shift || '').toUpperCase()
+              const shiftMap: Record<string, string> = { 'MANIANA': 'TM', 'MAÑANA': 'TM', 'TARDE': 'TT', 'NOCHE': 'TN', 'TN': 'TN', 'TT': 'TT', 'TM': 'TM' }
+              const shiftAbbr = shiftMap[turno] || (turno || placeholderCourse.shift)
+
+              const schedule = backendCourse.horario || backendCourse.schedule || backendCourse.horarioAgenda || backendCourse.scheduleRange || placeholderCourse.schedule
+
+              const datesStr = backendCourse.dates || (backendCourse.fechaInicio && backendCourse.fechaFin ? `${backendCourse.fechaInicio} - ${backendCourse.fechaFin}` : placeholderCourse.dates)
+
+              const location = backendCourse.aula || backendCourse.location || backendCourse.sede || backendCourse.campus || placeholderCourse.location
+              const isVirtual = (String(backendCourse.modalidad || backendCourse.isVirtual || '') || '').toUpperCase().includes('VIRTUAL') || Boolean(backendCourse.isVirtual)
+
+              const mapped = mapBackendCourseToFrontend(backendCourse)
+              
+              const finalDates = (mapped as any).dates || datesStr || placeholderCourse.dates
+              let fechaInicio: string | undefined = undefined
+              let fechaFin: string | undefined = undefined
+              if (finalDates && typeof finalDates === 'string' && finalDates.includes('-')) {
+                const parts = finalDates.split('-').map((p: string) => p.trim())
+                if (parts.length >= 2) {
+                  fechaInicio = parts[0]
+                  fechaFin = parts[1]
+                }
               }
-            }
 
-            // Ensure mapped course includes derived dates/horario fields and updated teachers/students
-            const merged = {
-              ...placeholderCourse,
-              ...mapped,
-              title: String(mapped.title || placeholderCourse.title),
-              teachers: teachersFromBackend.length > 0 ? teachersFromBackend : mapped.teachers || placeholderCourse.teachers,
-              studentsData,
-              students: studentsData.length || (mapped as any).students || 0,
-              dates: finalDates,
-              fechaInicio,
-              fechaFin,
-              horarioInicio,
-              horarioFin,
-              promocionable: Boolean(backendCourse.promocionable ?? true), // Por defecto true si no viene
-              stats: (mapped as any).stats || placeholderCourse.stats,
-            }
+              const finalSchedule = (mapped as any).schedule || schedule || placeholderCourse.schedule
+              let horarioInicio: string | undefined = undefined
+              let horarioFin: string | undefined = undefined
+              if (finalSchedule && typeof finalSchedule === 'string' && finalSchedule.includes('-')) {
+                const hp = finalSchedule.split('-').map((h: string) => h.trim())
+                if (hp.length >= 2) {
+                  horarioInicio = hp[0]
+                  horarioFin = hp[1]
+                }
+              }
 
-            setCourse(merged)
-            setCourseLoadError(null)
-            setCourseNotFound(false)
+              const merged = {
+                ...placeholderCourse,
+                ...mapped,
+                title: String(mapped.title || placeholderCourse.title),
+                teachers: normalizedTeachers.length > 0 ? normalizedTeachers : mapped.teachers || placeholderCourse.teachers,
+                studentsData,
+                students: studentsData.length || (mapped as any).students || 0,
+                dates: finalDates,
+                fechaInicio,
+                fechaFin,
+                horarioInicio,
+                horarioFin,
+                promocionable: Boolean(backendCourse.promocionable ?? true),
+                stats: (mapped as any).stats || placeholderCourse.stats,
+              }
+
+              setCourse(merged)
+              setCourseLoadError(null)
+              setCourseNotFound(false)
+            }
           } else {
             // Course not found - show 404
             setCourseNotFound(true)
@@ -955,7 +1006,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     let mounted = true
     const loadPreview = async () => {
       try {
-        const previewResp = await CoursesService.getCourseActsPreview(Number(courseId))
+        const previewResp = await CoursesService.getCourseActsPreview(getCourseIdForApi())
         
         if (mounted && previewResp && previewResp.success && previewResp.data) {
           setActsPreviewData(previewResp.data)
@@ -1204,7 +1255,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const attendancePercent = computeAttendancePercentByStudent()
     const headers = [
       "Nombre",
-      "Legajo",
       "Mail",
       "Nota 1",
       "Nota 2",
@@ -1220,7 +1270,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       const asistencia = attendancePercent[st.id] ?? 0
       return [
         st.name,
-        st.legajo,
         st.email,
         g["1P"] ?? "",
         g["2P"] ?? "",
@@ -1252,7 +1301,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `${course.title.replace(/\s+/g, "_")}_${course.code}.csv`
+    a.download = `${course.title.replace(/\s+/g, "_")}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -1282,7 +1331,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
       const headers = [
         "Nombre y Apellido",
-        "Legajo",
         "Mail",
         "Nota 1",
         "Nota 2",
@@ -1298,7 +1346,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         const asistencia = attendancePercent[st.id] ?? 0
         return [
           st.name,
-          st.legajo,
           st.email,
           g["1P"] ?? "",
           g["2P"] ?? "",
@@ -1338,7 +1385,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       })
       ws["!cols"] = [
         { wch: 28 }, // Nombre
-        { wch: 12 }, // Legajo
         { wch: 34 }, // Mail
         { wch: 8 },
         { wch: 8 },
@@ -1355,7 +1401,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `${course.title.replace(/\s+/g, "_")}_${course.code}.xlsx`
+      a.download = `${course.title.replace(/\s+/g, "_")}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -1434,7 +1480,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Asistencia'
       try {
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-        const resp = await CoursesService.getAttendanceRecords(Number(courseId))
+        const resp = await CoursesService.getAttendanceRecords(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success && Array.isArray(resp.data)) {
           const map: Record<number, Set<number>> = {}
@@ -1465,7 +1511,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           // Cargar asistencia para cada fecha
           const attendancePromises = sortedDates.map(async (dateStr) => {
             try {
-              const attendanceResp = await CoursesService.getAttendanceByDate(Number(courseId), dateStr)
+              const attendanceResp = await CoursesService.getAttendanceByDate(getCourseIdForApi(), dateStr)
               if (attendanceResp && attendanceResp.success && attendanceResp.data) {
                 const items = attendanceResp.data.items || []
                 const dateKey = dateStr
@@ -1569,7 +1615,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         const mm = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
         const dd = String(selectedDateObj.getDate()).padStart(2, '0')
         const iso = `${yyyy}-${mm}-${dd}`
-        const resp = await CoursesService.getAttendanceByDate(Number(courseId), iso)
+        const resp = await CoursesService.getAttendanceByDate(getCourseIdForApi(), iso)
         if (!mounted) return
 
         const key = `${monthNamesEs[selectedDateObj.getMonth()]}-${selectedDateObj.getDate()}`
@@ -1760,7 +1806,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     
     try {
       apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-      const resp = await CoursesService.saveAttendanceByDate(Number(courseId), dateIso, items)
+      const resp = await CoursesService.saveAttendanceByDate(getCourseIdForApi(), dateIso, items)
       
       // Desactivar loader
       setIsSavingAttendance(false)
@@ -2145,17 +2191,20 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             if (hasChanged) {
               hasChanges = true
               
+              // studentId es UUID string
+              const studentId = s.uuid || s.id
+              
               // Si está vacío o es null, enviar null
               if (currentVal === null || currentVal === "" || String(currentVal).trim() === "") {
-                gradesArr.push({ studentId: Number(s.id), grade: null })
+                gradesArr.push({ studentId, grade: null })
               } else {
                 // Si tiene valor, parsearlo y enviarlo
                 const parsed = Number.parseFloat(String(currentVal))
                 if (Number.isFinite(parsed)) {
-                  gradesArr.push({ studentId: Number(s.id), grade: String(parsed) })
+                  gradesArr.push({ studentId, grade: String(parsed) })
                 } else {
                   // Si no es un número válido, enviar null
-                  gradesArr.push({ studentId: Number(s.id), grade: null })
+                  gradesArr.push({ studentId, grade: null })
                 }
               }
             }
@@ -2178,7 +2227,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         // Ensure mock headers for dev env
         apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
-        const resp = await CoursesService.saveCourseGrades(Number(courseId), assessments)
+        const resp = await CoursesService.saveCourseGrades(getCourseIdForApi(), assessments)
         
         if (resp && resp.success) {
           // Después de guardar exitosamente, publicar las calificaciones de cada evaluación
@@ -2275,13 +2324,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const randomNumber = Math.floor(Math.random() * 9999)
       .toString()
       .padStart(4, "0")
-    return `ACTA${randomNumber} ${course.title} - ${course.code}.xlsx`
+    return `ACTA${randomNumber} ${course.title}.xlsx`
   }
 
   const filteredStudents = students.filter((student) => {
     const matchesSearch =
       student.name.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
-      student.legajo.toString().includes(studentSearchTerm)
+      student.email.toLowerCase().includes(studentSearchTerm.toLowerCase())
     const matchesCondition =
       studentsFilterConditions.length === 0 || studentsFilterConditions.includes(student.condition)
     return matchesSearch && matchesCondition
@@ -2290,7 +2339,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const filteredAttendanceStudents = students.filter((student) => {
     const matchesSearch =
       student.name.toLowerCase().includes(attendanceSearchTerm.toLowerCase()) ||
-      student.legajo.toString().includes(attendanceSearchTerm)
+      student.email.toLowerCase().includes(attendanceSearchTerm.toLowerCase())
     
     // Obtener el status de asistencia para el estudiante en la fecha seleccionada
     const attendanceStatus = getAttendance(student.id)
@@ -2306,7 +2355,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const filteredGradesStudents =
     course.studentsData?.filter((student) => {
       const matchesSearch =
-        student.name.toLowerCase().includes(gradesSearchTerm.toLowerCase()) || student.legajo.includes(gradesSearchTerm)
+        student.name.toLowerCase().includes(gradesSearchTerm.toLowerCase()) || student.email.toLowerCase().includes(gradesSearchTerm.toLowerCase())
       const finalCondition = calculateFinalCondition(gradesData[student.id] || {})
       const matchesFilter = gradesFilterConditions.length === 0 || gradesFilterConditions.includes(finalCondition)
       return matchesSearch && matchesFilter
@@ -2520,10 +2569,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         <div className="flex flex-wrap items-center gap-3 lg:gap-6 text-xs lg:text-sm mb-3">
           <div className="flex items-center space-x-1">
-            <FileText className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600 flex-shrink-0" />
-            <span className="text-gray-600">{course.code}</span>
-          </div>
-          <div className="flex items-center space-x-1">
             <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-600 flex-shrink-0" />
             <span className="text-gray-600 whitespace-nowrap">{course.students} alumnos</span>
           </div>
@@ -2531,8 +2576,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             <div className="flex -space-x-1">
               {course.teachers.map((teacher) => (
                 <div
-                  key={teacher.id}
-                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.id)}`}
+                  key={teacher.uuid || teacher.id}
+                  className={`w-5 h-5 lg:w-6 lg:h-6 rounded-full border-2 border-white flex items-center justify-center ${getTeacherColor(teacher.uuid || teacher.id)}`}
                   title={teacher.name}
                 >
                   <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>
@@ -2604,25 +2649,23 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Rol</th>
                     </tr>
                   </thead>
                   <tbody>
                     {course.teachers.map((teacher) => (
-                      <tr key={teacher.id} className="border-b hover:bg-gray-50">
+                      <tr key={teacher.uuid || teacher.id} className="border-b hover:bg-gray-50">
                         <td className="py-2 lg:py-3 px-3 lg:px-4">
                           <div className="flex items-center space-x-2 lg:space-x-3">
                             <div
-                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getTeacherColor(teacher.id)}`}
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getTeacherColor(teacher.uuid || teacher.id)}`}
                             >
                               <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(teacher.name)}</span>
                             </div>
                             <span className="font-medium text-xs lg:text-sm">{teacher.name}</span>
                           </div>
                         </td>
-                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{teacher.legajo}</td>
                         <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{teacher.email}</td>
                         <td className="py-2 lg:py-3 px-3 lg:px-4">
                           <span
@@ -2710,11 +2753,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   <Search className="h-3.5 w-3.5 lg:h-4 lg:w-4 absolute left-2 lg:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Buscar por nombre o legajo"
+                    placeholder="Buscar por nombre o email"
                     value={studentSearchTerm}
                     onChange={(e) => setStudentSearchTerm(e.target.value)}
                     className="w-full lg:w-64 pl-8 lg:pl-10 pr-3 lg:pr-4 py-1.5 lg:py-2 border border-gray-300 rounded-lg text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    aria-label="Buscar estudiantes por nombre o legajo"
+                    aria-label="Buscar estudiantes por nombre o email"
                   />
                 </div>
 
@@ -2805,11 +2848,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
             {/* Students Table */}
             <div className="overflow-x-auto -mx-4 lg:mx-0">
-              <table className="w-full min-w-[640px]">
+              <table className="w-full min-w-[500px]">
                 <thead>
                   <tr className="bg-gray-50 border-b">
                     <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
                     <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
                     <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Condición</th>
                   </tr>
@@ -2817,20 +2859,19 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 <tbody>
                   {filteredStudents.map((student, index) => (
                     <tr
-                      key={student.id}
+                      key={student.uuid || student.id}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                     >
                       <td className="py-2 lg:py-3 px-3 lg:px-4">
                         <div className="flex items-center space-x-2 lg:space-x-3">
                           <div
-                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
+                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
                           >
                             <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                           </div>
                           <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                         </div>
                       </td>
-                      <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
                       <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
                       <td className="py-2 lg:py-3 px-3 lg:px-4">
                           <span className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${getConditionBadgeClasses(student.condition)}`}>
@@ -2924,11 +2965,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     <Search className="h-3.5 w-3.5 lg:h-4 lg:w-4 absolute left-2 lg:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Buscar por nombre o legajo"
+                      placeholder="Buscar por nombre o email"
                       value={attendanceSearchTerm}
                       onChange={(e) => setAttendanceSearchTerm(e.target.value)}
                       className="w-full lg:w-64 pl-8 lg:pl-10 pr-3 lg:pr-4 py-1.5 lg:py-2 border border-gray-300 rounded-lg text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      aria-label="Buscar estudiantes por nombre o legajo"
+                      aria-label="Buscar estudiantes por nombre o email"
                     />
                   </div>
 
@@ -3044,11 +3085,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
               {/* Attendance Table */}
               <div className="overflow-x-auto -mx-4 lg:mx-0">
-                <table className="w-full min-w-[640px]">
+                <table className="w-full min-w-[500px]">
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
                       <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Asistencia</th>
                     </tr>
@@ -3068,9 +3108,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             </div>
                           </td>
                           <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <Skeleton className="h-4 w-20" />
-                          </td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
                             <Skeleton className="h-4 w-40" />
                           </td>
                           <td className="py-2 lg:py-3 px-3 lg:px-4">
@@ -3085,20 +3122,19 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     ) : (
                       filteredAttendanceStudents.map((student, index) => (
                         <tr
-                          key={student.id}
+                          key={student.uuid || student.id}
                           className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                         >
                           <td className="py-2 lg:py-3 px-3 lg:px-4">
                             <div className="flex items-center space-x-2 lg:space-x-3">
                               <div
-                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
+                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
                               >
                                 <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                               </div>
                               <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                             </div>
                           </td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
                           <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
                           <td className="py-2 lg:py-3 px-3 lg:px-4">
                             <div className="flex space-x-1.5 lg:space-x-2">
@@ -3159,11 +3195,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 <div className="relative flex-1 lg:max-w-xs">
                   <input
                     type="text"
-                    placeholder="Buscar por nombre o legajo"
+                    placeholder="Buscar por nombre o email"
                     value={gradesSearchTerm}
                     onChange={(e) => setGradesSearchTerm(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 lg:py-2 text-xs lg:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    aria-label="Buscar estudiantes por nombre o legajo"
+                    aria-label="Buscar estudiantes por nombre o email"
                   />
                   <Search className="absolute left-2.5 top-2 lg:top-2.5 h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-400" />
                 </div>
@@ -3288,20 +3324,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
             {/* Grades Table */}
             <div className="overflow-x-auto -mx-4 lg:mx-0">
-              <table className="w-full min-w-[800px] table-fixed">
+              <table className="w-full min-w-[700px] table-fixed">
                 <colgroup>
-                  <col className="w-[30%]" /> {/* Nombre */}
-                  <col className="w-[12%]" /> {/* Legajo */}
-                  <col className="w-[9%]" /> {/* Eval 1 */}
-                  <col className="w-[9%]" /> {/* Eval 2 */}
-                  <col className="w-[9%]" /> {/* REC */}
-                  <col className="w-[9%]" /> {/* FINAL */}
-                  <col className="w-[22%]" /> {/* CONDICIÓN */}
+                  <col className="w-[35%]" /> {/* Nombre */}
+                  <col className="w-[11%]" /> {/* Eval 1 */}
+                  <col className="w-[11%]" /> {/* Eval 2 */}
+                  <col className="w-[11%]" /> {/* REC */}
+                  <col className="w-[11%]" /> {/* FINAL */}
+                  <col className="w-[21%]" /> {/* CONDICIÓN */}
                 </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b">
                     <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Legajo</th>
                     <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 1</th>
                     <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 2</th>
                     <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">REC</th>
@@ -3324,9 +3358,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           </div>
                         </td>
                         <td className="py-2 lg:py-3 px-2 lg:px-4">
-                          <Skeleton className="h-4 w-20 mx-auto" />
-                        </td>
-                        <td className="py-2 lg:py-3 px-2 lg:px-4">
                           <Skeleton className="h-6 w-12 mx-auto" />
                         </td>
                         <td className="py-2 lg:py-3 px-2 lg:px-4">
@@ -3346,20 +3377,19 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   ) : (
                     filteredGradesStudents.map((student, index) => (
                     <tr
-                      key={student.id}
+                      key={student.uuid || student.id}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                     >
                       <td className="py-2 lg:py-3 px-3 lg:px-4">
                         <div className="flex items-center space-x-2 lg:space-x-3">
                           <div
-                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.id)}`}
+                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
                           >
                             <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
                           </div>
                           <span className="font-medium text-xs lg:text-sm">{student.name}</span>
                         </div>
                       </td>
-                      <td className="py-2 lg:py-3 px-2 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.legajo}</td>
                       <td className="py-2 lg:py-3 px-2 lg:px-4 text-center">
                         {isEditingGrades ? (
                           <input
@@ -3538,7 +3568,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg lg:text-xl font-bold text-gray-900">
-                {course.title} - {course.code}
+                {course.title}
               </h3>
               <button 
                 onClick={() => setShowActaModal(false)} 
@@ -3725,22 +3755,20 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
               {/* Tabla de Datos con scroll */}
               <div className="flex-1 overflow-auto border border-t-0 rounded-b-lg">
-                <table className="w-full min-w-[900px] table-fixed">
+                <table className="w-full min-w-[800px] table-fixed">
                   <colgroup>
-                    <col className="w-[22%]" /> {/* Nombre */}
-                    <col className="w-[10%]" /> {/* Legajo */}
-                    <col className="w-[20%]" /> {/* Mail */}
-                    <col className="w-[7%]" /> {/* Nota 1 */}
-                    <col className="w-[7%]" /> {/* Nota 2 */}
-                    <col className="w-[7%]" /> {/* REC */}
-                    <col className="w-[7%]" /> {/* Final */}
-                    <col className="w-[12%]" /> {/* Condición */}
+                    <col className="w-[25%]" /> {/* Nombre */}
+                    <col className="w-[22%]" /> {/* Mail */}
+                    <col className="w-[8%]" /> {/* Nota 1 */}
+                    <col className="w-[8%]" /> {/* Nota 2 */}
+                    <col className="w-[8%]" /> {/* REC */}
+                    <col className="w-[8%]" /> {/* Final */}
+                    <col className="w-[13%]" /> {/* Condición */}
                     <col className="w-[8%]" /> {/* Asistencia */}
                   </colgroup>
                   <thead className="bg-slate-100 sticky top-0">
                     <tr>
                       <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Nombre y Apellido</th>
-                      <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Legajo</th>
                       <th className="text-left py-3 px-3 font-bold text-gray-700 text-xs border-b border-r">Mail</th>
                       <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Nota 1</th>
                       <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs border-b border-r">Nota 2</th>
@@ -3758,9 +3786,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       const asistencia = attendancePercent[student.id] ?? 0
                       
                       return (
-                        <tr key={student.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <tr key={student.uuid || student.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                           <td className="py-2.5 px-3 text-xs border-b border-r truncate">{student.name}</td>
-                          <td className="py-2.5 px-3 text-xs border-b border-r">{student.legajo}</td>
                           <td className="py-2.5 px-3 text-xs border-b border-r truncate">{student.email}</td>
                           <td className="py-2.5 px-2 text-xs text-center border-b border-r font-medium">
                             {formatGradeForDisplay(g["1P"])}
@@ -3862,7 +3889,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       // ensure mock headers if needed
                       try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
 
-                      const resp = await CoursesService.confirmAct(Number(courseId))
+                      const resp = await CoursesService.confirmAct(getCourseIdForApi())
                       if (resp && resp.success) {
                         // keep the preview download for offline copy
                         try { await downloadXlsxPreview() } catch (err) { /* ignore */ }

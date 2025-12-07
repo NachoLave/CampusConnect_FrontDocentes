@@ -10,7 +10,8 @@ interface UseCampusesReturn {
 
 /**
  * Hook para obtener las sedes activas
- * Consume el endpoint GET /admin/sedes?onlyActive=true
+ * Consume la API externa de Backoffice: https://backoffice-production-df78.up.railway.app/api/v1/sedes/
+ * Filtra solo las sedes con status: true
  */
 export function useCampuses(): UseCampusesReturn {
   const [campuses, setCampuses] = useState<Campus[]>([])

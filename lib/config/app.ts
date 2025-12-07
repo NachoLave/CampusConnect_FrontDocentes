@@ -1,12 +1,13 @@
 // Configuración para cambiar fácilmente entre modo mock y real
 export const APP_CONFIG = {
-  // Cambiar a false cuando el módulo de autenticación esté disponible
-  USE_MOCK_AUTH: true,
+  // ⚠️ IMPORTANTE: Cambiar a false para usar autenticación real con JWT desde Core
+  // Cuando está en true, usa datos de prueba sin necesidad de login
+  USE_MOCK_AUTH: false,
   
   // Cambiar a false cuando quieras usar datos reales del backend
   USE_MOCK_DATA: false, // Forzar uso de datos reales del backend
   
-  // ID del docente para modo mock
+  // ID del docente para modo mock (solo se usa si USE_MOCK_AUTH es true)
   MOCK_TEACHER_ID: '1010',
   
   // Email del docente para modo mock (debe coincidir con el usado en Postman)

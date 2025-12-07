@@ -11,19 +11,19 @@ export const API_CONFIG = {
     // Cursos del docente
     COURSES: '/teaching/courses',
     MY_COURSES: '/teaching/courses/mine',
-    COURSE_DETAIL: (id: number) => `/teaching/courses/${id}`,
-    COURSE_ROSTER: (id: number) => `/teaching/courses/${id}/roster`,
+    COURSE_DETAIL: (id: number | string) => `/teaching/courses/${id}`,
+    COURSE_ROSTER: (id: number | string) => `/teaching/courses/${id}/roster`,
     
     // Asistencia
-    ATTENDANCE: (courseId: number, date: string) => `/teaching/courses/${courseId}/attendance/${date}`,
-    ATTENDANCE_RANGE: (courseId: number) => `/teaching/courses/${courseId}/attendance`,
-    ATTENDANCE_RECORDS: (courseId: number) => `/teaching/courses/${courseId}/attendance/records`,
+    ATTENDANCE: (courseId: number | string, date: string) => `/teaching/courses/${courseId}/attendance/${date}`,
+    ATTENDANCE_RANGE: (courseId: number | string) => `/teaching/courses/${courseId}/attendance`,
+    ATTENDANCE_RECORDS: (courseId: number | string) => `/teaching/courses/${courseId}/attendance/records`,
     
     // Evaluaciones y calificaciones
-    ASSESSMENTS: (courseId: number) => `/teaching/courses/${courseId}/assessments`,
-    GRADES: (assessmentId: number) => `/teaching/assessments/${assessmentId}/grades`,
-    COURSE_GRADES: (courseId: number) => `/teaching/courses/${courseId}/grades`,
-    PUBLISH_GRADES: (assessmentId: number) => `/teaching/assessments/${assessmentId}:publish`,
+    ASSESSMENTS: (courseId: number | string) => `/teaching/courses/${courseId}/assessments`,
+    GRADES: (assessmentId: number | string) => `/teaching/assessments/${assessmentId}/grades`,
+    COURSE_GRADES: (courseId: number | string) => `/teaching/courses/${courseId}/grades`,
+    PUBLISH_GRADES: (assessmentId: number | string) => `/teaching/assessments/${assessmentId}:publish`,
     
     // Perfil del docente
     TEACHER_PROFILE: '/teachers/me',
@@ -42,8 +42,8 @@ export const API_CONFIG = {
     STORE_EXPORT: '/teachers/me/store/orders:export',
     
     // Actas
-    COURSE_ACTS: (courseId: number) => `/teaching/courses/${courseId}/acts`,
-    COURSE_ACTS_PREVIEW: (courseId: number) => `/teaching/courses/${courseId}/acts:preview`,
+    COURSE_ACTS: (courseId: number | string) => `/teaching/courses/${courseId}/acts`,
+    COURSE_ACTS_PREVIEW: (courseId: number | string) => `/teaching/courses/${courseId}/acts:preview`,
     ACTS_PREVIEW: '/teaching/acts:preview',
     ACTS_CONFIRM: '/teaching/acts:confirm',
     
