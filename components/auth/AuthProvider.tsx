@@ -137,6 +137,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (token) {
           apiClient.setAuthToken(token)
           
+          // 🔐 Imprimir token completo para debugging/copia
+          console.log('🔐 TOKEN COMPLETO (copiar desde aquí):')
+          console.log(token)
+          console.log('🔐 FIN DEL TOKEN')
+          
           // Configurar también el UUID del docente
           const teacherUUID = authService.getTeacherUUID()
           if (teacherUUID) {

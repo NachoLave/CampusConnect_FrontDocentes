@@ -1,6 +1,11 @@
 import { Campus, ApiResponse } from '@/lib/types'
 
-// URL de la API externa de Sedes (Módulo Backoffice)
+// URL del proxy local para evitar CORS
+// En desarrollo: /api/sedes
+// En producción: /api/sedes (el proxy de Next.js maneja la petición al backend externo)
+const SEDES_PROXY_URL = '/api/sedes'
+
+// URL directa de la API externa (fallback si el proxy no funciona)
 const SEDES_API_URL = 'https://backoffice-production-df78.up.railway.app/api/v1/sedes'
 
 // Interfaz para la respuesta de la API de sedes externa
@@ -13,19 +18,31 @@ export interface SedeExterna {
 
 export class AdminService {
   /**
-   * Obtiene la lista de todas las sedes desde la API externa (Backoffice)
-   * GET https://backoffice-production-df78.up.railway.app/api/v1/sedes/?skip=0&limit=100
+   * Obtiene la lista de todas las sedes
+   * Usa el proxy local para evitar problemas de CORS
    */
   static async getAllCampuses(): Promise<ApiResponse<SedeExterna[]>> {
     try {
-      console.log('🏢 Obteniendo sedes desde API externa...')
+      console.log('🏢 Obteniendo sedes...')
       
-      const response = await fetch(`${SEDES_API_URL}/?skip=0&limit=100`, {
+      // Intentar primero con el proxy local (evita CORS)
+      let response = await fetch(SEDES_PROXY_URL, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
         }
       })
+
+      // Si el proxy falla, intentar directamente (solo funciona en localhost)
+      if (!response.ok && typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.log('⚠️ Proxy falló, intentando conexión directa...')
+        response = await fetch(`${SEDES_API_URL}/?skip=0&limit=100`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          }
+        })
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
