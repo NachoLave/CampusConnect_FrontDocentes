@@ -11,6 +11,7 @@ import { EditAvailabilityModal } from "@/components/modals/edit-availability-mod
 import { DeleteConfirmationModal } from "@/components/modals/delete-confirmation-modal"
 import { ConfirmationModal } from "@/components/modals/confirmation-modal"
 import { useTeacherProfile, useProposals, useAvailability } from "@/lib/hooks"
+import { authService } from "@/lib/api/services/auth"
 import type { AvailabilityBlock } from "@/lib/types"
 
 // Función para obtener iniciales del nombre
@@ -336,6 +337,20 @@ export default function PerfilPage() {
   const [selectedModalityFilters, setSelectedModalityFilters] = useState<string[]>([])
   const [showAvailabilityFilterDropdown, setShowAvailabilityFilterDropdown] = useState(false)
   const availabilityFilterDropdownRef = useRef<HTMLDivElement>(null)
+
+  // 🔐 DEBUG: Imprimir token completo en consola
+  useEffect(() => {
+    const token = authService.getToken()
+    if (token) {
+      console.log('========================================')
+      console.log('🔐 TOKEN COMPLETO (copiar desde aquí):')
+      console.log('========================================')
+      console.log(token)
+      console.log('========================================')
+      console.log('🔐 FIN DEL TOKEN')
+      console.log('========================================')
+    }
+  }, [])
 
   // Sincronizar con datos del backend solo cuando está permitido
   useEffect(() => {
