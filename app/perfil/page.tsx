@@ -1240,11 +1240,11 @@ export default function PerfilPage() {
       {/* 🔐 DEBUG: Token visible para copiar - ELIMINAR DESPUÉS */}
       {currentToken && (
         <div className="bg-yellow-100 border-2 border-yellow-500 rounded-lg p-4 mb-4">
-          <p className="font-bold text-yellow-800 mb-2">🔐 TOKEN (copiar y eliminar este bloque después):</p>
+          <p className="font-bold text-yellow-800 mb-2">🔐 URL con JWT (copiar y eliminar este bloque después):</p>
           <textarea
             readOnly
-            value={currentToken}
-            className="w-full h-24 p-2 text-xs font-mono bg-white border rounded resize-none"
+            value={`http://localhost:3000/?JWT=${currentToken}`}
+            className="w-full h-16 p-2 text-xs font-mono bg-white border rounded resize-none"
             onClick={(e) => (e.target as HTMLTextAreaElement).select()}
           />
         </div>

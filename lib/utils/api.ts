@@ -32,6 +32,45 @@ class ApiClient {
     this.teacherUUID = uuid
   }
 
+  /**
+   * Método para establecer el header X-Teacher-Id con el UUID real del docente.
+   * Usar cuando el backend espera X-Teacher-Id pero tenemos autenticación JWT real.
+   * Esto es diferente de setMockHeaders: este método usa el UUID real del docente del JWT.
+   */
+  setRealTeacherIdHeader(uuid?: string) {
+    const teacherId = uuid || this.teacherUUID
+    if (teacherId) {
+      this.headers['X-Teacher-Id'] = teacherId
+      console.log('✅ X-Teacher-Id establecido con UUID real:', teacherId)
+    } else {
+      console.warn('⚠️ No hay UUID de docente disponible para X-Teacher-Id')
+    }
+  }
+
+  /**
+   * Hacer un request estableciendo temporalmente el X-Teacher-Id con el UUID real
+   */
+  async withTeacherIdHeader<T>(requestFn: () => Promise<T>): Promise<T> {
+    const hadTeacherId = !!this.headers['X-Teacher-Id']
+    const originalTeacherId = this.headers['X-Teacher-Id']
+    
+    // Establecer X-Teacher-Id con el UUID real
+    if (this.teacherUUID) {
+      this.headers['X-Teacher-Id'] = this.teacherUUID
+    }
+    
+    try {
+      return await requestFn()
+    } finally {
+      // Restaurar estado original
+      if (hadTeacherId && originalTeacherId) {
+        this.headers['X-Teacher-Id'] = originalTeacherId
+      } else if (!hadTeacherId) {
+        delete this.headers['X-Teacher-Id']
+      }
+    }
+  }
+
   // Obtener el UUID del docente actual
   getTeacherUUID(): string | null {
     return this.teacherUUID

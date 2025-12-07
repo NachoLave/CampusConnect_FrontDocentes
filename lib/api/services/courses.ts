@@ -17,6 +17,44 @@ export class CoursesService {
   }
 
   /**
+   * Configura el header X-Teacher-Id con el UUID real del docente del JWT.
+   * Usar para llamadas al backend de nuestro módulo que requieren este header.
+   */
+  private static setRealTeacherHeader(): void {
+    const teacherUUID = this.getTeacherUUID()
+    if (teacherUUID) {
+      apiClient.setRealTeacherIdHeader(teacherUUID)
+    } else {
+      // Fallback: si no hay UUID real, usar el mock (para desarrollo)
+      console.warn('⚠️ No hay UUID real del docente, usando mock...')
+      try { 
+        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) 
+      } catch {}
+    }
+  }
+
+  /**
+   * Obtiene los headers necesarios para llamadas al backend propio
+   */
+  private static getOwnBackendHeaders(): Record<string, string> {
+    const teacherUUID = this.getTeacherUUID()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    }
+    
+    if (teacherUUID) {
+      headers['X-Teacher-Id'] = teacherUUID
+    } else {
+      // Fallback al mock
+      headers['X-Teacher-Id'] = APP_CONFIG.MOCK_TEACHER_ID
+      headers['X-Teacher-Roles'] = APP_CONFIG.MOCK_TEACHER_ROLES
+    }
+    
+    return headers
+  }
+
+  /**
    * Normaliza el periodo al formato del frontend
    * API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
    */
@@ -362,8 +400,8 @@ export class CoursesService {
   // Obtener todos los registros de asistencia del curso
   static async getAttendanceRecords(courseId: number | string): Promise<ApiResponse<any[]>> {
     try {
-      // Asegurar headers requeridos por backend (docente mock, roles)
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      // Establecer X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE_RECORDS(courseId)
       return await apiClient.get<any[]>(endpoint)
     } catch (err) {
@@ -374,7 +412,8 @@ export class CoursesService {
   // Obtener asistencia por fecha (YYYY-MM-DD)
   static async getAttendanceByDate(courseId: number | string, dateIso: string): Promise<ApiResponse<any>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      // Establecer X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
       return await apiClient.get<any>(endpoint)
     } catch (err) {
@@ -386,7 +425,8 @@ export class CoursesService {
   // NOTA: courseId puede ser UUID (string) o number. studentId siempre es UUID string.
   static async saveAttendanceByDate(courseId: number | string, dateIso: string, items: Array<{ studentId: string; status: string | null }>): Promise<ApiResponse<any>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      // Establecer X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
       const body = { items }
       return await apiClient.put<any>(endpoint, body)
@@ -404,12 +444,8 @@ export class CoursesService {
         : `/teaching/courses/${courseId}/acts:confirm`
 
       const url = `${API_CONFIG.BASE_URL}${endpoint}`
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES
-      }
+      // Usar headers con UUID real del docente
+      const headers = this.getOwnBackendHeaders()
 
       const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) })
       const text = await response.text()
@@ -434,7 +470,8 @@ export class CoursesService {
   // Obtener actas (acts) asociadas a un curso
   static async getActs(courseId: number | string): Promise<ApiResponse<any[]>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      // Establecer X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
         ? API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)
         : `/teaching/courses/${courseId}/acts`
@@ -479,7 +516,8 @@ export class CoursesService {
   // Obtener preview del acta de un curso
   static async getCourseActsPreview(courseId: number | string): Promise<ApiResponse<any>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+      // Establecer X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
         ? API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW(courseId)
         : `/teaching/courses/${courseId}/acts:preview`
@@ -487,6 +525,7 @@ export class CoursesService {
       console.log('[CoursesService] getCourseActsPreview - courseId:', courseId)
       console.log('[CoursesService] getCourseActsPreview - endpoint:', endpoint)
       console.log('[CoursesService] getCourseActsPreview - baseURL:', API_CONFIG.BASE_URL)
+      console.log('[CoursesService] getCourseActsPreview - teacherUUID:', this.getTeacherUUID())
       
       const resp = await apiClient.get<any>(endpoint)
       console.log('[CoursesService] getCourseActsPreview - response:', resp)
@@ -944,9 +983,8 @@ export class CoursesService {
         ? API_CONFIG.ENDPOINTS.PUBLISH_GRADES(assessmentId)
         : `/teaching/assessments/${assessmentId}:publish`
 
-      // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
-      // Limpiar otros headers y solo dejar X-Teacher-Id
-      apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, '', '')
+      // Solo usar X-Teacher-Id con el UUID real del docente
+      this.setRealTeacherHeader()
       
 
       // El endpoint usa POST sin body (el ID del profesor viene en el header X-Teacher-Id)

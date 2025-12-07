@@ -27,7 +27,25 @@ import { CoursesService, mapBackendCourseToFrontend } from '@/lib/api/services/c
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
+import { authService } from '@/lib/api/services/auth'
 import CourseNotFound from '@/app/cursos/[id]/not-found'
+
+/**
+ * Helper: Configura el header X-Teacher-Id con el UUID real del docente.
+ * Usar para llamadas al backend de nuestro módulo que requieren este header.
+ */
+const setRealTeacherHeader = () => {
+  const teacherUUID = authService.getTeacherUUID()
+  if (teacherUUID) {
+    apiClient.setRealTeacherIdHeader(teacherUUID)
+  } else {
+    // Fallback: si no hay UUID real, usar el mock (para desarrollo)
+    console.warn('⚠️ [CourseInfo] No hay UUID real del docente, usando mock...')
+    try { 
+      apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) 
+    } catch {}
+  }
+}
 
 interface CourseInfoProps {
   courseId: string
@@ -655,7 +673,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Calificaciones'
       setLoadingGrades(true)
       try {
-        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        // Establecer X-Teacher-Id con el UUID real del docente
+        setRealTeacherHeader()
         const resp = await CoursesService.getCourseGrades(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success && Array.isArray(resp.data)) {
@@ -852,7 +871,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             partsResp = await CoursesService.getCourseParticipantsByUUID(courseId)
           } else {
             // Usar API interna para cursos con ID numérico (legacy)
-            apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+            setRealTeacherHeader()
             partsResp = await CoursesService.getCourseParticipants(Number(courseId))
           }
           
@@ -1479,7 +1498,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const loadRecords = async () => {
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Asistencia'
       try {
-        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        setRealTeacherHeader()
         const resp = await CoursesService.getAttendanceRecords(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success && Array.isArray(resp.data)) {
@@ -1610,7 +1629,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       setIsLoadingAttendance(true)
       
       try {
-        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        setRealTeacherHeader()
         const yyyy = selectedDateObj.getFullYear()
         const mm = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
         const dd = String(selectedDateObj.getDate()).padStart(2, '0')
@@ -1805,7 +1824,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setIsSavingAttendance(true)
     
     try {
-      apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+      setRealTeacherHeader()
       const resp = await CoursesService.saveAttendanceByDate(getCourseIdForApi(), dateIso, items)
       
       // Desactivar loader
@@ -2225,8 +2244,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           return
         }
 
-        // Ensure mock headers for dev env
-        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES)
+        // Establecer X-Teacher-Id con el UUID real del docente
+        setRealTeacherHeader()
         const resp = await CoursesService.saveCourseGrades(getCourseIdForApi(), assessments)
         
         if (resp && resp.success) {
@@ -3886,8 +3905,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   onClick={async () => {
                     try {
                       setGeneratingAct(true)
-                      // ensure mock headers if needed
-                      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
+                      // Establecer X-Teacher-Id con el UUID real del docente
+                      setRealTeacherHeader()
 
                       const resp = await CoursesService.confirmAct(getCourseIdForApi())
                       if (resp && resp.success) {
