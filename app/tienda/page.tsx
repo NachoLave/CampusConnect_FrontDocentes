@@ -2,10 +2,11 @@
 
 import { useStoreOrders } from '@/lib/hooks'
 import { useMemo, useState, useEffect } from 'react'
+import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-range-picker'
-import { Calendar, Search, Filter, ShoppingBag, ExternalLink, X, ChevronDown } from 'lucide-react'
+import { Calendar, Search, Filter, ShoppingBag, ExternalLink, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -14,102 +15,52 @@ export default function TiendaPage() {
   const [fromDate, setFromDate] = useState<Date | null>(null)
   const [toDate, setToDate] = useState<Date | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  // allow selecting multiple sedes like Comedor's Estado filter
-  const [selectedSedes, setSelectedSedes] = useState<string[]>([])
-  const [showSedeFilter, setShowSedeFilter] = useState(false)
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
-  const deriveSede = (address?: string | null) => {
-    if (!address) return 'Monserrat'
-    const a = String(address).toLowerCase()
-    if (a.includes('belgrano')) return 'Belgrano'
-    if (a.includes('monserrat')) return 'Monserrat'
-    // If contains building like B- or A- treat as Belgrano (heuristic)
-    if (/\b[bB]-\d+/.test(address)) return 'Belgrano'
-    return address
-  }
-
-  const rows = useMemo(() => {
-    return (orders || []).flatMap(order => {
-      const sede = deriveSede(order.deliveryAddress)
-      return (order.items || []).map((item: any) => ({ order, item, sede }))
-    })
-  }, [orders])
-
-  const availableSedes = useMemo(() => {
-    const s = new Set<string>()
-    for (const o of orders || []) {
-      s.add(deriveSede(o.deliveryAddress))
-    }
-    return Array.from(s).sort()
-  }, [orders])
-
-  const filteredRows = useMemo(() => {
-  const from = fromDate ? fromDate : null
-  const to = toDate ? toDate : null
+  const filteredOrders = useMemo(() => {
+    const from = fromDate ? fromDate : null
+    const to = toDate ? toDate : null
     const st = (searchTerm || '').toLowerCase()
 
-    return rows.filter(({ order, item, sede }) => {
+    return (orders || []).filter(order => {
       // Date filter
       if (from) {
-        const od = new Date(order.date)
+        const od = new Date(order.created_at)
         if (isNaN(od.getTime()) || od < from) return false
       }
       if (to) {
-        const od = new Date(order.date)
+        const od = new Date(order.created_at)
         if (isNaN(od.getTime()) || od > to) return false
       }
 
-    // Sede filter (multiple selection)
-    if (selectedSedes.length > 0 && !selectedSedes.includes(sede)) return false
-
-      // SearchTerm filter (item name or code)
+      // Search filter (search in product names)
       if (st) {
-        const name = String(item.productName || '').toLowerCase()
-        const code = String(item.productCode || '').toLowerCase()
-        if (!name.includes(st) && !code.includes(st)) return false
+        const hasMatchingProduct = order.Item_compra.some(item => {
+          const productName = (item.Stock?.Articulo?.Titulo || '').toLowerCase()
+          return productName.includes(st)
+        })
+        if (!hasMatchingProduct) return false
       }
 
       return true
     })
-  }, [rows, fromDate, toDate, searchTerm, selectedSedes])
+  }, [orders, fromDate, toDate, searchTerm])
 
   // Paginación
-  const paginatedRows = useMemo(() => {
+  const paginatedOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage
     const endIndex = startIndex + itemsPerPage
-    return filteredRows.slice(startIndex, endIndex)
-  }, [filteredRows, currentPage])
+    return filteredOrders.slice(startIndex, endIndex)
+  }, [filteredOrders, currentPage])
 
-  const totalPages = Math.ceil(filteredRows.length / itemsPerPage)
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage)
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [fromDate, toDate, searchTerm, selectedSedes])
-
-  const toggleSede = (sede: string) => {
-    setSelectedSedes(prev => prev.includes(sede) ? prev.filter(x => x !== sede) : [...prev, sede])
-  }
-
-  // Close the sede dropdown when clicking outside (mimics Comedor behavior)
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      const btn = document.querySelector('[aria-label="Filtrar por sede"]')
-      const dropdown = btn?.nextElementSibling
-      if (showSedeFilter && btn && dropdown) {
-        if (!btn.contains(target) && !dropdown.contains(target)) {
-          setShowSedeFilter(false)
-        }
-      }
-    }
-    if (showSedeFilter) {
-      document.addEventListener('mousedown', handler)
-      return () => document.removeEventListener('mousedown', handler)
-    }
-  }, [showSedeFilter])
+  }, [fromDate, toDate, searchTerm])
 
   // Función helper para formatear fechas de manera segura
   const formatDate = (dateString: string): string => {
@@ -122,6 +73,16 @@ export default function TiendaPage() {
     } catch (error) {
       return dateString || 'Fecha no disponible'
     }
+  }
+
+  const toggleOrderExpansion = (orderId: number) => {
+    const newExpanded = new Set(expandedOrderIds)
+    if (newExpanded.has(orderId)) {
+      newExpanded.delete(orderId)
+    } else {
+      newExpanded.add(orderId)
+    }
+    setExpandedOrderIds(newExpanded)
   }
 
   if (ordersError) {
@@ -158,136 +119,78 @@ export default function TiendaPage() {
         </Button>
       </div>
 
-  {/* Filters Section */}
+      {/* Filters Section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900">Filtros</h2>
         </div>
         
-    <div>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Desde</label>
-                <DatePicker
-                  selectedDate={fromDate}
-                  onChange={(d) => setFromDate(d)}
-                  placeholder="Seleccionar fecha"
-                  maxDate={toDate || undefined}
+        <div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Desde</label>
+              <DatePicker
+                selectedDate={fromDate}
+                onChange={(d) => setFromDate(d)}
+                placeholder="Seleccionar fecha"
+                maxDate={toDate || undefined}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Hasta</label>
+              <DatePicker
+                selectedDate={toDate}
+                onChange={(d) => setToDate(d)}
+                placeholder="Seleccionar fecha"
+                minDate={fromDate || undefined}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Buscar Producto</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input 
+                  placeholder="Nombre del producto..." 
+                  className="pl-10"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Hasta</label>
-                <DatePicker
-                  selectedDate={toDate}
-                  onChange={(d) => setToDate(d)}
-                  placeholder="Seleccionar fecha"
-                  minDate={fromDate || undefined}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Buscar Ítem</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input 
-                    placeholder="Nombre, código..." 
-                    className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Sede</label>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSedeFilter(!showSedeFilter)}
-                    className="flex items-center space-x-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                    aria-label="Filtrar por sede"
-                    aria-expanded={showSedeFilter}
-                  >
-                    <Filter className="h-4 w-4 flex-shrink-0" />
-                    <span className="flex-1 text-left">
-                      {selectedSedes.length === 0 ? 'Todas' : `${selectedSedes.length} seleccionado${selectedSedes.length > 1 ? 's' : ''}`}
-                    </span>
-                    {selectedSedes.length > 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">{selectedSedes.length}</span>
-                    )}
-                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
-                  </button>
-                  {showSedeFilter && (
-                    <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                      <div className="p-3">
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="text-sm font-medium text-gray-700">Sedes</label>
-                          <div className="flex items-center gap-2">
-                            {selectedSedes.length > 0 && (
-                              <button
-                                onClick={() => { setSelectedSedes([]); setShowSedeFilter(false) }}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                aria-label="Limpiar sedes"
-                              >
-                                Limpiar
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setShowSedeFilter(false)}
-                              className="text-gray-400 hover:text-gray-600"
-                              aria-label="Cerrar filtro"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {availableSedes.map((s) => (
-                            <label key={s} className="flex items-center space-x-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={selectedSedes.includes(s)}
-                                onChange={() => toggleSede(s)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-700">{s}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
+          </div>
         </div>
       </div>
-
 
       {/* Table Section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '40%' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead className="bg-gray-50">
               {ordersLoading || orders.length === 0 ? null : (
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ID Compra
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Fecha
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ítem
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cantidad
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Precio Unitario
+                    Productos
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sede
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Detalles
                   </th>
                 </tr>
               )}
@@ -297,7 +200,7 @@ export default function TiendaPage() {
                 <>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={6} className="px-6 py-4">
+                      <td colSpan={5} className="px-6 py-4">
                         <div className="relative overflow-hidden h-12 bg-gray-100 rounded">
                           <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
                         </div>
@@ -307,7 +210,7 @@ export default function TiendaPage() {
                 </>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex flex-col items-center">
                       <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
                       <h3 className="text-lg font-medium text-gray-900 mb-2">No hay órdenes</h3>
@@ -315,9 +218,9 @@ export default function TiendaPage() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredRows.length === 0 ? (
+              ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex flex-col items-center">
                       <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
                       <h3 className="text-lg font-medium text-gray-900 mb-2">No hay órdenes</h3>
@@ -326,38 +229,91 @@ export default function TiendaPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedRows.map(({ order, item, sede }, idx) => (
-                  <tr key={`${order.id}-${item.id}-${idx}`} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(order.date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.productName || 'Producto sin nombre'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.quantity || 1}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${(item.unitPrice || 0).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${((item.unitPrice || 0) * (item.quantity || 1)).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {sede || order.deliveryAddress || 'Monserrat'}
-                    </td>
-                  </tr>
-                ))
+                paginatedOrders.map((order) => {
+                  const isExpanded = expandedOrderIds.has(order.id)
+                  return (
+                    <React.Fragment key={`order-${order.id}`}>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                          #{order.id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDate(order.created_at)}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          <div className="space-y-1">
+                            {order.Item_compra.map((item, idx) => (
+                              <div key={`${order.id}-title-${idx}`}>
+                                <span className="font-medium">{item.Stock?.Articulo?.Titulo}</span>
+                                <span className="text-gray-500 ml-2">({item.cantidad})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                          ${(order.total_compra || 0).toLocaleString('es-AR')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <button
+                            onClick={() => toggleOrderExpansion(order.id)}
+                            className="text-blue-600 hover:text-blue-800 transition-colors inline-flex items-center justify-center"
+                            title={isExpanded ? 'Ocultar detalles' : 'Ver detalles'}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-5 w-5" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5" />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-gray-50 border-t">
+                          <td colSpan={5} className="px-6 py-4">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-gray-900 mb-3">Productos en esta compra:</h4>
+                              {order.Item_compra.map((item, idx) => {
+                                const articulo = item.Stock?.Articulo
+                                const color = item.Stock?.Color
+                                const imagen = articulo?.Imagen?.[0]?.imagen
+                                return (
+                                  <div key={`${order.id}-item-${idx}`} className="flex gap-4 p-3 bg-white rounded border border-gray-200">
+                                    {imagen && (
+                                      <img 
+                                        src={imagen} 
+                                        alt={articulo?.Titulo}
+                                        className="h-16 w-16 object-cover rounded"
+                                      />
+                                    )}
+                                    <div className="flex-1">
+                                      <h5 className="font-medium text-gray-900">{articulo?.Titulo}</h5>
+                                      <p className="text-sm text-gray-600 mt-1">{articulo?.descripcion}</p>
+                                      <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                                        <span>Color: {color?.nombre}</span>
+                                        <span>Cantidad: {item.cantidad}</span>
+                                        <span className="font-medium text-gray-900">Subtotal: ${item.subtotal.toLocaleString('es-AR')}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })
               )}
             </tbody>
           </table>
         </div>
 
         {/* Pagination */}
-        {!ordersLoading && filteredRows.length > 0 && totalPages > 1 && (
+        {!ordersLoading && filteredOrders.length > 0 && totalPages > 1 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredRows.length)} de {filteredRows.length} resultados
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredOrders.length)} de {filteredOrders.length} resultados
             </div>
             <div className="flex space-x-2">
               <Button

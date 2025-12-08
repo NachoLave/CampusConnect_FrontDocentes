@@ -349,35 +349,42 @@ export interface Subject {
   careerUUID?: string        // UUID de la carrera
 }
 
-// Tipos para tienda
-export interface StoreOrder {
-  id: string
-  orderNumber: string
-  date: string
-  status: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED'
-  total: number
-  items: StoreOrderItem[]
-  paymentMethod: string
-  deliveryAddress?: string
-  notes?: string
+// Tipos para tienda (adaptados a microservicio)
+export interface StoreOrderItem {
+  id: number
+  cantidad: number
+  subtotal: number
+  stock_id: number
+  compra_id: number
+  created_at: string
+  Stock: {
+    stock: number
+    talle: string | null
+    Color: {
+      hexa: string
+      nombre: string
+    }
+    Articulo: {
+      Titulo: string
+      descripcion: string
+      Imagen: Array<{
+        imagen: string
+      }>
+    }
+  }
 }
 
-export interface StoreOrderItem {
-  id: string
-  productId: string
-  product?: string  // Nombre del producto desde el backend
-  productName: string
-  quantity: number
-  unitPrice: number
-  totalPrice: number
-  category: string
+export interface StoreOrder {
+  id: number
+  usuario_id: string
+  created_at: string
+  total_compra: number
+  Item_compra: StoreOrderItem[]
 }
 
 export interface StoreOrderSummary {
   totalOrders: number
   totalSpent: number
-  pendingOrders: number
-  deliveredOrders: number
 }
 
 // Tipos para comedor

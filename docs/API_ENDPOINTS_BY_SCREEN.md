@@ -425,30 +425,66 @@ Body: {
 
 #### Endpoints Used:
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/teachers/me/store/orders` | Get all store orders |
-| GET | `/teachers/me/store/orders:export` | Export orders (CSV/Excel) |
+| Method | Endpoint | Base URL | Purpose |
+|--------|----------|----------|---------|
+| GET | `/api/orders/me?userId={userId}` | `https://uadestore.onrender.com` | Get all store orders |
 
 **Service:** `lib/api/services/store.ts`  
 **Hook:** `lib/hooks/useStore.ts`
 
-#### Store Orders Response:
+#### Store Orders Response Format:
 ```typescript
-GET /teachers/me/store/orders
+GET https://uadestore.onrender.com/api/orders/me?userId=1697c6f4-5066-40fe-a4eb-67e299fd9742
+
 Response: Array<{
-  orderId: number,
-  date: string,
-  items: Array<{
-    productName: string,
-    quantity: number,
-    price: number
-  }>,
-  total: number,
-  status: string,
-  campus: string
+  id: number,
+  usuario_id: string,
+  created_at: string, // ISO datetime
+  total_compra: number,
+  Item_compra: Array<{
+    id: number,
+    cantidad: number,
+    subtotal: number,
+    stock_id: number,
+    compra_id: number,
+    created_at: string,
+    Stock: {
+      stock: number,
+      talle: string | null,
+      Color: {
+        hexa: string,
+        nombre: string
+      },
+      Articulo: {
+        Titulo: string,
+        descripcion: string,
+        Imagen: Array<{
+          imagen: string // Signed Supabase URL
+        }>
+      }
+    }
+  }>
 }>
 ```
+
+#### UI Structure:
+- **Main Row:** Shows purchase (order) summary with:
+  - Purchase date (formatted)
+  - Number of items in the purchase
+  - Total amount spent
+  - Expandable details button
+  
+- **Expanded Row:** Shows all products in the purchase with:
+  - Product image (from Supabase signed URL)
+  - Product title and description
+  - Color information
+  - Quantity purchased
+  - Subtotal price
+
+#### Filters:
+- **Date Range:** Filter orders by creation date (from/to)
+- **Product Search:** Search by product name across all purchases
+- **Pagination:** 5 orders per page
 
 ---
 
