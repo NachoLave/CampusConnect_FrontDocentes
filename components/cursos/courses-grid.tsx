@@ -53,26 +53,9 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   // Mostrar error solo si hay error y no hay cursos
   const shouldShowError = error && allCourses.length === 0
   
-  // Debug logs
-  console.log('CoursesGrid Debug:', {
-    selectedPeriod,
-    allCourses: allCourses.length,
-    isLoading,
-    error,
-    shouldShowError
-  })
-  
   // Usar sedes y días dinámicos del backend
   const sedes = availableSedes
   const days = availableDays
-  
-  console.log('CoursesGrid - Filtros disponibles:', {
-    selectedPeriod,
-    availableSedes,
-    availableDays,
-    sedes,
-    days
-  })
 
   // Pasar datos dinámicos al componente padre
   useEffect(() => {
@@ -111,14 +94,6 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   }, [allCourses, selectedPeriod])
 
   const filteredAndSortedCourses = useMemo(() => {
-    console.log('Filtering courses:', {
-      totalCourses: allCourses.length,
-      searchTerm,
-      selectedSedes,
-      selectedDays,
-      selectedPeriod
-    })
-    
     const filtered = allCourses.filter((course) => {
       const matchesSearch =
         searchTerm === "" ||
@@ -133,37 +108,11 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       const matchesDay = selectedDays.length === 0 || selectedDaysNormalized.includes(courseDayNormalized)
       
       const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
-      
-      console.log('Course filter check:', {
-        title: course.title,
-        courseDay: course.day,
-        courseDayNormalized,
-        selectedDays,
-        selectedDaysNormalized,
-        matchesDay,
-        courseSede: course.sede,
-        selectedSedes,
-        matchesSede
-      })
 
       const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod
-      
-      if (!matches) {
-        console.log('Course filtered out:', {
-          title: course.title,
-          period: course.period,
-          selectedPeriod,
-          matchesPeriod,
-          matchesSede,
-          matchesDay,
-          matchesSearch
-        })
-      }
 
       return matches
     })
-
-    console.log('Filtered courses:', filtered.length)
 
     // Sort by day and then by shift
     return filtered.sort((a, b) => {

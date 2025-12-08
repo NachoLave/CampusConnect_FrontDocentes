@@ -10,7 +10,7 @@ import { AddAvailabilityModal } from "@/components/modals/add-availability-modal
 import { EditAvailabilityModal } from "@/components/modals/edit-availability-modal"
 import { DeleteConfirmationModal } from "@/components/modals/delete-confirmation-modal"
 import { ConfirmationModal } from "@/components/modals/confirmation-modal"
-import { useTeacherProfile, useProposals, useAvailability } from "@/lib/hooks"
+import { useTeacherProfile, useProposals, useAvailability, useCampuses } from "@/lib/hooks"
 import { authService } from "@/lib/api/services/auth"
 import type { AvailabilityBlock } from "@/lib/types"
 
@@ -319,6 +319,24 @@ export default function PerfilPage() {
   const { profile, isLoading: profileLoading, error: profileError } = useTeacherProfile()
   const { proposals: backendProposals, isLoading: proposalsLoading, error: proposalsError, createProposal, deleteProposal, toggleProposalAvailability, refetch: refetchProposals } = useProposals()
   const { availability: backendAvailability, isLoading: availabilityLoading, error: availabilityError, addAvailability, deleteAvailability, updateAvailabilityBlock, refetch: refetchAvailability } = useAvailability()
+  const { campuses: allCampuses, isLoading: campusesLoading, error: campusesError } = useCampuses()
+
+  // 🔍 DEBUG: Log de IDs de todas las sedes obtenidas
+  useEffect(() => {
+    if (!campusesLoading && allCampuses.length > 0) {
+      console.log('🏢 SEDES OBTENIDAS:')
+      console.log('Total de sedes:', allCampuses.length)
+      allCampuses.forEach((campus, index) => {
+        console.log(`  ${index + 1}. ${campus.name} (${campus.ubicacion || 'Sin ubicación'})`)
+        console.log(`     - UUID: ${campus.uuid}`)
+        console.log(`     - Code: ${campus.code}`)
+      })
+      console.log('🏢 IDs (UUIDs) de todas las sedes:', allCampuses.map(c => c.uuid).join(', '))
+    }
+    if (campusesError) {
+      console.error('❌ Error al cargar sedes:', campusesError)
+    }
+  }, [allCampuses, campusesLoading, campusesError])
 
   // Estado local para Optimistic Updates
   const [proposals, setProposals] = useState(backendProposals)

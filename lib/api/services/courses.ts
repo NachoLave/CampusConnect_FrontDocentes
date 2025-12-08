@@ -17,26 +17,25 @@ export class CoursesService {
   }
 
   /**
-   * Configura el header X-Teacher-Id con el UUID real del docente del JWT.
-   * Usar para llamadas al backend de nuestro módulo que requieren este header.
+   * Configura SOLO el header X-Teacher-Id con el UUID real del docente.
+   * Para llamadas al backend de nuestro módulo (asistencia, calificaciones, actas).
+   * NO envía X-Teacher-Roles ni Authorization.
    */
-  private static setRealTeacherHeader(): void {
+  private static setOnlyTeacherIdHeader(): void {
     const teacherUUID = this.getTeacherUUID()
     if (teacherUUID) {
+      // Solo establecer X-Teacher-Id, sin roles ni authorization
       apiClient.setRealTeacherIdHeader(teacherUUID)
     } else {
-      // Fallback: si no hay UUID real, usar el mock (para desarrollo)
-      console.warn('⚠️ No hay UUID real del docente, usando mock...')
-      try { 
-        apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) 
-      } catch {}
+      // No hay UUID disponible
     }
   }
 
   /**
-   * Obtiene los headers necesarios para llamadas al backend propio
+   * Obtiene SOLO el header X-Teacher-Id para llamadas al backend propio.
+   * NO incluye X-Teacher-Roles ni Authorization.
    */
-  private static getOwnBackendHeaders(): Record<string, string> {
+  private static getOnlyTeacherIdHeaders(): Record<string, string> {
     const teacherUUID = this.getTeacherUUID()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -46,12 +45,24 @@ export class CoursesService {
     if (teacherUUID) {
       headers['X-Teacher-Id'] = teacherUUID
     } else {
-      // Fallback al mock
       headers['X-Teacher-Id'] = APP_CONFIG.MOCK_TEACHER_ID
-      headers['X-Teacher-Roles'] = APP_CONFIG.MOCK_TEACHER_ROLES
     }
     
     return headers
+  }
+
+  /**
+   * Log detallado de una request que se va a enviar
+   */
+  private static logRequest(method: string, url: string, headers: Record<string, string>, body?: any): void {
+    // Logs removidos
+  }
+
+  /**
+   * Log detallado de una response recibida
+   */
+  private static logResponse(method: string, url: string, status: number, data: any, error?: string): void {
+    // Logs removidos
   }
 
   /**
@@ -92,7 +103,6 @@ export class CoursesService {
     const teacherUUID = this.getTeacherUUID()
     
     if (!teacherUUID) {
-      console.error('❌ No hay docente autenticado')
       return {
         data: [],
         success: false,
@@ -101,21 +111,16 @@ export class CoursesService {
     }
 
     try {
-      console.log(`📚 Obteniendo cursos del docente ${teacherUUID}...`)
-
       // Paso 1: Obtener inscripciones del docente
       const inscripciones = await this.getDocenteInscripciones(teacherUUID)
       
       if (!inscripciones || inscripciones.length === 0) {
-        console.log('📚 No se encontraron cursos para este docente')
         return {
           data: [],
           success: true,
           message: 'No hay cursos asignados'
         }
       }
-
-      console.log(`📚 Inscripciones encontradas: ${inscripciones.length}`)
 
       // Paso 2: Para cada inscripción, obtener detalles del curso y conteo de alumnos
       const cursosPromises = inscripciones.map(async (inscripcion) => {
@@ -133,15 +138,12 @@ export class CoursesService {
 
       const cursos = await Promise.all(cursosPromises)
       
-      console.log(`✅ Cursos obtenidos: ${cursos.length}`)
-      
       return {
         data: cursos,
         success: true,
         message: 'Cursos obtenidos correctamente'
       }
     } catch (error) {
-      console.error('❌ Error obteniendo cursos:', error)
       return {
         data: [],
         success: false,
@@ -156,8 +158,6 @@ export class CoursesService {
    */
   private static async getDocenteInscripciones(teacherUUID: string): Promise<ExternalInscripcion[]> {
     try {
-      console.log(`📋 Obteniendo inscripciones del docente ${teacherUUID}...`)
-      
       const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
         method: 'GET',
         headers: {
@@ -172,13 +172,11 @@ export class CoursesService {
       const data: InscripcionesResponse = await response.json()
       
       if (data.success && data.data) {
-        console.log(`📋 Inscripciones obtenidas: ${data.data.length}`)
         return data.data
       }
 
       return []
     } catch (error) {
-      console.error('❌ Error obteniendo inscripciones del docente:', error)
       return []
     }
   }
@@ -190,8 +188,6 @@ export class CoursesService {
   private static async getCursoDetalle(cursoUUID: string): Promise<ExternalCursoDetalle | null> {
     try {
       const url = `${CURSOS_API_URL}/cursos/${cursoUUID}`
-      console.log(`📖 Obteniendo detalle del curso ${cursoUUID}...`)
-      console.log(`📖 URL: ${url}`)
       
       const response = await fetch(url, {
         method: 'GET',
@@ -199,27 +195,19 @@ export class CoursesService {
           'Accept': 'application/json'
         }
       })
-
-      console.log(`📖 Response status: ${response.status}`)
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`❌ HTTP error! status: ${response.status}, body: ${errorText}`)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data: CursoDetalleResponse = await response.json()
-      console.log(`📖 Response data:`, data)
       
       if (data.success && data.data) {
-        console.log(`✅ Detalle del curso obtenido: ${data.data.materia?.nombre || cursoUUID}`)
         return data.data
       }
 
-      console.warn(`⚠️ Respuesta sin success o sin data:`, data)
       return null
     } catch (error) {
-      console.error(`❌ Error obteniendo detalle del curso ${cursoUUID}:`, error)
       return null
     }
   }
@@ -249,7 +237,6 @@ export class CoursesService {
 
       return []
     } catch (error) {
-      console.error(`❌ Error obteniendo inscripciones del curso ${cursoUUID}:`, error)
       return []
     }
   }
@@ -398,92 +385,143 @@ export class CoursesService {
   }
 
   // Obtener todos los registros de asistencia del curso
+  // Solo envía header X-Teacher-Id con el UUID del docente
+  // Usa proxy local para evitar problemas de CORS
   static async getAttendanceRecords(courseId: number | string): Promise<ApiResponse<any[]>> {
+    const url = `/api/attendance/${courseId}/records`
+    const headers = this.getOnlyTeacherIdHeaders()
+    
+    this.logRequest('GET', url, headers)
+    
     try {
-      // Establecer X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE_RECORDS(courseId)
-      return await apiClient.get<any[]>(endpoint)
+      const response = await fetch(url, { method: 'GET', headers })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
+      
+      this.logResponse('GET', url, response.status, data, response.ok ? undefined : `HTTP ${response.status}`)
+      
+      if (response.ok) {
+        const list = Array.isArray(data?.value) ? data.value : Array.isArray(data) ? data : []
+        return { data: list, success: true, message: 'Registros de asistencia obtenidos' }
+      }
+      return { data: [], success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (err) {
-      return { data: [] as any[], success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+      return { data: [], success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
   }
 
   // Obtener asistencia por fecha (YYYY-MM-DD)
+  // Solo envía header X-Teacher-Id con el UUID del docente
+  // Usa proxy local para evitar problemas de CORS
   static async getAttendanceByDate(courseId: number | string, dateIso: string): Promise<ApiResponse<any>> {
+    const url = `/api/attendance/${courseId}/${dateIso}`
+    const headers = this.getOnlyTeacherIdHeaders()
+    
+    this.logRequest('GET', url, headers)
+    
     try {
-      // Establecer X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
-      return await apiClient.get<any>(endpoint)
+      const response = await fetch(url, { method: 'GET', headers })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
+      
+      this.logResponse('GET', url, response.status, data, response.ok ? undefined : `HTTP ${response.status}`)
+      
+      if (response.ok) {
+        return { data, success: true, message: 'Asistencia obtenida' }
+      }
+      return { data: null, success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (err) {
-      return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+      return { data: null, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
   }
 
   // Guardar asistencia para una fecha específica (PUT)
+  // Solo envía header X-Teacher-Id con el UUID del docente
   // NOTA: courseId puede ser UUID (string) o number. studentId siempre es UUID string.
+  // Usa proxy local para evitar problemas de CORS
   static async saveAttendanceByDate(courseId: number | string, dateIso: string, items: Array<{ studentId: string; status: string | null }>): Promise<ApiResponse<any>> {
+    const url = `/api/attendance/${courseId}/${dateIso}`
+    const headers = this.getOnlyTeacherIdHeaders()
+    const body = { items }
+    
+    this.logRequest('PUT', url, headers, body)
+    
     try {
-      // Establecer X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      const endpoint = API_CONFIG.ENDPOINTS.ATTENDANCE(courseId, dateIso)
-      const body = { items }
-      return await apiClient.put<any>(endpoint, body)
+      const response = await fetch(url, { 
+        method: 'PUT', 
+        headers, 
+        body: JSON.stringify(body) 
+      })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
+      
+      this.logResponse('PUT', url, response.status, data, response.ok ? undefined : `HTTP ${response.status}`)
+      
+      if (response.ok) {
+        return { data, success: true, message: 'Asistencia guardada correctamente' }
+      }
+      return { data: null, success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (err) {
-      return { data: null as any, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+      return { data: null, success: false, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
   }
 
   // Confirmar/Generar acta oficial para un curso
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async confirmAct(courseId: number | string): Promise<ApiResponse<any>> {
+    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
+      ? `${API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)}:confirm`
+      : `/teaching/courses/${courseId}/acts:confirm`
+
+    const url = `${API_CONFIG.BASE_URL}${endpoint}`
+    const headers = this.getOnlyTeacherIdHeaders()
+    const body = {}
+
     try {
-      // Build endpoint like /teaching/courses/{id}/acts:confirm
-      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
-        ? `${API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)}:confirm`
-        : `/teaching/courses/${courseId}/acts:confirm`
-
-      const url = `${API_CONFIG.BASE_URL}${endpoint}`
-      // Usar headers con UUID real del docente
-      const headers = this.getOwnBackendHeaders()
-
-      const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) })
+      const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
       const text = await response.text()
-      let parsed: any = null
-      try { parsed = text ? JSON.parse(text) : null } catch (_) { parsed = null }
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
 
       if (response.ok) {
-        return { data: parsed, success: true, message: 'Acta generada correctamente' }
+        return { data, success: true, message: 'Acta generada correctamente' }
       }
 
-      // Handle specific 409 / ACTA_WINDOW_CLOSED case returning server message/code
-      if (response.status === 409 && parsed) {
-        return { data: parsed, success: false, error: parsed.message || 'Acta ya cerrada' }
+      // Handle specific 409 / ACTA_WINDOW_CLOSED case
+      if (response.status === 409 && data) {
+        return { data, success: false, error: data.message || 'Acta ya cerrada' }
       }
 
-      return { data: parsed, success: false, error: parsed?.message || `HTTP error ${response.status}` }
+      return { data, success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (error) {
-      return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+      return { data: null, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
     }
   }
 
   // Obtener actas (acts) asociadas a un curso
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async getActs(courseId: number | string): Promise<ApiResponse<any[]>> {
+    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
+      ? API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)
+      : `/teaching/courses/${courseId}/acts`
+
+    const url = `${API_CONFIG.BASE_URL}${endpoint}`
+    const headers = this.getOnlyTeacherIdHeaders()
+
     try {
-      // Establecer X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
-        ? API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)
-        : `/teaching/courses/${courseId}/acts`
+      const response = await fetch(url, { method: 'GET', headers })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
 
-      const resp = await apiClient.get<any[]>(endpoint)
-      if (!resp || !resp.success) {
-        return { data: [], success: false, error: resp?.error || 'Error obteniendo actas' }
+      if (response.ok) {
+        const list = Array.isArray(data?.value) ? data.value : Array.isArray(data) ? data : []
+        return { data: list, success: true, message: 'Actas obtenidas' }
       }
-
-      const dataAny: any = resp.data
-      const list = Array.isArray(dataAny?.value) ? dataAny.value : Array.isArray(dataAny) ? dataAny : []
-      return { data: list, success: true, message: 'Actas obtenidas' }
+      return { data: [], success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (error) {
       return { data: [], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
     }
@@ -514,32 +552,27 @@ export class CoursesService {
   }
 
   // Obtener preview del acta de un curso
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async getCourseActsPreview(courseId: number | string): Promise<ApiResponse<any>> {
+    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
+      ? API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW(courseId)
+      : `/teaching/courses/${courseId}/acts:preview`
+
+    const url = `${API_CONFIG.BASE_URL}${endpoint}`
+    const headers = this.getOnlyTeacherIdHeaders()
+
     try {
-      // Establecer X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
-        ? API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW(courseId)
-        : `/teaching/courses/${courseId}/acts:preview`
-      
-      console.log('[CoursesService] getCourseActsPreview - courseId:', courseId)
-      console.log('[CoursesService] getCourseActsPreview - endpoint:', endpoint)
-      console.log('[CoursesService] getCourseActsPreview - baseURL:', API_CONFIG.BASE_URL)
-      console.log('[CoursesService] getCourseActsPreview - teacherUUID:', this.getTeacherUUID())
-      
-      const resp = await apiClient.get<any>(endpoint)
-      console.log('[CoursesService] getCourseActsPreview - response:', resp)
-      
-      if (!resp || !resp.success) {
-        console.warn('[CoursesService] getCourseActsPreview - failed:', resp?.error)
-        return { data: null as any, success: false, error: resp?.error || 'Error obteniendo preview del acta' }
+      const response = await fetch(url, { method: 'GET', headers })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
+
+      if (response.ok) {
+        return { data, success: true, message: 'Preview del acta obtenido correctamente' }
       }
-      
-      console.log('[CoursesService] getCourseActsPreview - success, data:', resp.data)
-      return { data: resp.data, success: true, message: 'Preview del acta obtenido correctamente' }
+      return { data: null, success: false, error: data?.message || `HTTP error ${response.status}` }
     } catch (error) {
-      console.error('[CoursesService] getCourseActsPreview - exception:', error)
-      return { data: null as any, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+      return { data: null, success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
     }
   }
 
@@ -575,8 +608,6 @@ export class CoursesService {
    */
   static async getCourseByUUID(cursoUUID: string): Promise<ApiResponse<Course>> {
     try {
-      console.log(`📖 Obteniendo curso por UUID ${cursoUUID}...`)
-      
       // Obtener detalles del curso
       const cursoDetalle = await this.getCursoDetalle(cursoUUID)
       
@@ -614,7 +645,6 @@ export class CoursesService {
         message: 'Curso obtenido correctamente'
       }
     } catch (error) {
-      console.error(`❌ Error obteniendo curso ${cursoUUID}:`, error)
       return {
         data: null as any,
         success: false,
@@ -629,8 +659,6 @@ export class CoursesService {
    */
   static async getCourseParticipantsByUUID(cursoUUID: string): Promise<ApiResponse<{ teachers: any[]; students: any[]; course?: any }>> {
     try {
-      console.log(`📖 Obteniendo participantes del curso ${cursoUUID}...`)
-      
       // Obtener detalles del curso y las inscripciones en paralelo
       const [cursoDetalle, inscripciones] = await Promise.all([
         this.getCursoDetalle(cursoUUID),
@@ -751,15 +779,12 @@ export class CoursesService {
         period: CoursesService.normalizePeriodToFrontend(cursoDetalle.periodo || '')
       }
 
-      console.log(`✅ Participantes obtenidos: ${teachers.length} docentes, ${students.length} alumnos`)
-
       return {
         data: { teachers, students, course },
         success: true,
         message: 'Participantes obtenidos correctamente'
       }
     } catch (error) {
-      console.error(`❌ Error obteniendo participantes del curso ${cursoUUID}:`, error)
       return {
         data: null as any,
         success: false,
@@ -888,22 +913,27 @@ export class CoursesService {
   }
 
   // Obtener calificaciones de un curso (todas las evaluaciones y notas)
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async getCourseGrades(courseId: number | string): Promise<ApiResponse<any[]>> {
+    const headers = this.getOnlyTeacherIdHeaders()
+    
     try {
       // Paso 1: Obtener la lista de evaluaciones del curso
-      // GET /teaching/courses/{courseId}/assessments
       const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
         ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
         : `/teaching/courses/${courseId}/assessments`
-
-      const assessmentsResp = await apiClient.get<any[]>(assessmentsEndpoint)
       
-      if (!assessmentsResp || !assessmentsResp.success) {
-        return { data: [], success: false, error: assessmentsResp?.error || 'Error obteniendo evaluaciones' }
+      const assessmentsUrl = `${API_CONFIG.BASE_URL}${assessmentsEndpoint}`
+
+      const assessmentsResponse = await fetch(assessmentsUrl, { method: 'GET', headers })
+      const assessmentsText = await assessmentsResponse.text()
+      let assessmentsData: any = null
+      try { assessmentsData = assessmentsText ? JSON.parse(assessmentsText) : null } catch { assessmentsData = null }
+
+      if (!assessmentsResponse.ok) {
+        return { data: [], success: false, error: assessmentsData?.message || `Error obteniendo evaluaciones: HTTP ${assessmentsResponse.status}` }
       }
 
-      // Obtener el array de evaluaciones
-      const assessmentsData: any = assessmentsResp.data
       const assessments = Array.isArray(assessmentsData?.value) ? assessmentsData.value : Array.isArray(assessmentsData) ? assessmentsData : []
 
       if (assessments.length === 0) {
@@ -911,7 +941,6 @@ export class CoursesService {
       }
 
       // Paso 2: Para cada evaluación, obtener sus notas
-      // GET /teaching/assessments/{assessmentId}/grades
       const result: any[] = []
       
       for (const assessment of assessments) {
@@ -921,19 +950,21 @@ export class CoursesService {
         const gradesEndpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
           ? API_CONFIG.ENDPOINTS.GRADES(assessmentId)
           : `/teaching/assessments/${assessmentId}/grades`
+        
+        const gradesUrl = `${API_CONFIG.BASE_URL}${gradesEndpoint}`
 
         try {
-          const gradesResp = await apiClient.get<any[]>(gradesEndpoint)
-          
-          if (gradesResp && gradesResp.success) {
-            const gradesData: any = gradesResp.data
+          const gradesResponse = await fetch(gradesUrl, { method: 'GET', headers })
+          const gradesText = await gradesResponse.text()
+          let gradesData: any = null
+          try { gradesData = gradesText ? JSON.parse(gradesText) : null } catch { gradesData = null }
+
+          if (gradesResponse.ok) {
             const grades = Array.isArray(gradesData?.value) ? gradesData.value : Array.isArray(gradesData) ? gradesData : []
 
-            // Combinar la información de la evaluación con sus notas
-            // El resultado debe tener el formato que espera el componente
             result.push({
               assessmentId: assessment.assessmentId || assessment.id,
-              tipo: assessment.type || assessment.tipo, // PARCIAL_1, PARCIAL_2, RECUPERATORIO, FINAL
+              tipo: assessment.type || assessment.tipo,
               fecha: assessment.date || assessment.fecha,
               courseId: assessment.courseId || courseId,
               grades: grades.map((g: any) => ({
@@ -947,10 +978,16 @@ export class CoursesService {
                 courseId: g.courseId || assessment.courseId || courseId
               }))
             })
+          } else {
+            result.push({
+              assessmentId: assessment.assessmentId || assessment.id,
+              tipo: assessment.type || assessment.tipo,
+              fecha: assessment.date || assessment.fecha,
+              courseId: assessment.courseId || courseId,
+              grades: []
+            })
           }
         } catch (gradeError) {
-          console.warn(`Error obteniendo notas para evaluación ${assessmentId}:`, gradeError)
-          // Continuar con las demás evaluaciones incluso si una falla
           result.push({
             assessmentId: assessment.assessmentId || assessment.id,
             tipo: assessment.type || assessment.tipo,
@@ -969,42 +1006,34 @@ export class CoursesService {
 
   // Publicar calificaciones de una evaluación
   // POST /teaching/assessments/{assessmentId}:publish (sin body)
-  // Responde con { assessmentId, publishedCount, publishedAt }
-  // Si publishedCount > 0 y publishedAt no es null, hubo cambios y se publicaron
-  // Si publishedCount === 0 y publishedAt === null, no hubo cambios y no se hizo nada en la BD
-  // El backend guarda el ID del profesor (del header X-Teacher-Id) y la fecha de publicación
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async publishGrades(assessmentId: number): Promise<ApiResponse<{
     assessmentId: number
     publishedCount: number
     publishedAt: string | null
   }>> {
+    const endpoint = typeof API_CONFIG.ENDPOINTS.PUBLISH_GRADES === 'function'
+      ? API_CONFIG.ENDPOINTS.PUBLISH_GRADES(assessmentId)
+      : `/teaching/assessments/${assessmentId}:publish`
+
+    const url = `${API_CONFIG.BASE_URL}${endpoint}`
+    const headers = this.getOnlyTeacherIdHeaders()
+
     try {
-      const endpoint = typeof API_CONFIG.ENDPOINTS.PUBLISH_GRADES === 'function'
-        ? API_CONFIG.ENDPOINTS.PUBLISH_GRADES(assessmentId)
-        : `/teaching/assessments/${assessmentId}:publish`
+      const response = await fetch(url, { method: 'POST', headers })
+      const text = await response.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
 
-      // Solo usar X-Teacher-Id con el UUID real del docente
-      this.setRealTeacherHeader()
-      
-
-      // El endpoint usa POST sin body (el ID del profesor viene en el header X-Teacher-Id)
-      // Enviar null para que no se incluya body en el request
-      const resp = await apiClient.post<{
-        assessmentId: number
-        publishedCount: number
-        publishedAt: string | null
-      }>(endpoint, null as any)
-
-      if (!resp || !resp.success) {
-        console.error('[publishGrades] Error en la respuesta:', resp)
+      if (!response.ok) {
         return {
           data: null as any,
           success: false,
-          error: resp?.error || 'Error publicando calificaciones'
+          error: data?.message || `Error publicando calificaciones: HTTP ${response.status}`
         }
       }
 
-      const publishData = resp.data
+      const publishData = data
       
       // Verificar si hubo cambios publicados
       if (publishData && publishData.publishedCount > 0 && publishData.publishedAt) {
@@ -1035,19 +1064,27 @@ export class CoursesService {
   }
 
   // Guardar/actualizar calificaciones de un curso
+  // Solo envía header X-Teacher-Id con el UUID del docente
   static async saveCourseGrades(courseId: number | string, assessments: any[]): Promise<ApiResponse<any>> {
+    const headers = this.getOnlyTeacherIdHeaders()
+    
     try {
       // Paso 1: Obtener las evaluaciones existentes del curso
       const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
         ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
         : `/teaching/courses/${courseId}/assessments`
       
-      const existingAssessmentsResp = await apiClient.get<any[]>(assessmentsEndpoint)
-      const existingAssessmentsData: any = existingAssessmentsResp?.data || []
-      const existingAssessments = Array.isArray(existingAssessmentsData?.value) 
-        ? existingAssessmentsData.value 
-        : Array.isArray(existingAssessmentsData) 
-        ? existingAssessmentsData 
+      const assessmentsUrl = `${API_CONFIG.BASE_URL}${assessmentsEndpoint}`
+      
+      const assessmentsResponse = await fetch(assessmentsUrl, { method: 'GET', headers })
+      const assessmentsText = await assessmentsResponse.text()
+      let assessmentsData: any = null
+      try { assessmentsData = assessmentsText ? JSON.parse(assessmentsText) : null } catch { assessmentsData = null }
+      
+      const existingAssessments = Array.isArray(assessmentsData?.value) 
+        ? assessmentsData.value 
+        : Array.isArray(assessmentsData) 
+        ? assessmentsData 
         : []
       
       const results: any[] = []
@@ -1055,19 +1092,28 @@ export class CoursesService {
 
       for (const ass of assessments) {
         // Normalize grades array for sending - solo studentId y grade
+        // IMPORTANTE: studentId es UUID (string), NO number
         const gradesPayload = Array.isArray(ass.grades)
-          ? ass.grades.map((g: any) => ({ 
-              studentId: Number(g.studentId), 
-              grade: g.grade === null ? null : String(g.grade)
-            }))
+          ? ass.grades.map((g: any) => {
+              // studentId debe ser string (UUID), no number
+              const studentId = g.studentId ? String(g.studentId) : null
+              return {
+                studentId,
+                grade: g.grade === null ? null : String(g.grade)
+              }
+            })
           : []
 
-        // Intentar obtener el assessmentId: del parámetro o buscarlo en las evaluaciones existentes
-        let aid = Number(ass.assessmentId || ass.assessmentId === 0 ? ass.assessmentId : NaN)
+        // Intentar obtener el assessmentId (puede ser string UUID o number)
+        let aid: string | number | null = null
         
-        // Si no tiene assessmentId, buscar en las evaluaciones existentes por tipo
-        // Obtener desde GET /teaching/courses/{courseId}/assessments
-        if (!Number.isFinite(aid)) {
+        // Si viene directamente en el payload, usarlo (puede ser string o number)
+        if (ass.assessmentId !== null && ass.assessmentId !== undefined && ass.assessmentId !== '') {
+          aid = ass.assessmentId
+        }
+        
+        // Si no se encontró, buscar en las evaluaciones existentes por tipo
+        if (!aid) {
           const matchingAssessment = existingAssessments.find((ea: any) => {
             const eaType = String(ea.type || ea.tipo || '').toUpperCase()
             const assType = String(ass.tipo || '').toUpperCase()
@@ -1075,30 +1121,34 @@ export class CoursesService {
           })
           
           if (matchingAssessment) {
-            aid = Number(matchingAssessment.assessmentId || matchingAssessment.id)
-          } else {
-            console.warn(`[saveCourseGrades] No se encontró assessmentId para tipo ${ass.tipo} en las evaluaciones del curso`)
+            aid = matchingAssessment.assessmentId || matchingAssessment.id
           }
         }
         
-        // If assessmentId provided or found -> update grades via PUT to /teaching/assessments/{id}/grades
-        // IMPORTANTE: Solo se envía UNA evaluación a la vez (una columna por PUT)
-        if (Number.isFinite(aid)) {
-          const endpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
-            ? API_CONFIG.ENDPOINTS.GRADES(aid)
-            : `/teaching/assessments/${aid}/grades`
+        if (aid) {
+          // El endpoint es PUT a /grades:publish con body completo
+          // PUT /teaching/assessments/{assessmentId}/grades:publish
+          const gradesEndpoint = typeof API_CONFIG.ENDPOINTS.GRADES === 'function'
+            ? `${API_CONFIG.ENDPOINTS.GRADES(aid)}:publish`
+            : `/teaching/assessments/${aid}/grades:publish`
 
-          // Body con solo esta evaluación (una columna)
+          const gradesUrl = `${API_CONFIG.BASE_URL}${gradesEndpoint}`
           const body = { courseId, grades: gradesPayload }
           
           try {
-            const resp = await apiClient.put<any>(endpoint, body)
+            const gradesResponse = await fetch(gradesUrl, { 
+              method: 'PUT', 
+              headers, 
+              body: JSON.stringify(body) 
+            })
+            const gradesText = await gradesResponse.text()
+            let gradesData: any = null
+            try { gradesData = gradesText ? JSON.parse(gradesText) : null } catch { gradesData = null }
             
-            if (resp && resp.success) {
-              // Guardar el assessmentId para poder publicarlo después
-              results.push({ ...resp.data, assessmentId: aid, tipo: ass.tipo })
+            if (gradesResponse.ok) {
+              results.push({ ...gradesData, assessmentId: aid, tipo: ass.tipo })
             } else {
-              const errorMsg = `Error en ${ass.tipo}: ${resp?.error || 'Error desconocido'}`
+              const errorMsg = `Error en ${ass.tipo}: ${gradesData?.message || `HTTP ${gradesResponse.status}`}`
               errors.push(errorMsg)
             }
           } catch (err) {
@@ -1106,30 +1156,24 @@ export class CoursesService {
             errors.push(errorMsg)
           }
         } else {
-          // No assessmentId -> evaluación no existe, registrar error
           const errorMsg = `No se encontró evaluación para ${ass.tipo}. Debe crear la evaluación primero.`
           errors.push(errorMsg)
         }
       }
 
-      // Retornar resultado final con los assessmentIds que se guardaron exitosamente
-      // Esto permite que el componente sepa qué evaluaciones publicar
       if (errors.length > 0 && results.length === 0) {
-        // Todos fallaron
         return { 
           data: null as any, 
           success: false, 
           error: `Todas las evaluaciones fallaron:\n${errors.join('\n')}` 
         }
       } else if (errors.length > 0 && results.length > 0) {
-        // Algunos exitosos, algunos fallaron
         return { 
           data: results, 
           success: true, 
           message: `${results.length} evaluación(es) guardada(s). ${errors.length} error(es):\n${errors.join('\n')}` 
         }
       } else {
-        // Todos exitosos - results contiene los assessmentIds guardados
         return { 
           data: results, 
           success: true, 

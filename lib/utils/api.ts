@@ -48,6 +48,34 @@ class ApiClient {
   }
 
   /**
+   * Establece el header X-Teacher-Roles con el rol del docente en un curso específico.
+   * Valores: 'TITULAR' o 'AUXILIAR'
+   */
+  setTeacherRoleHeader(role: string) {
+    if (role) {
+      this.headers['X-Teacher-Roles'] = role.toUpperCase()
+      console.log('✅ X-Teacher-Roles establecido:', role.toUpperCase())
+    }
+  }
+
+  /**
+   * Configura ambos headers X-Teacher-Id y X-Teacher-Roles para llamadas al backend propio
+   */
+  setTeacherHeaders(uuid?: string, role?: string) {
+    this.setRealTeacherIdHeader(uuid)
+    if (role) {
+      this.setTeacherRoleHeader(role)
+    }
+  }
+
+  /**
+   * Limpia el header X-Teacher-Roles
+   */
+  clearTeacherRoleHeader() {
+    delete this.headers['X-Teacher-Roles']
+  }
+
+  /**
    * Hacer un request estableciendo temporalmente el X-Teacher-Id con el UUID real
    */
   async withTeacherIdHeader<T>(requestFn: () => Promise<T>): Promise<T> {

@@ -31,16 +31,16 @@ import { authService } from '@/lib/api/services/auth'
 import CourseNotFound from '@/app/cursos/[id]/not-found'
 
 /**
- * Helper: Configura el header X-Teacher-Id con el UUID real del docente.
- * Usar para llamadas al backend de nuestro módulo que requieren este header.
+ * Helper: Configura los headers X-Teacher-Id y X-Teacher-Roles con el UUID real del docente.
+ * Usar para llamadas al backend de nuestro módulo que requieren estos headers.
+ * @param teacherRole - Rol del docente en el curso: 'TITULAR' o 'AUXILIAR'
  */
-const setRealTeacherHeader = () => {
+const setRealTeacherHeader = (teacherRole?: string) => {
   const teacherUUID = authService.getTeacherUUID()
   if (teacherUUID) {
-    apiClient.setRealTeacherIdHeader(teacherUUID)
+    apiClient.setTeacherHeaders(teacherUUID, teacherRole)
   } else {
     // Fallback: si no hay UUID real, usar el mock (para desarrollo)
-    console.warn('⚠️ [CourseInfo] No hay UUID real del docente, usando mock...')
     try { 
       apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) 
     } catch {}
@@ -570,6 +570,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [hasUnsavedAttendance, setHasUnsavedAttendance] = useState(false)
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false)
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
+  
+  // Rol del docente actual en este curso (TITULAR o AUXILIAR)
+  // Se obtiene de la lista de docentes del curso comparando con el UUID del usuario logueado
+  const [currentTeacherRole, setCurrentTeacherRole] = useState<string | undefined>(undefined)
 
   // Bloquear scroll del body cuando el modal de preview está abierto
   useEffect(() => {
@@ -602,6 +606,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     let mounted = true
     const loadActs = async () => {
       try {
+        // Pasar el rol del docente si está disponible
         const resp = await CoursesService.getActs(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success) {
@@ -629,7 +634,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [originalGradesData, setOriginalGradesData] = useState<Record<string, Record<string, string>>>({})
   const [loadingGrades, setLoadingGrades] = useState(false)
   // Estado para guardar los assessmentId de cada tipo de evaluación
-  const [assessmentIds, setAssessmentIds] = useState<Record<string, number>>({})
+  const [assessmentIds, setAssessmentIds] = useState<Record<string, string | number>>({})
   // Estado para almacenar los datos del preview del acta
   const [actsPreviewData, setActsPreviewData] = useState<any>(null)
 
@@ -673,14 +678,13 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Calificaciones'
       setLoadingGrades(true)
       try {
-        // Establecer X-Teacher-Id con el UUID real del docente
-        setRealTeacherHeader()
         const resp = await CoursesService.getCourseGrades(getCourseIdForApi())
         if (!mounted) return
+        
         if (resp && resp.success && Array.isArray(resp.data)) {
           const assessments: any[] = resp.data
           const updated: Record<string, Record<string, string>> = {}
-          const assessmentIdsMap: Record<string, number> = {}
+          const assessmentIdsMap: Record<string, string | number> = {}
 
           // Map assessment types to internal grade keys
           // Mapeo directo entre tipos del backend y claves internas
@@ -702,29 +706,33 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           for (const ass of assessments) {
             const key = mapTipoToKey(ass.tipo)
             if (!key) {
-              console.warn(`⚠️ Tipo de evaluación no reconocido: ${ass.tipo}`)
               continue
             }
             
             // Guardar el assessmentId para este tipo de evaluación
+            // IMPORTANTE: Guardar incluso si no hay grades, porque el assessment existe en el backend
             if (ass.assessmentId) {
               assessmentIdsMap[key] = ass.assessmentId
             }
             
             const gradesArr = Array.isArray(ass.grades) ? ass.grades : []
+            
             for (const g of gradesArr) {
-          const sid = String(g.studentId ?? g.studentId)
-          if (!updated[sid]) updated[sid] = {}
-          // Sanitize backend values to ensure only numeric grades (rounded to 0.5) are stored
-          const sanitized = validateAndRoundGrade(String(g.grade ?? ''))
-          updated[sid][key] = sanitized
+              const sid = String(g.studentId ?? g.studentId)
+              
+              if (!updated[sid]) updated[sid] = {}
+              // Sanitize backend values to ensure only numeric grades (rounded to 0.5) are stored
+              const sanitized = validateAndRoundGrade(String(g.grade ?? ''))
+              updated[sid][key] = sanitized
             }
           }
 
           // Ensure all students exist in the map (even if empty)
           for (const s of students) {
             const sid = String(s.id)
-            if (!updated[sid]) updated[sid] = {}
+            if (!updated[sid]) {
+              updated[sid] = {}
+            }
           }
 
           // Calculate final condition for each student
@@ -741,12 +749,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
           setGradesData(updated)
           setAssessmentIds(assessmentIdsMap)
-        } else {
-          // no data or error - keep existing gradesData
-          console.warn('No grades data returned', resp?.error)
         }
       } catch (err) {
-        console.warn('Error loading grades:', err)
       } finally {
         if (mounted) {
           setLoadingGrades(false)
@@ -867,7 +871,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           
           if (isUUID) {
             // Usar API externa para cursos con UUID
-            console.log(`[CourseInfo] Cargando curso por UUID: ${courseId}`)
             partsResp = await CoursesService.getCourseParticipantsByUUID(courseId)
           } else {
             // Usar API interna para cursos con ID numérico (legacy)
@@ -912,6 +915,23 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               role: t.role || 'Docente',
               dni: t.dni
             }))
+
+            // Detectar el rol del docente actual en este curso
+            const myUUID = authService.getTeacherUUID()
+            if (myUUID && teachersFromBackend.length > 0) {
+              const myTeacher = teachersFromBackend.find((t: any) => 
+                (t.uuid || t.teacherId || t.id) === myUUID
+              )
+              if (myTeacher) {
+                // El rol puede venir como 'Titular', 'TITULAR', 'Auxiliar', 'AUXILIAR'
+                const role = (myTeacher.role || '').toUpperCase()
+                const normalizedRole = role.includes('TITULAR') ? 'TITULAR' : 
+                                       role.includes('AUXILIAR') ? 'AUXILIAR' : 
+                                       role.includes('AUX') ? 'AUXILIAR' : undefined
+                setCurrentTeacherRole(normalizedRole)
+              } else {
+              }
+            }
 
             // Para cursos con UUID, los datos ya vienen normalizados
             if (isUUID) {
@@ -1008,7 +1028,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             setCourseNotFound(true)
           } else {
             setCourseLoadError(errorMessage)
-            console.warn('Error loading course details or roster:', err)
           }
         } finally {
           if (mounted) setLoadingCourse(false)
@@ -1030,15 +1049,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         if (mounted && previewResp && previewResp.success && previewResp.data) {
           setActsPreviewData(previewResp.data)
         } else if (mounted) {
-          console.warn('[CourseInfo] Acts preview not available:', previewResp?.error || 'No data')
           // Si el preview falla, los estados de loading se actualizarán cuando se carguen los datos de calificaciones/asistencia
         }
       } catch (previewErr) {
-        console.error('[CourseInfo] Error loading acts preview:', previewErr)
       }
     }
     
-    // Cargar siempre, independientemente de la pestaña activa
     if (courseId) {
       loadPreview()
     }
@@ -1427,7 +1443,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       URL.revokeObjectURL(url)
     } catch (err) {
       // Si no está la dependencia, caemos a CSV
-      console.warn("xlsx no disponible, exportando CSV", err)
       downloadCSVPreview()
     }
   }
@@ -1498,7 +1513,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const loadRecords = async () => {
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Asistencia'
       try {
-        setRealTeacherHeader()
         const resp = await CoursesService.getAttendanceRecords(getCourseIdForApi())
         if (!mounted) return
         if (resp && resp.success && Array.isArray(resp.data)) {
@@ -1554,7 +1568,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 }
               }
             } catch (err) {
-              console.warn(`Error loading attendance for date ${dateStr}:`, err)
             }
             return null
           })
@@ -1574,7 +1587,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           setAttendanceRecordsByMonth({})
         }
       } catch (err) {
-        console.warn('Error cargando attendance records:', err)
         setAttendanceRecordsByMonth({})
       } finally {
         // Loading completado
@@ -1629,7 +1641,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       setIsLoadingAttendance(true)
       
       try {
-        setRealTeacherHeader()
         const yyyy = selectedDateObj.getFullYear()
         const mm = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
         const dd = String(selectedDateObj.getDate()).padStart(2, '0')
@@ -1669,7 +1680,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         }))
         setHasUnsavedAttendance(false)
       } catch (err) {
-        console.warn('Error cargando asistencia por fecha:', err)
       } finally {
         if (mounted) {
           setIsLoadingAttendance(false)
@@ -1802,7 +1812,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         
         // studentId viene del backend como UUID string, NO convertir a número
         if (!student.id) {
-          console.warn('[saveAttendance] Estudiante sin ID, omitiendo:', student)
           return null
         }
         
@@ -1824,7 +1833,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setIsSavingAttendance(true)
     
     try {
-      setRealTeacherHeader()
       const resp = await CoursesService.saveAttendanceByDate(getCourseIdForApi(), dateIso, items)
       
       // Desactivar loader
@@ -2170,6 +2178,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     setShowGradesSaveModal(false)
     const doSave = async () => {
       try {
+        
         setSavingGrades(true)
         // Build payload: array of assessments with grades per student
         const keys = ["1P", "2P", "REC", "FINAL"]
@@ -2244,66 +2253,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           return
         }
 
-        // Establecer X-Teacher-Id con el UUID real del docente
-        setRealTeacherHeader()
         const resp = await CoursesService.saveCourseGrades(getCourseIdForApi(), assessments)
         
         if (resp && resp.success) {
-          // Después de guardar exitosamente, publicar las calificaciones de cada evaluación
-          // IMPORTANTE: Solo se publica UNA evaluación a la vez (una columna por publicación)
-          const assessmentIdsToPublish: number[] = []
-          
-          // Recopilar los assessmentIds que se guardaron exitosamente desde los resultados
-          // El servicio devuelve los assessmentIds en resp.data
-          if (resp.data && Array.isArray(resp.data)) {
-            for (const result of resp.data) {
-              if (result && result.assessmentId && Number.isFinite(Number(result.assessmentId))) {
-                assessmentIdsToPublish.push(Number(result.assessmentId))
-              }
-            }
-          }
-          
-          // Si no hay resultados en resp.data, intentar obtenerlos del array assessments original
-          if (assessmentIdsToPublish.length === 0) {
-            for (const ass of assessments) {
-              const assessmentId = ass.assessmentId
-              if (assessmentId && Number.isFinite(Number(assessmentId))) {
-                assessmentIdsToPublish.push(Number(assessmentId))
-              }
-            }
-          }
-
-          // Publicar calificaciones para cada evaluación guardada
-          // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
-          
-          let publishedCount = 0
-          let noChangesCount = 0
-
-          for (const assessmentId of assessmentIdsToPublish) {
-            try {
-              // Delay antes de publicar para asegurar que el backend haya procesado el guardado
-              // El backend necesita tiempo para actualizar la base de datos y estar listo para generar el evento
-              await new Promise(resolve => setTimeout(resolve, 500))
-              
-              // Solo usar X-Teacher-Id (el backend genera el evento automáticamente)
-              // publishGrades ya establece solo X-Teacher-Id internamente
-              const publishResp = await CoursesService.publishGrades(assessmentId)
-              if (publishResp && publishResp.success && publishResp.data) {
-                if (publishResp.data.publishedCount > 0 && publishResp.data.publishedAt) {
-                  publishedCount++
-                } else {
-                  noChangesCount++
-                }
-              } else if (publishResp && !publishResp.success) {
-                // Si hay un error, loguearlo pero continuar
-                console.warn(`Error publicando evaluación ${assessmentId}:`, publishResp.error)
-                // No incrementar contadores si falla
-              }
-            } catch (publishErr) {
-              console.warn(`Excepción al publicar evaluación ${assessmentId}:`, publishErr)
-              // Continuar con las demás evaluaciones aunque una falle
-            }
-          }
+          // NOTA: El PUT a /grades:publish ya guarda y publica en un solo paso
+          // No es necesario hacer un POST adicional de publicación
 
           // Actualizar las calificaciones originales después de guardar exitosamente
           // Esto asegura que solo se envíen cambios futuros, no las que ya se guardaron
@@ -2317,8 +2271,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           setIsEditingGrades(false)
           setGradesAlertType('success')
           
-          // Mensaje simple de éxito
-          const message = 'Evaluación(es) guardada(s) correctamente'
+          // Mensaje simple de éxito (el PUT a /grades:publish guarda y publica en un solo paso)
+          const message = 'Calificaciones guardadas y publicadas correctamente'
           
           setGradesAlertMessage(message)
           setShowGradesAlertModal(true)
@@ -3905,9 +3859,6 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   onClick={async () => {
                     try {
                       setGeneratingAct(true)
-                      // Establecer X-Teacher-Id con el UUID real del docente
-                      setRealTeacherHeader()
-
                       const resp = await CoursesService.confirmAct(getCourseIdForApi())
                       if (resp && resp.success) {
                         // keep the preview download for offline copy
