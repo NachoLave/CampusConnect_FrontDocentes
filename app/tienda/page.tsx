@@ -112,11 +112,16 @@ export default function TiendaPage() {
             <span className="text-blue-600 underline cursor-pointer">sitio oficial</span>
           </p>
         </div>
-        <Button className="bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2">
+        <a
+          href="https://uade-store.vercel.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors"
+        >
           <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
           <span className="hidden sm:inline">Visitar Tienda</span>
           <span className="sm:hidden">Tienda</span>
-        </Button>
+        </a>
       </div>
 
       {/* Filters Section */}

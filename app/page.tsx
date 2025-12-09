@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { Calendar, Clock, BookOpen, ChevronLeft, ChevronRight, Zap, Users } from "lucide-react"
+import { Calendar, Clock, BookOpen, ChevronLeft, ChevronRight, Zap, Users, ArrowRight, Wallet } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
@@ -588,9 +588,10 @@ export default function DashboardPage() {
                 <h2 className="text-lg md:text-xl font-semibold text-slate-700">Próxima clase</h2>
                 <Link
                   href="/cursos"
-                  className="text-sm text-slate-600 hover:text-slate-800 hover:underline font-medium"
+                  className="flex items-center gap-1 text-sm text-slate-600 hover:text-slate-800 hover:underline font-medium transition-colors group"
                 >
-                  Mis Cursos
+                  <span>Mis Cursos</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
               </div>
 
@@ -634,6 +635,13 @@ export default function DashboardPage() {
               <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Saldo</h3>
+                  <Link
+                    href="/billetera"
+                    className="flex items-center gap-1 text-sm text-slate-600 hover:text-slate-800 hover:underline font-medium transition-colors group"
+                  >
+                    <span>Billetera</span>
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </Link>
                 </div>
                 {balanceLoading ? (
                   <InlineBalanceSkeleton />
@@ -650,6 +658,13 @@ export default function DashboardPage() {
               <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-slate-700">Mis reservas</h3>
+                  <Link
+                    href="/comedor"
+                    className="flex items-center gap-1 text-sm text-slate-600 hover:text-slate-800 hover:underline font-medium transition-colors group"
+                  >
+                    <span>Comedor</span>
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </Link>
                 </div>
                   <div className="flex items-center gap-2 mb-2">
                     <Calendar className="h-4 w-4 text-gray-500" />
