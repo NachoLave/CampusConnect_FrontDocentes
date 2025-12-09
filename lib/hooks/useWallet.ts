@@ -214,11 +214,11 @@ export function useWalletActions() {
     }
   }, [])
 
-  const creditBalance = useCallback(async (amount: number, teacherId: number = 1010) => {
+  const creditBalance = useCallback(async (amount: number) => {
     setLoadingState({ isLoading: true, error: null })
     
     try {
-      const response = await WalletService.creditBalance(amount, teacherId)
+      const response = await WalletService.creditBalance(amount)
       
       if (response.success) {
         setLoadingState({ isLoading: false, error: null })

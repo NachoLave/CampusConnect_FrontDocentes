@@ -1,10 +1,13 @@
-import { WalletInfo, Transaction, ApiResponse } from '@/lib/types'
+import { WalletInfo, Transaction, ApiResponse, ExternalWallet, ExternalTransfer } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import walletData from '@/lib/data/wallet.json'
 import { GraduationCap, DollarSign, UtensilsCrossed } from 'lucide-react'
-import { postmanProxy } from '@/lib/utils/postmanProxy'
+import { authService } from './auth'
+
+// URL base de la API externa de billetera
+const WALLET_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api'
 
 // Interfaz para las transacciones del historial del backend
 export interface WalletHistoryItem {
@@ -12,6 +15,7 @@ export interface WalletHistoryItem {
   tipo: 'EGRESO' | 'INGRESO'
   fecha: string
   monto: number
+  currency?: string
 }
 
 // Mapeo de iconos para los datos mock
@@ -28,38 +32,69 @@ export class WalletService {
   // Método para actualizar el balance manualmente (desde Postman)
   static updateBalanceFromPostman(newBalance: number) {
     this.currentBalance = newBalance
-    console.log(`Balance actualizado desde Postman: $${newBalance}`)
   }
-  // Obtener información de la billetera
+  // Obtener información de la billetera desde la API externa
   static async getWalletInfo(): Promise<ApiResponse<WalletInfo>> {
     try {
-      // Obtener balance real del backend
-      const balanceResponse = await this.getBalance()
-
-      if (balanceResponse.success && balanceResponse.data !== null && balanceResponse.data !== undefined) {
-        // Combinar balance real con información mock para el resto
-        const walletInfo: WalletInfo = {
-          ...walletData.walletInfo,
-          balance: balanceResponse.data // Usar el balance real del backend
-        }
-
-        return {
-          data: walletInfo,
-          success: true,
-          message: 'Información de billetera obtenida correctamente desde el backend'
-        }
-      } else {
-        // No usar datos mock - devolver error real
+      const token = authService.getToken()
+      if (!token) {
         return {
           data: null as any,
           success: false,
-          error: balanceResponse.error || 'No se pudo obtener el balance del backend',
+          error: 'No hay token de autenticación',
           message: 'No se pudo obtener la información de la billetera'
         }
       }
+
+      const response = await fetch(`${WALLET_API_URL}/wallets/mine`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        return {
+          data: null as any,
+          success: false,
+          error: `Error del servidor: ${response.status}`,
+          message: 'No se pudo obtener la información de la billetera'
+        }
+      }
+
+      const result: { success: boolean; data: ExternalWallet[] } = await response.json()
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'No se encontró información de billetera',
+          message: 'No se pudo obtener la información de la billetera'
+        }
+      }
+
+      const wallet = result.data[0] // Usar la primera billetera
+      const accountNumber = `DOC-${wallet.uuid.substring(0, 4).toUpperCase()}`
+      const balance = parseFloat(wallet.balance)
+
+      const walletInfo: WalletInfo = {
+        balance,
+        accountType: 'DOCENTE', // Hardcoded
+        accountNumber,
+        status: wallet.status === 'active' ? 'active' : wallet.status === 'inactive' ? 'inactive' : 'suspended',
+        lastUpdated: new Date().toISOString(),
+        currency: wallet.currency
+      }
+
+      return {
+        data: walletInfo,
+        success: true,
+        message: 'Información de billetera obtenida correctamente'
+      }
     } catch (error) {
-      console.error('Error obteniendo información de billetera real:', error)
-      // Retornar error para que el usuario sepa que hay un problema
       return {
         data: null as any,
         success: false,
@@ -69,31 +104,67 @@ export class WalletService {
     }
   }
 
-  // Obtener saldo actual
+  // Obtener saldo actual desde la API externa
   static async getBalance(): Promise<ApiResponse<number>> {
     try {
-      // Usar el proxy de Postman para obtener el balance real
-      const balance = await postmanProxy.getBalance()
+      const token = authService.getToken()
+      if (!token) {
+        return {
+          data: 0,
+          success: false,
+          error: 'No hay token de autenticación',
+          message: 'No se pudo obtener el saldo'
+        }
+      }
+
+      const response = await fetch(`${WALLET_API_URL}/wallets/mine`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        return {
+          data: 0,
+          success: false,
+          error: `Error del servidor: ${response.status}`,
+          message: 'No se pudo obtener el saldo'
+        }
+      }
+
+      const result: { success: boolean; data: ExternalWallet[] } = await response.json()
       
+      if (!result.success || !result.data || result.data.length === 0) {
+        return {
+          data: 0,
+          success: false,
+          error: 'No se encontró información de billetera',
+          message: 'No se pudo obtener el saldo'
+        }
+      }
+
+      const wallet = result.data[0]
+      const balance = parseFloat(wallet.balance)
+
       return {
         data: balance,
         success: true,
-        message: 'Saldo obtenido desde el backend'
+        message: 'Saldo obtenido correctamente'
       }
     } catch (error) {
-      console.error('Error obteniendo saldo real:', error)
-      
-      // No usar datos mock como fallback - devolver error real
       return {
         data: 0,
         success: false,
-        error: error instanceof Error ? error.message : 'Error al obtener el saldo del backend',
-        message: 'No se pudo obtener el saldo del backend'
+        error: error instanceof Error ? error.message : 'Error desconocido',
+        message: 'No se pudo obtener el saldo'
       }
     }
   }
 
-  // Obtener transacciones
+  // Obtener transacciones (método legacy - usar getWalletHistory en su lugar)
   static async getTransactions(): Promise<ApiResponse<Transaction[]>> {
     if (APP_CONFIG.USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -111,10 +182,15 @@ export class WalletService {
       }
     }
 
-    return apiClient.get<Transaction[]>(API_CONFIG.ENDPOINTS.WALLET_TRANSACTIONS)
+    // Método legacy - devolver vacío ya que ahora se usa getWalletHistory
+    return {
+      data: [],
+      success: false,
+      error: 'Este método está deprecado. Use getWalletHistory() en su lugar.'
+    }
   }
 
-  // Obtener transacciones con paginación
+  // Obtener transacciones con paginación (método legacy - usar getWalletHistory en su lugar)
   static async getTransactionsPaginated(page: number = 1, limit: number = 10): Promise<ApiResponse<{
     transactions: Transaction[]
     total: number
@@ -147,16 +223,20 @@ export class WalletService {
       }
     }
 
-    const endpoint = `${API_CONFIG.ENDPOINTS.WALLET_TRANSACTIONS}?page=${page}&limit=${limit}`
-    return apiClient.get<{
-      transactions: Transaction[]
-      total: number
-      page: number
-      totalPages: number
-    }>(endpoint)
+    // Método legacy - devolver vacío ya que ahora se usa getWalletHistory
+    return {
+      data: {
+        transactions: [],
+        total: 0,
+        page,
+        totalPages: 0
+      },
+      success: false,
+      error: 'Este método está deprecado. Use getWalletHistory() en su lugar.'
+    }
   }
 
-  // Cargar saldo (para futuras funcionalidades)
+  // Cargar saldo (método legacy - usar creditBalance en su lugar)
   static async loadBalance(amount: number, paymentMethod: string): Promise<ApiResponse<{
     newBalance: number
     transactionId: string
@@ -177,13 +257,15 @@ export class WalletService {
       }
     }
 
-    return apiClient.post<{
-      newBalance: number
-      transactionId: string
-    }>(API_CONFIG.ENDPOINTS.WALLET_BALANCE, { amount, paymentMethod })
+    // Método legacy - usar creditBalance en su lugar
+    return {
+      data: null as any,
+      success: false,
+      error: 'Este método está deprecado. Use creditBalance() en su lugar.'
+    }
   }
 
-  // Realizar pago (para futuras funcionalidades)
+  // Realizar pago (método legacy - no implementado aún)
   static async makePayment(amount: number, description: string, category: string): Promise<ApiResponse<{
     newBalance: number
     transactionId: string
@@ -212,70 +294,161 @@ export class WalletService {
       }
     }
 
-    return apiClient.post<{
-      newBalance: number
-      transactionId: string
-    }>(`${API_CONFIG.ENDPOINTS.WALLET}/payment`, { amount, description, category })
+    // Método legacy - no implementado aún con los nuevos endpoints
+    return {
+      data: null as any,
+      success: false,
+      error: 'Este método aún no está implementado con los nuevos endpoints.'
+    }
   }
 
-  // Obtener historial de wallet del año completo
+  // Obtener historial de wallet del año completo desde la API externa
   static async getWalletHistory(year: number = new Date().getFullYear()): Promise<ApiResponse<WalletHistoryItem[]>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
-      
-      const fromDate = `${year}-01-01`
-      const toDate = `${year}-12-31`
-      const endpoint = `${API_CONFIG.ENDPOINTS.WALLET_HISTORY}?from=${fromDate}&to=${toDate}`
-      
-      const resp = await apiClient.get<WalletHistoryItem[]>(endpoint)
-      if (!resp || !resp.success) {
-        return { data: [] as WalletHistoryItem[], success: false, error: resp?.error || 'Error obteniendo historial' }
+      const token = authService.getToken()
+      if (!token) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: 'No hay token de autenticación'
+        }
       }
+
+      const response = await fetch(`${WALLET_API_URL}/transfers/mine`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: `Error del servidor: ${response.status}`
+        }
+      }
+
+      const result: { success: boolean; data: ExternalTransfer[] } = await response.json()
       
-      // Ordenar del más reciente al más antiguo (por fecha descendente)
-      const sorted = Array.isArray(resp.data) 
-        ? [...resp.data].sort((a, b) => {
-            const dateA = new Date(a.fecha).getTime()
-            const dateB = new Date(b.fecha).getTime()
-            return dateB - dateA // Más reciente primero
-          })
-        : []
-      
-      return { data: sorted, success: true, message: 'Historial obtenido correctamente' }
+      if (!result.success || !result.data) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: 'No se encontró historial de transacciones'
+        }
+      }
+
+      // Filtrar por año y mapear al formato esperado
+      const yearTransfers = result.data.filter(transfer => {
+        const transferYear = new Date(transfer.processed_at || transfer.created_at).getFullYear()
+        return transferYear === year
+      })
+
+      const historyItems: WalletHistoryItem[] = yearTransfers.map(transfer => ({
+        nombre: transfer.description || 'Transacción',
+        tipo: transfer.type === 'credit' ? 'INGRESO' : 'EGRESO',
+        fecha: transfer.processed_at || transfer.created_at,
+        monto: parseFloat(transfer.amount) * (transfer.type === 'credit' ? 1 : -1),
+        currency: transfer.currency
+      }))
+
+      // Ordenar del más reciente al más antiguo
+      const sorted = historyItems.sort((a, b) => {
+        const dateA = new Date(a.fecha).getTime()
+        const dateB = new Date(b.fecha).getTime()
+        return dateB - dateA
+      })
+
+      return {
+        data: sorted,
+        success: true,
+        message: 'Historial obtenido correctamente'
+      }
     } catch (error) {
-      return { data: [] as WalletHistoryItem[], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+      return {
+        data: [] as WalletHistoryItem[],
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
     }
   }
 
-  // Obtener historial de wallet del mes actual (para gráfico)
+  // Obtener historial de wallet del mes actual (para gráfico) desde la API externa
   static async getWalletHistoryCurrentMonth(): Promise<ApiResponse<WalletHistoryItem[]>> {
     try {
-      try { apiClient.setMockHeaders(APP_CONFIG.MOCK_TEACHER_ID, APP_CONFIG.MOCK_TEACHER_ROLES) } catch {}
-      
-      const now = new Date()
-      const year = now.getFullYear()
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-      const fromDate = `${year}-${month}-01`
-      
-      // Obtener último día del mes
-      const lastDay = new Date(year, now.getMonth() + 1, 0).getDate()
-      const toDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
-      
-      const endpoint = `${API_CONFIG.ENDPOINTS.WALLET_HISTORY}?from=${fromDate}&to=${toDate}`
-      
-      const resp = await apiClient.get<WalletHistoryItem[]>(endpoint)
-      if (!resp || !resp.success) {
-        return { data: [] as WalletHistoryItem[], success: false, error: resp?.error || 'Error obteniendo historial del mes' }
+      const token = authService.getToken()
+      if (!token) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: 'No hay token de autenticación'
+        }
       }
+
+      const response = await fetch(`${WALLET_API_URL}/transfers/mine`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: `Error del servidor: ${response.status}`
+        }
+      }
+
+      const result: { success: boolean; data: ExternalTransfer[] } = await response.json()
       
-      return { data: Array.isArray(resp.data) ? resp.data : [], success: true, message: 'Historial del mes obtenido correctamente' }
+      if (!result.success || !result.data) {
+        return {
+          data: [] as WalletHistoryItem[],
+          success: false,
+          error: 'No se encontró historial de transacciones'
+        }
+      }
+
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      const currentMonth = now.getMonth()
+
+      // Filtrar por mes actual
+      const monthTransfers = result.data.filter(transfer => {
+        const transferDate = new Date(transfer.processed_at || transfer.created_at)
+        return transferDate.getFullYear() === currentYear && transferDate.getMonth() === currentMonth
+      })
+
+      const historyItems: WalletHistoryItem[] = monthTransfers.map(transfer => ({
+        nombre: transfer.description || 'Transacción',
+        tipo: transfer.type === 'credit' ? 'INGRESO' : 'EGRESO',
+        fecha: transfer.processed_at || transfer.created_at,
+        monto: parseFloat(transfer.amount) * (transfer.type === 'credit' ? 1 : -1),
+        currency: transfer.currency
+      }))
+
+      return {
+        data: historyItems,
+        success: true,
+        message: 'Historial del mes obtenido correctamente'
+      }
     } catch (error) {
-      return { data: [] as WalletHistoryItem[], success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+      return {
+        data: [] as WalletHistoryItem[],
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
     }
   }
 
-  // Acreditar saldo usando tarjeta de crédito
-  static async creditBalance(amount: number, teacherId: number = 1010): Promise<ApiResponse<{
+  // Acreditar saldo usando tarjeta de crédito (POST /api/transfers)
+  static async creditBalance(amount: number): Promise<ApiResponse<{
     newBalance: number
     transactionId: string
   }>> {
@@ -289,53 +462,108 @@ export class WalletService {
         }
       }
 
-      console.log('Intentando acreditar saldo:', { amount, teacherId })
-
-      // Usar los mismos headers que postmanProxy para autenticación mock
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Content-Type': 'application/json'
+      const token = authService.getToken()
+      if (!token) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'No hay token de autenticación'
+        }
       }
 
-      console.log('Headers de autenticación:', headers)
-
-      // Usar fetch directamente con los mismos headers que postmanProxy
-      const response = await fetch('https://modulodocentefinal-production.up.railway.app/teachers/me/account/balance', {
-        method: 'PUT',
-        headers: headers,
-        body: JSON.stringify({
-          id: teacherId,
-          amount: amount
-        })
+      // Obtener el UUID de la wallet del docente desde el endpoint /wallets/mine
+      // Esto garantiza que siempre tengamos el UUID correcto de la billetera activa
+      const walletResponse = await fetch(`${WALLET_API_URL}/wallets/mine`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       })
 
-      console.log('Status de respuesta:', response.status)
-      console.log('Headers de respuesta:', response.headers)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Error del servidor:', errorText)
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
+      if (!walletResponse.ok) {
+        return {
+          data: null as any,
+          success: false,
+          error: `Error obteniendo información de billetera: ${walletResponse.status}`
+        }
       }
 
-      const data = await response.json()
-      console.log('Datos de respuesta:', data)
+      const walletResult: { success: boolean; data: ExternalWallet[] } = await walletResponse.json()
+      
+      if (!walletResult.success || !walletResult.data || walletResult.data.length === 0) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'No se encontró información de billetera del docente'
+        }
+      }
+
+      // Usar el UUID de la primera wallet (billetera del docente logeado)
+      const walletUUID = walletResult.data[0].uuid
+
+      // Asegurar que amount sea un número (no string)
+      const numericAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+      if (isNaN(numericAmount) || numericAmount <= 0) {
+        return {
+          data: null as any,
+          success: false,
+          error: 'El monto debe ser un número válido mayor a 0'
+        }
+      }
+
+      // Preparar el body según la especificación (todos los campos fijos excepto amount)
+      const body = {
+        from: 'SYSTEM',
+        to: walletUUID, // UUID de la billetera obtenido del endpoint /wallets/mine
+        currency: 'ARG',
+        amount: numericAmount, // Solo este campo varía según lo que ingresa el usuario
+        type: 'credit',
+        description: 'Carga de Saldo'
+      }
+
+      const url = `${WALLET_API_URL}/transfers`
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+
+      const responseText = await response.text()
+      let data: any = null
+      try {
+        data = responseText ? JSON.parse(responseText) : null
+      } catch {
+        data = null
+      }
+
+      if (!response.ok) {
+        return {
+          data: null as any,
+          success: false,
+          error: `Error del servidor: ${response.status} - ${responseText || 'Sin detalles'}`
+        }
+      }
+      
+      // Obtener el nuevo balance después de la carga
+      const balanceResponse = await this.getBalance()
+      const newBalance = balanceResponse.success ? balanceResponse.data : amount
 
       return {
         data: {
-          newBalance: data.balance || amount,
-          transactionId: `CREDIT-${Date.now()}`
+          newBalance,
+          transactionId: data.uuid || `CREDIT-${Date.now()}`
         },
         success: true,
         message: 'Saldo acreditado correctamente'
       }
     } catch (error) {
-      console.error('Error acreditando saldo:', error)
       return {
         data: null as any,
         success: false,

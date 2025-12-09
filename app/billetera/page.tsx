@@ -7,7 +7,6 @@ import Link from "next/link"
 import { useBalance } from "@/lib/hooks/useWallet"
 import { InlineBalanceSkeleton, Skeleton, TextSkeleton } from "@/components/ui/loaders"
 import { WalletService, WalletHistoryItem } from "@/lib/api/services/wallet"
-import { TeacherService } from "@/lib/api/services/teacher"
 import { GraduationCap, DollarSign, UtensilsCrossed, BookOpen } from "lucide-react"
 
 // Función para obtener icono según el nombre de la transacción
@@ -43,7 +42,7 @@ export default function BilleteraPage() {
   const [loadingMonthHistory, setLoadingMonthHistory] = useState(true)
   
   // Estados para información de cuenta
-  const [teacherLegajo, setTeacherLegajo] = useState<string | null>(null)
+  const [accountInfo, setAccountInfo] = useState<{ accountNumber: string; status: string; currency: string } | null>(null)
   const [loadingAccountInfo, setLoadingAccountInfo] = useState(true)
   
   // Usar el hook de balance para obtener datos reales
@@ -72,7 +71,7 @@ export default function BilleteraPage() {
           setHistoryItems(resp.data)
         }
       } catch (err) {
-        console.error('Error loading wallet history:', err)
+        // Error silencioso
       } finally {
         if (mounted) setLoadingHistory(false)
       }
@@ -92,7 +91,7 @@ export default function BilleteraPage() {
           setMonthHistoryItems(resp.data)
         }
       } catch (err) {
-        console.error('Error loading month history:', err)
+        // Error silencioso
       } finally {
         if (mounted) setLoadingMonthHistory(false)
       }
@@ -101,25 +100,83 @@ export default function BilleteraPage() {
     return () => { mounted = false }
   }, [])
 
-  // Cargar información del docente para obtener el legajo
+  // Cargar información de la cuenta desde getWalletInfo
   useEffect(() => {
     let mounted = true
-    const loadTeacherProfile = async () => {
+    const loadAccountInfo = async () => {
       setLoadingAccountInfo(true)
       try {
-        const resp = await TeacherService.getProfile()
-        if (mounted && resp.success && resp.data && resp.data.legajo) {
-          setTeacherLegajo(resp.data.legajo)
+        const resp = await WalletService.getWalletInfo()
+        if (mounted && resp.success && resp.data) {
+          setAccountInfo({
+            accountNumber: resp.data.accountNumber,
+            status: resp.data.status,
+            currency: resp.data.currency || 'ARS'
+          })
         }
       } catch (err) {
-        console.error('Error loading teacher profile:', err)
+        // Error silencioso
       } finally {
         if (mounted) setLoadingAccountInfo(false)
       }
     }
-    loadTeacherProfile()
+    loadAccountInfo()
     return () => { mounted = false }
   }, [])
+
+  // Función para actualizar todos los datos (balance, historial y resumen del mes)
+  const handleRefreshAll = async () => {
+    // Actualizar balance
+    await refetch()
+    
+    // Actualizar historial completo
+    setLoadingHistory(true)
+    try {
+      const year = new Date().getFullYear()
+      const resp = await WalletService.getWalletHistory(year)
+      if (resp.success && resp.data) {
+        setHistoryItems(resp.data)
+      }
+    } catch (err) {
+      // Error silencioso
+    } finally {
+      setLoadingHistory(false)
+    }
+    
+    // Actualizar historial del mes
+    setLoadingMonthHistory(true)
+    try {
+      const resp = await WalletService.getWalletHistoryCurrentMonth()
+      if (resp.success && resp.data) {
+        setMonthHistoryItems(resp.data)
+      }
+    } catch (err) {
+      // Error silencioso
+    } finally {
+      setLoadingMonthHistory(false)
+    }
+    
+    // Actualizar información de cuenta
+    setLoadingAccountInfo(true)
+    try {
+      const resp = await WalletService.getWalletInfo()
+      if (resp.success && resp.data) {
+        setAccountInfo({
+          accountNumber: resp.data.accountNumber,
+          status: resp.data.status,
+          currency: resp.data.currency || 'ARS'
+        })
+      }
+    } catch (err) {
+      // Error silencioso
+    } finally {
+      setLoadingAccountInfo(false)
+    }
+    
+    // Actualizar timestamp
+    const now = new Date()
+    setLastUpdated(now.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }))
+  }
 
   // Paginación del historial
   const paginatedItems = useMemo(() => {
@@ -154,9 +211,17 @@ export default function BilleteraPage() {
 
   // Calcular datos del gráfico del mes actual
   const { pieData, totalExpenses, totalIncomes } = useMemo(() => {
-    const expenseTx = monthHistoryItems.filter(item => item.tipo === 'EGRESO')
-    const incomeTx = monthHistoryItems.filter(item => item.tipo === 'INGRESO')
+    // Separar créditos (cargas de saldo) y débitos (gastos)
+    const expenseTx = monthHistoryItems.filter(item => item.tipo === 'EGRESO') // debit = gastos
+    const incomeTx = monthHistoryItems.filter(item => item.tipo === 'INGRESO') // credit = cargas de saldo
     
+    // Calcular total de gastos (suma absoluta de todos los débitos)
+    const totalExpenses = expenseTx.reduce((sum, item) => sum + Math.abs(item.monto), 0)
+    
+    // Calcular total de ingresos (suma de todos los créditos)
+    const totalIncomes = incomeTx.reduce((sum, item) => sum + Math.abs(item.monto), 0)
+    
+    // Categorizar gastos para el gráfico
     const expenseByCategory = expenseTx.reduce<Record<string, number>>((acc, item) => {
       const cat = categoryFor(item.nombre)
       acc[cat] = (acc[cat] || 0) + Math.abs(item.monto)
@@ -187,9 +252,6 @@ export default function BilleteraPage() {
 
     // Limitar a 5 categorías máximo (solo las que tienen valor)
     pieData = pieData.slice(0, 5)
-
-    const totalExpenses = pieData.reduce((s, d) => s + d.value, 0)
-    const totalIncomes = incomeTx.reduce((s, item) => s + item.monto, 0)
 
     return { pieData, totalExpenses, totalIncomes }
   }, [monthHistoryItems])
@@ -271,11 +333,12 @@ export default function BilleteraPage() {
               </div>
               <div className="flex items-center text-xs md:text-sm text-gray-500">
                 <button 
-                  onClick={refetch}
-                  disabled={isLoading}
+                  onClick={handleRefreshAll}
+                  disabled={isLoading || loadingHistory || loadingMonthHistory}
                   className="hover:text-gray-700 transition-colors disabled:opacity-50"
+                  title="Actualizar saldo, historial y resumen del mes"
                 >
-                  <RefreshCw className={`h-3 w-3 md:h-4 md:w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3 w-3 md:h-4 md:w-4 mr-1 ${(isLoading || loadingHistory || loadingMonthHistory) ? 'animate-spin' : ''}`} />
                 </button>
                 Actualizado: {lastUpdated}
               </div>
@@ -401,18 +464,24 @@ export default function BilleteraPage() {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tipo de cuenta</span>
-                  <span className="font-medium text-gray-900">Docente</span>
+                  <span className="font-medium text-gray-900">DOCENTE</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Número de cuenta</span>
                   <span className="font-medium text-gray-900">
-                    {teacherLegajo ? `DOC-${teacherLegajo}` : 'DOC-'}
+                    {accountInfo?.accountNumber || 'DOC-'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Estado</span>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Activa
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    accountInfo?.status === 'active' 
+                      ? 'bg-green-100 text-green-800' 
+                      : accountInfo?.status === 'inactive'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {accountInfo?.status === 'active' ? 'Activa' : accountInfo?.status === 'inactive' ? 'Inactiva' : 'Suspendida'}
                   </span>
                 </div>
               </div>
@@ -453,56 +522,60 @@ export default function BilleteraPage() {
                   <Skeleton className="h-16 rounded-lg" />
                 </div>
               </div>
-            ) : totalExpenses === 0 ? (
-              <div className="text-sm text-gray-500">Sin gastos registrados este mes</div>
+            ) : totalExpenses === 0 && totalIncomes === 0 ? (
+              <div className="text-sm text-gray-500">Sin movimientos registrados este mes</div>
             ) : (
               <div className="space-y-4">
-                {/* Gráfico y detalle lado a lado */}
-                <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6">
-                  {/* Gráfico de torta a la izquierda */}
-                  <div className="flex-shrink-0">
-                    <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
-                      {computeArcs().map((arc, i) => (
-                        <path key={i} d={arc.path} fill={arc.color} />
-                      ))}
-                      {/* agujero para dona */}
-                      <circle cx="50" cy="50" r="24" fill="#fff" />
-                    </svg>
-                  </div>
-                  
-                  {/* Detalle a la derecha */}
-                  <div className="flex-1 w-full">
-                    <div className="grid grid-cols-1 gap-2">
-                      {pieData
-                        .filter(d => d.value > 0) // Solo mostrar categorías con valor > 0
-                        .map((d, i) => {
-                          // Encontrar el índice original en pieData para el color correcto
-                          const originalIdx = pieData.findIndex(cat => cat.label === d.label)
-                          return (
-                            <div key={i} className="flex items-center justify-between text-xs md:text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[originalIdx % colors.length] }} />
-                                <span className="text-gray-700">{d.label}</span>
+                {/* Gráfico y detalle lado a lado - Solo mostrar si hay gastos */}
+                {totalExpenses > 0 && (
+                  <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6">
+                    {/* Gráfico de torta a la izquierda */}
+                    <div className="flex-shrink-0">
+                      <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
+                        {computeArcs().map((arc, i) => (
+                          <path key={i} d={arc.path} fill={arc.color} />
+                        ))}
+                        {/* agujero para dona */}
+                        <circle cx="50" cy="50" r="24" fill="#fff" />
+                      </svg>
+                    </div>
+                    
+                    {/* Detalle a la derecha */}
+                    <div className="flex-1 w-full">
+                      <div className="grid grid-cols-1 gap-2">
+                        {pieData
+                          .filter(d => d.value > 0) // Solo mostrar categorías con valor > 0
+                          .map((d, i) => {
+                            // Encontrar el índice original en pieData para el color correcto
+                            const originalIdx = pieData.findIndex(cat => cat.label === d.label)
+                            return (
+                              <div key={i} className="flex items-center justify-between text-xs md:text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[originalIdx % colors.length] }} />
+                                  <span className="text-gray-700">{d.label}</span>
+                                </div>
+                                <span className="font-medium text-gray-900">
+                                  ${Math.round(d.value).toLocaleString("es-AR")}
+                                </span>
                               </div>
-                              <span className="font-medium text-gray-900">
-                                ${Math.round(d.value).toLocaleString("es-AR")}
-                              </span>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
                 
-                {/* Totales abajo */}
+                {/* Totales abajo - Siempre mostrar si hay transacciones */}
                 <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                    <div className="text-slate-600">Total depositado</div>
-                    <div className="text-slate-900 font-semibold">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="text-green-700 font-medium">Total depositado (Créditos)</div>
+                    <div className="text-green-900 font-semibold text-base">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
+                    <div className="text-xs text-green-600 mt-1">Cargas de saldo</div>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                    <div className="text-slate-600">Total gastado</div>
-                    <div className="text-slate-900 font-semibold">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="text-red-700 font-medium">Total gastado (Débitos)</div>
+                    <div className="text-red-900 font-semibold text-base">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
+                    <div className="text-xs text-red-600 mt-1">Gastos del mes</div>
                   </div>
                 </div>
               </div>

@@ -209,6 +209,34 @@ export interface WalletInfo {
   accountNumber: string
   status: 'active' | 'inactive' | 'suspended'
   lastUpdated: string
+  currency?: string // ARG, ARS, etc.
+}
+
+// Tipos para respuestas de API externa de billetera
+export interface ExternalWallet {
+  uuid: string
+  user_uuid: string
+  currency: string
+  balance: string
+  status: string
+  last_activity_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ExternalTransfer {
+  uuid: string
+  from_wallet_uuid: string
+  to_wallet_uuid: string
+  amount: string
+  currency: string
+  type: 'credit' | 'debit'
+  status: string
+  description: string
+  metadata: any | null
+  processed_at: string
+  created_at: string
+  updated_at: string
 }
 
 export interface CarouselImage {
