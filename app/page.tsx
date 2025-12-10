@@ -666,52 +666,101 @@ export default function DashboardPage() {
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </Link>
                 </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="h-4 w-4 text-gray-500" />
-                    <span className="font-medium text-slate-700">Hoy</span>
+                {reservationsLoading ? (
+                  <div className="space-y-2">
+                    <div className="relative overflow-hidden h-4 w-24 bg-gray-200 rounded">
+                      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                    </div>
+                    <div className="relative overflow-hidden h-4 w-32 bg-gray-200 rounded">
+                      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                    </div>
                   </div>
-                  {/* Use canteen reservations from backend instead of mock */}
-                  {
-                    (() => {
-                      const getDatePart = (d: any) => {
-                        if (!d) return ''
-                        try {
-                          const dt = new Date(d)
-                          return dt.toISOString().split('T')[0]
-                        } catch (e) {
-                          return String(d).split('T')[0]
-                        }
+                ) : reservationsError ? (
+                  <p className="text-red-500 text-sm">No se pudieron cargar las reservas</p>
+                ) : (() => {
+                  // Filtrar reservas futuras y ordenar por fecha más cercana
+                  const now = new Date()
+                  now.setHours(0, 0, 0, 0) // Resetear horas para comparar solo fechas
+                  
+                  const futureReservations = (reservations || [])
+                    .filter(r => {
+                      try {
+                        const reservationDate = new Date(r.date)
+                        reservationDate.setHours(0, 0, 0, 0)
+                        return reservationDate >= now
+                      } catch {
+                        return false
                       }
-
-                      const todayStr = new Date().toISOString().split('T')[0]
-                      const todays = (reservations || []).filter(r => getDatePart(r.date) === todayStr)
-
-                      if (reservationsLoading) {
-                        return <p className="text-gray-600">Cargando reservas...</p>
+                    })
+                    .sort((a, b) => {
+                      try {
+                        const dateA = new Date(a.date).getTime()
+                        const dateB = new Date(b.date).getTime()
+                        return dateA - dateB
+                      } catch {
+                        return 0
                       }
+                    })
 
-                      if (reservationsError) {
-                        return <p className="text-red-500">No se pudieron cargar las reservas</p>
-                      }
-
-                      if (!todays || todays.length === 0) {
-                        return <p className="text-gray-600">No tenes reservas hoy</p>
-                      }
-
-                      // Show first reservation timeRange or formatted time
-                      const r = todays[0]
-                      const timeText = r.timeRange || (() => {
-                        try {
-                          const dt = new Date(r.date)
-                          const hh = String(dt.getHours()).padStart(2,'0')
-                          const mm = String(dt.getMinutes()).padStart(2,'0')
-                          return `${hh}:${mm}`
-                        } catch (e) { return '' }
-                      })()
-
-                      return <p className="text-gray-600">{timeText} {r.total ? `• ${r.total}` : ''}</p>
-                    })()
+                  if (futureReservations.length === 0) {
+                    return (
+                      <div className="text-sm text-gray-500">
+                        <p>No hay próximas reservas</p>
+                      </div>
+                    )
                   }
+
+                  // Obtener la próxima reserva
+                  const nextReservation = futureReservations[0]
+                  
+                  // Formatear fecha
+                  let formattedDate = ''
+                  let formattedTime = ''
+                  
+                  try {
+                    const reservationDate = new Date(nextReservation.date)
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    const reservationDay = new Date(reservationDate)
+                    reservationDay.setHours(0, 0, 0, 0)
+                    
+                    const diffTime = reservationDay.getTime() - today.getTime()
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                    
+                    if (diffDays === 0) {
+                      formattedDate = 'Hoy'
+                    } else if (diffDays === 1) {
+                      formattedDate = 'Mañana'
+                    } else {
+                      const day = reservationDate.getDate()
+                      const month = reservationDate.toLocaleDateString('es-ES', { month: 'short' })
+                      formattedDate = `${day} ${month}`
+                    }
+                    
+                    // Formatear hora
+                    formattedTime = nextReservation.timeRange || (() => {
+                      const hh = String(reservationDate.getHours()).padStart(2, '0')
+                      const mm = String(reservationDate.getMinutes()).padStart(2, '0')
+                      return `${hh}:${mm}`
+                    })()
+                  } catch (e) {
+                    formattedDate = 'Fecha no disponible'
+                    formattedTime = nextReservation.timeRange || 'Hora no disponible'
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <span className="font-medium text-slate-700">{formattedDate}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-600">{formattedTime}</span>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           </div>
