@@ -20,8 +20,8 @@ const carouselImages = [
   },
   {
     src: "/images/expo-hall.png",
-    alt: "Expo Educativa 2024",
-    title: "Expo Educativa 2024",
+    alt: "Expo Educativa 2025",
+    title: "Expo Educativa 2025",
     subtitle: "Conectando el futuro de la educación",
   },
   {
