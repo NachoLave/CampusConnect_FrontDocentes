@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    // Obtener userId de los query params
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId es requerido' }, { status: 400 })
-    }
-
-    // Llamar al endpoint de Azure a través del proxy
-    const url = `https://comedorback.azurewebsites.net/reservations/userId/${userId}`
+    // Llamar al endpoint de locations de Azure a través del proxy
+    const url = 'https://comedorback.azurewebsites.net/locations'
     
     const resp = await fetch(url, {
       method: 'GET',
@@ -30,9 +22,8 @@ export async function GET(request: Request) {
     const data = await resp.json()
     return NextResponse.json(data, { status: 200 })
   } catch (error: any) {
-    console.error('Error en proxy de reservas de comedor:', error)
+    console.error('Error en proxy de locations de comedor:', error)
     return NextResponse.json({ error: error?.message || 'Proxy error' }, { status: 500 })
   }
 }
-
 

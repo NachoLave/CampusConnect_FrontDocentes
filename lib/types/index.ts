@@ -336,7 +336,7 @@ export interface AvailabilityBlock {
   dayOfWeek: string // LUNES, MARTES, MIERCOLES, JUEVES, VIERNES
   shift: 'MANIANA' | 'MANANA' | 'TARDE' | 'NOCHE' // MANIANA es el correcto, MANANA por compatibilidad
   modality: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
-  campuses: string[] // UUIDs de las sedes
+  campuses: string[] // Array de strings: UUIDs de sedes (strings) o "VIR" para virtual. Todos los valores son strings, excepto "VIR" que es un caso especial
   // Campos enriquecidos desde API externa (para display)
   campusNames?: string[] // Nombres de las sedes para mostrar en UI
 }
@@ -345,12 +345,12 @@ export interface CreateAvailabilityBlockRequest {
   dayOfWeek: string
   shift: 'MANIANA' | 'MANANA' | 'TARDE' | 'NOCHE' // MANIANA es el correcto, MANANA por compatibilidad
   modality: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
-  campuses: string[]
+  campuses: string[] // Array de strings: UUIDs de sedes (strings) o "VIR" para virtual. Todos los valores son strings
 }
 
 export interface UpdateAvailabilityBlockRequest {
   modality?: 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS'
-  campuses: string[]
+  campuses: string[] // Array de strings: UUIDs de sedes (strings) o "VIR" para virtual. Todos los valores son strings
 }
 
 // Tipos para Sedes
@@ -418,10 +418,10 @@ export interface StoreOrderSummary {
 // Tipos para comedor
 export interface CanteenReservation {
   id: string
-  date: string
-  type: string // ALMUERZO | DESAYUNO | CENA | MERIENDA
-  timeRange?: string
-  sede?: string
-  total?: number | string // Puede ser precio o información del menú
-  status: 'Finalizado' | 'Cancelado' | 'Pendiente'
+  date: string // Fecha en formato ISO para formateo en el cliente
+  type: string // Tipo de reserva (Almuerzo, Cena, Desayuno, Merienda)
+  timeRange?: string // Horario formateado (HH:mm)
+  cost: number // Costo de la reserva
+  sede?: string // Nombre de la sede
+  status: 'Finalizado' | 'Cancelado' | 'Pendiente' | 'Activa'
 }

@@ -12,6 +12,7 @@ import { DeleteConfirmationModal } from "@/components/modals/delete-confirmation
 import { ConfirmationModal } from "@/components/modals/confirmation-modal"
 import { useTeacherProfile, useProposals, useAvailability, useCampuses } from "@/lib/hooks"
 import { authService } from "@/lib/api/services/auth"
+import { AdminService } from "@/lib/api/services/admin"
 import type { AvailabilityBlock } from "@/lib/types"
 
 // Función para obtener iniciales del nombre
@@ -321,22 +322,77 @@ export default function PerfilPage() {
   const { availability: backendAvailability, isLoading: availabilityLoading, error: availabilityError, addAvailability, deleteAvailability, updateAvailabilityBlock, refetch: refetchAvailability } = useAvailability()
   const { campuses: allCampuses, isLoading: campusesLoading, error: campusesError } = useCampuses()
 
-  // 🔍 DEBUG: Log de IDs de todas las sedes obtenidas
+  // 🔍 DEBUG: Log de IDs de todas las sedes obtenidas (SOLO ACTIVAS desde useCampuses)
   useEffect(() => {
     if (!campusesLoading && allCampuses.length > 0) {
-      console.log('🏢 SEDES OBTENIDAS:')
-      console.log('Total de sedes:', allCampuses.length)
+      console.log('🏢 SEDES ACTIVAS OBTENIDAS (desde useCampuses):')
+      console.log('Total de sedes activas:', allCampuses.length)
       allCampuses.forEach((campus, index) => {
         console.log(`  ${index + 1}. ${campus.name} (${campus.ubicacion || 'Sin ubicación'})`)
         console.log(`     - UUID: ${campus.uuid}`)
         console.log(`     - Code: ${campus.code}`)
+        console.log(`     - Active: ${campus.active}`)
       })
-      console.log('🏢 IDs (UUIDs) de todas las sedes:', allCampuses.map(c => c.uuid).join(', '))
+      console.log('🏢 IDs (UUIDs) de todas las sedes activas:', allCampuses.map(c => c.uuid).join(', '))
     }
     if (campusesError) {
-      console.error('❌ Error al cargar sedes:', campusesError)
+      console.error('❌ Error al cargar sedes activas:', campusesError)
     }
   }, [allCampuses, campusesLoading, campusesError])
+
+  // 🔍 DEBUG: Log de ABSOLUTAMENTE TODAS las sedes (ACTIVAS E INACTIVAS) desde el endpoint de sedes
+  useEffect(() => {
+    const fetchAllCampuses = async () => {
+      try {
+        console.log('🔍 ========================================')
+        console.log('🔍 SOLICITANDO TODAS LAS SEDES (ACTIVAS E INACTIVAS)')
+        console.log('🔍 ========================================')
+        
+        const response = await AdminService.getAllCampuses()
+        
+        if (response.success && response.data) {
+          console.log('✅ ========================================')
+          console.log('✅ TODAS LAS SEDES OBTENIDAS DEL ENDPOINT')
+          console.log('✅ ========================================')
+          console.log(`📊 Total de sedes (activas + inactivas): ${response.data.length}`)
+          console.log('')
+          
+          response.data.forEach((sede, index) => {
+            console.log(`  ${index + 1}. ${sede.nombre}`)
+            console.log(`     - UUID (id_sede): ${sede.id_sede}`)
+            console.log(`     - Ubicación: ${sede.ubicacion || 'Sin ubicación'}`)
+            console.log(`     - Status (activa): ${sede.status}`)
+            console.log('')
+          })
+          
+          console.log('📋 RESUMEN:')
+          const activas = response.data.filter(s => s.status === true)
+          const inactivas = response.data.filter(s => s.status === false)
+          console.log(`  - Activas: ${activas.length}`)
+          console.log(`  - Inactivas: ${inactivas.length}`)
+          console.log('')
+          
+          console.log('🆔 TODOS LOS UUIDs (id_sede) DE TODAS LAS SEDES:')
+          console.log(response.data.map(s => s.id_sede).join(', '))
+          console.log('')
+          
+          console.log('🆔 UUIDs DE SEDES ACTIVAS:')
+          console.log(activas.map(s => s.id_sede).join(', '))
+          console.log('')
+          
+          console.log('🆔 UUIDs DE SEDES INACTIVAS:')
+          console.log(inactivas.map(s => s.id_sede).join(', '))
+          console.log('✅ ========================================')
+        } else {
+          console.error('❌ Error al obtener todas las sedes:', response.error)
+        }
+      } catch (error) {
+        console.error('❌ Error al obtener todas las sedes:', error)
+      }
+    }
+
+    fetchAllCampuses()
+  }, []) // Solo se ejecuta una vez al montar el componente
 
   // Estado local para Optimistic Updates
   const [proposals, setProposals] = useState(backendProposals)
@@ -611,7 +667,7 @@ export default function PerfilPage() {
     dayOfWeek: string
     shift: string
     modality: string
-    campuses: string[]
+    campuses: string[] // Array de strings: UUIDs de sedes (strings) o "VIR" (único caso especial, también string)
   }) => {
     // Crear una clave única para este bloque
     const blockKey = `${availabilityData.dayOfWeek}-${availabilityData.shift}-${availabilityData.modality}`
@@ -837,6 +893,7 @@ export default function PerfilPage() {
       const existingBlockId = existingBlock.id // Capturar ID para uso en closure
       
       // 🔍 LOG TEMPORAL - Request PATCH
+      // IMPORTANTE: updatedCampuses contiene strings - UUIDs de sedes como strings, o "VIR" como caso especial
       console.log(`PATCH /teachers/me/availability/${existingBlockId}`)
       console.log('Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
       console.log('Bloque existente:', existingBlock)
@@ -884,11 +941,12 @@ export default function PerfilPage() {
       }
       
       // 🔍 LOG TEMPORAL - Request POST
+      // IMPORTANTE: campuses contiene strings - UUIDs de sedes como strings, o "VIR" como caso especial
       const requestPayload = {
         dayOfWeek: newBlock.dayOfWeek,
         shift: newBlock.shift,
         modality: newBlock.modality,
-        campuses: newBlock.campuses // Si es Virtual viene ["VIR"], si no, las sedes seleccionadas
+        campuses: newBlock.campuses // Array de strings: UUIDs (strings) o "VIR" (string especial para virtual)
       }
       console.log('POST /teachers/me/availability')
       console.log('Request Body:', JSON.stringify(requestPayload, null, 2))
@@ -945,6 +1003,7 @@ export default function PerfilPage() {
     }
     
     // 🔍 LOG TEMPORAL - Request PATCH
+    // IMPORTANTE: data.campuses contiene strings - UUIDs de sedes como strings, o "VIR" como caso especial
     console.log(`PATCH /teachers/me/availability/${blockId}`)
     console.log('Request Body:', JSON.stringify(data, null, 2))
     console.log('Bloque original:', editingBlock)

@@ -141,12 +141,14 @@ export default function ComedorPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Finalizado":
+      case "Activa":
         return "text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs font-medium"
+      case "Finalizado":
+        return "text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium"
       case "Cancelado":
         return "text-orange-600 bg-orange-50 px-2 py-1 rounded-full text-xs font-medium"
       case "Pendiente":
-        return "text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium"
+        return "text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium"
       default:
         return "text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium"
     }
@@ -260,7 +262,7 @@ export default function ComedorPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      {["Desayuno", "Almuerzo", "Merienda", "Cena"].map((tipo) => (
+                      {["Almuerzo", "Cena", "Desayuno", "Merienda"].map((tipo) => (
                         <label key={tipo} className="flex items-center space-x-2 cursor-pointer">
                           <input
                             type="checkbox"
@@ -326,7 +328,7 @@ export default function ComedorPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      {["Finalizado", "Cancelado", "Pendiente"].map((estado) => (
+                      {["Activa", "Pendiente", "Finalizado", "Cancelado"].map((estado) => (
                         <label key={estado} className="flex items-center space-x-2 cursor-pointer">
                           <input
                             type="checkbox"
@@ -363,9 +365,11 @@ export default function ComedorPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Horario
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sede</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Menú
+                  Sede
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Costo
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
@@ -429,9 +433,7 @@ export default function ComedorPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.timeRange || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{reservation.sede || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {typeof reservation.total === 'number' 
-                        ? `$${reservation.total.toLocaleString()}` 
-                        : reservation.total || '-'}
+                      ${reservation.cost.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={getStatusColor(reservation.status)}>{reservation.status}</span>

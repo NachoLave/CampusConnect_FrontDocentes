@@ -102,14 +102,18 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
       let campusesToSend: string[] = []
       
       // Determinar campuses según modalidad
+      // IMPORTANTE: campusesToSend es un array de strings donde:
+      // - Cada UUID de sede se envía como string
+      // - "VIR" es el único valor especial permitido (también es string)
+      // Todos los valores son strings, sin restricciones adicionales
       if (isVirtual) {
-        campusesToSend = ["VIR"]
+        campusesToSend = ["VIR"] // Solo "VIR" para modalidad virtual
       } else if (isAmbas) {
-        // AMBAS: Incluir sedes físicas seleccionadas + VIR
+        // AMBAS: Incluir UUIDs de sedes físicas seleccionadas (strings) + "VIR" (string especial)
         campusesToSend = [...locations, "VIR"]
       } else {
-        // PRESENCIAL: Solo sedes físicas seleccionadas
-        campusesToSend = locations
+        // PRESENCIAL: Solo UUIDs de sedes físicas seleccionadas (todos son strings)
+        campusesToSend = locations // locations contiene UUIDs como strings
       }
       
       const totalBlocks = selectedDays.length * selectedShifts.length

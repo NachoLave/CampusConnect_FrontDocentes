@@ -36,6 +36,7 @@ export function EditAvailabilityModal({
     if (currentBlock && open) {
       setSelectedModality(currentBlock.modality)
       // Filtrar VIR de las sedes seleccionadas para mostrar solo físicas
+      // currentBlock.campuses ya contiene UUIDs
       setSelectedCampuses(currentBlock.campuses.filter(c => c !== 'VIR') || [])
     }
   }, [currentBlock, open])
@@ -48,8 +49,8 @@ export function EditAvailabilityModal({
   // Determinar si se cambió la modalidad
   const modalityChanged = currentBlock && selectedModality !== currentBlock.modality
 
-  // Filtrar sedes físicas (sin VIR)
-  const filteredCampuses = campuses.filter(campus => campus.code !== 'VIR')
+  // Filtrar sedes físicas (solo las que tienen UUID)
+  const filteredCampuses = campuses.filter(campus => campus.uuid)
 
   const handleModalityChange = (modality: string) => {
     setSelectedModality(modality)
@@ -59,11 +60,11 @@ export function EditAvailabilityModal({
     }
   }
 
-  const handleCampusChange = (campusCode: string, checked: boolean) => {
+  const handleCampusChange = (campusUuid: string, checked: boolean) => {
     if (checked) {
-      setSelectedCampuses(prev => [...prev, campusCode])
+      setSelectedCampuses(prev => [...prev, campusUuid])
     } else {
-      setSelectedCampuses(prev => prev.filter(c => c !== campusCode))
+      setSelectedCampuses(prev => prev.filter(c => c !== campusUuid))
     }
   }
 
@@ -71,14 +72,18 @@ export function EditAvailabilityModal({
     let campusesToSend: string[] = []
     
     // Determinar campuses según modalidad
+    // IMPORTANTE: campusesToSend es un array de strings donde:
+    // - Cada UUID de sede se envía como string
+    // - "VIR" es el único valor especial permitido (también es string)
+    // Todos los valores son strings, sin restricciones adicionales
     if (isVirtual) {
-      campusesToSend = ["VIR"]
+      campusesToSend = ["VIR"] // Solo "VIR" para modalidad virtual
     } else if (isAmbas) {
-      // AMBAS: Incluir sedes físicas + VIR
+      // AMBAS: Incluir UUIDs de sedes físicas (strings) + "VIR" (string especial)
       campusesToSend = [...selectedCampuses, "VIR"]
     } else {
-      // PRESENCIAL: Solo sedes físicas
-      campusesToSend = selectedCampuses
+      // PRESENCIAL: Solo UUIDs de sedes físicas (todos son strings)
+      campusesToSend = selectedCampuses // selectedCampuses contiene UUIDs como strings
     }
     
     // Si cambió la modalidad, enviarla también
@@ -195,14 +200,14 @@ export function EditAvailabilityModal({
               ) : (
                 <div className="space-y-3 border rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
                   {filteredCampuses.map((campus) => (
-                    <div key={campus.code} className="flex items-center space-x-2">
+                    <div key={campus.uuid} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`edit-${campus.code}`}
-                        checked={selectedCampuses.includes(campus.code)}
-                        onCheckedChange={(checked) => handleCampusChange(campus.code, checked as boolean)}
+                        id={`edit-${campus.uuid}`}
+                        checked={selectedCampuses.includes(campus.uuid!)}
+                        onCheckedChange={(checked) => handleCampusChange(campus.uuid!, checked as boolean)}
                       />
                       <label 
-                        htmlFor={`edit-${campus.code}`} 
+                        htmlFor={`edit-${campus.uuid}`} 
                         className="text-sm flex-1 text-gray-900 cursor-pointer"
                       >
                         {campus.name}
