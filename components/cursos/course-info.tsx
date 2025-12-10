@@ -2820,42 +2820,48 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             </div>
 
             {/* Students Table */}
-            <div className="overflow-x-auto -mx-4 lg:mx-0">
-              <table className="w-full min-w-[500px]">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Condición</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.map((student, index) => (
-                    <tr
-                      key={student.uuid || student.id}
-                      className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                    >
-                      <td className="py-2 lg:py-3 px-3 lg:px-4">
-                        <div className="flex items-center space-x-2 lg:space-x-3">
-                          <div
-                            className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
-                          >
-                            <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
-                          </div>
-                          <span className="font-medium text-xs lg:text-sm">{student.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
-                      <td className="py-2 lg:py-3 px-3 lg:px-4">
-                          <span className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${getConditionBadgeClasses(student.condition)}`}>
-                            {student.condition}
-                          </span>
-                      </td>
+            {students.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-sm lg:text-base">Aún no hay alumnos asignados al curso</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <table className="w-full min-w-[500px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Condición</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredStudents.map((student, index) => (
+                      <tr
+                        key={student.uuid || student.id}
+                        className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                      >
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                          <div className="flex items-center space-x-2 lg:space-x-3">
+                            <div
+                              className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
+                            >
+                              <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
+                            </div>
+                            <span className="font-medium text-xs lg:text-sm">{student.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
+                        <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <span className={`px-2 py-1 rounded text-[10px] lg:text-xs font-medium whitespace-nowrap ${getConditionBadgeClasses(student.condition)}`}>
+                              {student.condition}
+                            </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -3057,101 +3063,107 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               </div>
 
               {/* Attendance Table */}
-              <div className="overflow-x-auto -mx-4 lg:mx-0">
-                <table className="w-full min-w-[500px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
-                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Asistencia</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Shimmer loading effect mientras carga la asistencia */}
-                    {isLoadingAttendance ? (
-                      Array.from({ length: 5 }).map((_, index) => (
-                        <tr
-                          key={`attendance-skeleton-${index}`}
-                          className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                        >
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <div className="flex items-center space-x-2 lg:space-x-3">
-                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
-                              <Skeleton className="h-4 w-32" />
-                            </div>
-                          </td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <Skeleton className="h-4 w-40" />
-                          </td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <div className="flex space-x-1.5 lg:space-x-2">
-                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
-                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
-                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      filteredAttendanceStudents.map((student, index) => (
-                        <tr
-                          key={student.uuid || student.id}
-                          className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                        >
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <div className="flex items-center space-x-2 lg:space-x-3">
-                              <div
-                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
-                              >
-                                <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
+              {students.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm lg:text-base">Aún no hay alumnos asignados al curso</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto -mx-4 lg:mx-0">
+                  <table className="w-full min-w-[500px]">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                        <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Mail</th>
+                        <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Asistencia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Shimmer loading effect mientras carga la asistencia */}
+                      {isLoadingAttendance ? (
+                        Array.from({ length: 5 }).map((_, index) => (
+                          <tr
+                            key={`attendance-skeleton-${index}`}
+                            className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                          >
+                            <td className="py-2 lg:py-3 px-3 lg:px-4">
+                              <div className="flex items-center space-x-2 lg:space-x-3">
+                                <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                                <Skeleton className="h-4 w-32" />
                               </div>
-                              <span className="font-medium text-xs lg:text-sm">{student.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
-                          <td className="py-2 lg:py-3 px-3 lg:px-4">
-                            <div className="flex space-x-1.5 lg:space-x-2">
-                              <button
-                                onClick={() => setAttendance(student.id, "P")}
-                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                  getAttendance(student.id) === "P"
-                                    ? "bg-green-500 text-white shadow-md"
-                                    : "bg-gray-200 text-gray-600 hover:bg-green-100"
-                                }`}
-                                title="Presente"
-                              >
-                                P
-                              </button>
-                              <button
-                                onClick={() => setAttendance(student.id, "1/2")}
-                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                  getAttendance(student.id) === "1/2"
-                                    ? "bg-yellow-500 text-white shadow-md"
-                                    : "bg-gray-200 text-gray-600 hover:bg-yellow-100"
-                                }`}
-                                title="Media falta"
-                              >
-                                1/2
-                              </button>
-                              <button
-                                onClick={() => setAttendance(student.id, "A")}
-                                className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
-                                  getAttendance(student.id) === "A"
-                                    ? "bg-red-500 text-white shadow-md"
-                                    : "bg-gray-200 text-gray-600 hover:bg-red-100"
-                                }`}
-                                title="Ausente"
-                              >
-                                A
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            </td>
+                            <td className="py-2 lg:py-3 px-3 lg:px-4">
+                              <Skeleton className="h-4 w-40" />
+                            </td>
+                            <td className="py-2 lg:py-3 px-3 lg:px-4">
+                              <div className="flex space-x-1.5 lg:space-x-2">
+                                <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                                <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                                <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        filteredAttendanceStudents.map((student, index) => (
+                          <tr
+                            key={student.uuid || student.id}
+                            className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                          >
+                            <td className="py-2 lg:py-3 px-3 lg:px-4">
+                              <div className="flex items-center space-x-2 lg:space-x-3">
+                                <div
+                                  className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getStudentColor(student.uuid || student.id)}`}
+                                >
+                                  <span className="text-white text-[10px] lg:text-xs font-semibold">{getInitials(student.name)}</span>
+                                </div>
+                                <span className="font-medium text-xs lg:text-sm">{student.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 lg:py-3 px-3 lg:px-4 text-gray-600 text-xs lg:text-sm">{student.email}</td>
+                            <td className="py-2 lg:py-3 px-3 lg:px-4">
+                              <div className="flex space-x-1.5 lg:space-x-2">
+                                <button
+                                  onClick={() => setAttendance(student.id, "P")}
+                                  className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                    getAttendance(student.id) === "P"
+                                      ? "bg-green-500 text-white shadow-md"
+                                      : "bg-gray-200 text-gray-600 hover:bg-green-100"
+                                  }`}
+                                  title="Presente"
+                                >
+                                  P
+                                </button>
+                                <button
+                                  onClick={() => setAttendance(student.id, "1/2")}
+                                  className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                    getAttendance(student.id) === "1/2"
+                                      ? "bg-yellow-500 text-white shadow-md"
+                                      : "bg-gray-200 text-gray-600 hover:bg-yellow-100"
+                                  }`}
+                                  title="Media falta"
+                                >
+                                  1/2
+                                </button>
+                                <button
+                                  onClick={() => setAttendance(student.id, "A")}
+                                  className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full text-[10px] lg:text-xs font-semibold transition-colors flex-shrink-0 ${
+                                    getAttendance(student.id) === "A"
+                                      ? "bg-red-500 text-white shadow-md"
+                                      : "bg-gray-200 text-gray-600 hover:bg-red-100"
+                                  }`}
+                                  title="Ausente"
+                                >
+                                  A
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3296,63 +3308,75 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             </div>
 
             {/* Grades Table */}
-            <div className="overflow-x-auto -mx-4 lg:mx-0">
-              <table className="w-full min-w-[700px] table-fixed">
-                <colgroup>
-                  <col className="w-[35%]" /> {/* Nombre */}
-                  <col className="w-[11%]" /> {/* Eval 1 */}
-                  <col className="w-[11%]" /> {/* Eval 2 */}
-                  <col className="w-[11%]" /> {/* REC */}
-                  <col className="w-[11%]" /> {/* FINAL */}
-                  <col className="w-[21%]" /> {/* CONDICIÓN */}
-                </colgroup>
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
-                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 1</th>
-                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 2</th>
-                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">REC</th>
-                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">FINAL</th>
-                    <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">CONDICIÓN</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingGrades && Object.keys(gradesData).length === 0 ? (
-                    // Skeleton loading rows - solo mostrar si no hay datos
-                    Array.from({ length: 5 }).map((_, index) => (
-                      <tr
-                        key={`skeleton-${index}`}
-                        className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                      >
-                        <td className="py-2 lg:py-3 px-3 lg:px-4">
-                          <div className="flex items-center space-x-2 lg:space-x-3">
-                            <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
-                            <Skeleton className="h-4 w-32" />
-                          </div>
-                        </td>
-                        <td className="py-2 lg:py-3 px-2 lg:px-4">
-                          <Skeleton className="h-6 w-12 mx-auto" />
-                        </td>
-                        <td className="py-2 lg:py-3 px-2 lg:px-4">
-                          <Skeleton className="h-6 w-12 mx-auto" />
-                        </td>
-                        <td className="py-2 lg:py-3 px-2 lg:px-4">
-                          <Skeleton className="h-6 w-12 mx-auto" />
-                        </td>
-                        <td className="py-2 lg:py-3 px-2 lg:px-4">
-                          <Skeleton className="h-6 w-12 mx-auto" />
-                        </td>
-                        <td className="py-3 px-4">
-                          <Skeleton className="h-6 w-24 mx-auto rounded-full" />
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    filteredGradesStudents.map((student, index) => (
-                    <tr
-                      key={student.uuid || student.id}
-                      className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                    >
+            {students.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-sm lg:text-base">Aún no hay alumnos asignados al curso</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <table className="w-full min-w-[700px] table-fixed">
+                  <colgroup>
+                    <col className="w-[35%]" /> {/* Nombre */}
+                    <col className="w-[11%]" /> {/* Eval 1 */}
+                    <col className="w-[11%]" /> {/* Eval 2 */}
+                    <col className="w-[11%]" /> {/* REC */}
+                    <col className="w-[11%]" /> {/* FINAL */}
+                    <col className="w-[21%]" /> {/* CONDICIÓN */}
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="text-left py-2 lg:py-3 px-3 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Nombre</th>
+                      <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 1</th>
+                      <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">Eval. 2</th>
+                      <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">REC</th>
+                      <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">FINAL</th>
+                      <th className="text-center py-2 lg:py-3 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">CONDICIÓN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingGrades && Object.keys(gradesData).length === 0 ? (
+                      // Skeleton loading rows - solo mostrar si no hay datos
+                      Array.from({ length: 5 }).map((_, index) => (
+                        <tr
+                          key={`skeleton-${index}`}
+                          className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                        >
+                          <td className="py-2 lg:py-3 px-3 lg:px-4">
+                            <div className="flex items-center space-x-2 lg:space-x-3">
+                              <Skeleton className="w-7 h-7 lg:w-8 lg:h-8 rounded-full" />
+                              <Skeleton className="h-4 w-32" />
+                            </div>
+                          </td>
+                          <td className="py-2 lg:py-3 px-2 lg:px-4">
+                            <Skeleton className="h-6 w-12 mx-auto" />
+                          </td>
+                          <td className="py-2 lg:py-3 px-2 lg:px-4">
+                            <Skeleton className="h-6 w-12 mx-auto" />
+                          </td>
+                          <td className="py-2 lg:py-3 px-2 lg:px-4">
+                            <Skeleton className="h-6 w-12 mx-auto" />
+                          </td>
+                          <td className="py-2 lg:py-3 px-2 lg:px-4">
+                            <Skeleton className="h-6 w-12 mx-auto" />
+                          </td>
+                          <td className="py-3 px-4">
+                            <Skeleton className="h-6 w-24 mx-auto rounded-full" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      filteredGradesStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-gray-500">
+                            <p className="text-sm lg:text-base">Aún no hay alumnos asignados al curso</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredGradesStudents.map((student, index) => (
+                          <tr
+                            key={student.uuid || student.id}
+                            className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                          >
                       <td className="py-2 lg:py-3 px-3 lg:px-4">
                         <div className="flex items-center space-x-2 lg:space-x-3">
                           <div
@@ -3509,10 +3533,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       </td>
                     </tr>
                   ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
