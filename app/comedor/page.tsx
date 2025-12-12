@@ -7,6 +7,7 @@ import { DatePicker } from "@/components/ui/date-range-picker"
 import { useCanteenReservations } from '@/lib/hooks'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { authService } from '@/lib/api/services/auth'
 
 const formatDate = (iso: string) => {
   try {
@@ -27,6 +28,12 @@ export default function ComedorPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
+  // Obtener el token JWT para incluirlo en el enlace al módulo de comedor
+  const getCanteenModuleUrl = () => {
+    const token = authService.getToken()
+    const baseUrl = 'https://proyecto-react-shadcn.vercel.app/login'
+    return token ? `${baseUrl}?JWT=${token}` : baseUrl
+  }
 
   // Cerrar filtros al hacer click afuera
   useEffect(() => {
@@ -168,7 +175,7 @@ export default function ComedorPage() {
           </p>
         </div>
         <a
-          href="https://proyecto-react-shadcn.vercel.app/login"
+          href={getCanteenModuleUrl()}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors"

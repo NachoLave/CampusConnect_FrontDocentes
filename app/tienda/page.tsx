@@ -9,6 +9,7 @@ import { DatePicker } from '@/components/ui/date-range-picker'
 import { Calendar, Search, Filter, ShoppingBag, ExternalLink, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { authService } from '@/lib/api/services/auth'
 
 export default function TiendaPage() {
   const { orders, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useStoreOrders()
@@ -18,6 +19,13 @@ export default function TiendaPage() {
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
+
+  // Obtener el token JWT para incluirlo en el enlace al módulo de tienda
+  const getStoreModuleUrl = () => {
+    const token = authService.getToken()
+    const baseUrl = 'https://uade-store.vercel.app/'
+    return token ? `${baseUrl}?JWT=${token}` : baseUrl
+  }
 
   const filteredOrders = useMemo(() => {
     const from = fromDate ? fromDate : null
@@ -112,12 +120,12 @@ export default function TiendaPage() {
             <span className="text-blue-600 underline cursor-pointer">sitio oficial</span>
           </p>
         </div>
-        <a
-          href="https://uade-store.vercel.app/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors"
-        >
+          <a
+            href={getStoreModuleUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center bg-slate-800 hover:bg-slate-700 text-white mt-4 text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors"
+          >
           <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
           <span className="hidden sm:inline">Visitar Tienda</span>
           <span className="sm:hidden">Tienda</span>
