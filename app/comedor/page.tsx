@@ -31,7 +31,7 @@ export default function ComedorPage() {
   // Obtener el token JWT para incluirlo en el enlace al módulo de comedor
   const getCanteenModuleUrl = () => {
     const token = authService.getToken()
-    const baseUrl = 'https://proyecto-react-shadcn.vercel.app/login'
+    const baseUrl = 'https://proyecto-react-shadcn.vercel.app/'
     return token ? `${baseUrl}?JWT=${token}` : baseUrl
   }
 
