@@ -379,8 +379,10 @@ export class WalletService {
   // Obtener historial de wallet del mes actual (para gráfico) desde la API externa
   static async getWalletHistoryCurrentMonth(): Promise<ApiResponse<WalletHistoryItem[]>> {
     try {
+      console.log('🌐 [WalletService] getWalletHistoryCurrentMonth - Iniciando llamada a API')
       const token = authService.getToken()
       if (!token) {
+        console.error('🌐 [WalletService] getWalletHistoryCurrentMonth - No hay token')
         return {
           data: [] as WalletHistoryItem[],
           success: false,
@@ -388,6 +390,7 @@ export class WalletService {
         }
       }
 
+      console.log('🌐 [WalletService] Llamando a:', `${WALLET_API_URL}/transfers/mine`)
       const response = await fetch(`${WALLET_API_URL}/transfers/mine`, {
         method: 'GET',
         headers: {
@@ -397,7 +400,10 @@ export class WalletService {
         }
       })
 
+      console.log('🌐 [WalletService] Response status:', response.status, response.statusText)
+
       if (!response.ok) {
+        console.error('🌐 [WalletService] Error en respuesta:', response.status)
         return {
           data: [] as WalletHistoryItem[],
           success: false,
@@ -406,8 +412,11 @@ export class WalletService {
       }
 
       const result: { success: boolean; data: ExternalTransfer[] } = await response.json()
+      console.log('🌐 [WalletService] Resultado completo de API:', result)
+      console.log('🌐 [WalletService] Total de transfers recibidos:', result.data?.length || 0)
       
       if (!result.success || !result.data) {
+        console.error('🌐 [WalletService] No hay datos en la respuesta')
         return {
           data: [] as WalletHistoryItem[],
           success: false,
@@ -418,12 +427,19 @@ export class WalletService {
       const now = new Date()
       const currentYear = now.getFullYear()
       const currentMonth = now.getMonth()
+      console.log('🌐 [WalletService] Filtrando por año:', currentYear, 'mes:', currentMonth)
 
       // Filtrar por mes actual
       const monthTransfers = result.data.filter(transfer => {
         const transferDate = new Date(transfer.processed_at || transfer.created_at)
-        return transferDate.getFullYear() === currentYear && transferDate.getMonth() === currentMonth
+        const matches = transferDate.getFullYear() === currentYear && transferDate.getMonth() === currentMonth
+        if (matches) {
+          console.log(`🌐 [WalletService] Transfer del mes: ${transfer.description} - ${transfer.type} - $${transfer.amount}`)
+        }
+        return matches
       })
+
+      console.log('🌐 [WalletService] Transfers del mes actual:', monthTransfers.length)
 
       const historyItems: WalletHistoryItem[] = monthTransfers.map(transfer => ({
         nombre: transfer.description || 'Transacción',
@@ -433,12 +449,15 @@ export class WalletService {
         currency: transfer.currency
       }))
 
+      console.log('🌐 [WalletService] HistoryItems mapeados:', historyItems)
+
       return {
         data: historyItems,
         success: true,
         message: 'Historial del mes obtenido correctamente'
       }
     } catch (error) {
+      console.error('🌐 [WalletService] Error en getWalletHistoryCurrentMonth:', error)
       return {
         data: [] as WalletHistoryItem[],
         success: false,

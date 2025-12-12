@@ -18,14 +18,6 @@ const getIconForTransaction = (nombre: string) => {
   return DollarSign
 }
 
-// Función para categorizar transacciones
-const categoryFor = (nombre: string) => {
-  const d = nombre.toLowerCase()
-  if (d.includes("matrícula") || d.includes("matricula") || d.includes("buzo")) return "Matrícula"
-  if (d.includes("menu") || d.includes("cafeter") || d.includes("comida")) return "Cafetería"
-  if (d.includes("librer") || d.includes("papel") || d.includes("a4")) return "Librería"
-  return "Otros"
-}
 
 export default function BilleteraPage() {
   const [showBalance, setShowBalance] = useState(true)
@@ -86,12 +78,16 @@ export default function BilleteraPage() {
     const loadMonthHistory = async () => {
       setLoadingMonthHistory(true)
       try {
+        console.log('📊 [Billetera] Llamando a WalletService.getWalletHistoryCurrentMonth()')
         const resp = await WalletService.getWalletHistoryCurrentMonth()
+        console.log('📊 [Billetera] Respuesta de getWalletHistoryCurrentMonth:', resp)
         if (mounted && resp.success && resp.data) {
+          console.log('📊 [Billetera] Datos del mes recibidos:', resp.data)
+          console.log('📊 [Billetera] Total de transacciones:', resp.data.length)
           setMonthHistoryItems(resp.data)
         }
       } catch (err) {
-        // Error silencioso
+        console.error('❌ [Billetera] Error cargando historial del mes:', err)
       } finally {
         if (mounted) setLoadingMonthHistory(false)
       }
@@ -146,12 +142,15 @@ export default function BilleteraPage() {
     // Actualizar historial del mes
     setLoadingMonthHistory(true)
     try {
+      console.log('🔄 [Billetera] Refrescando historial del mes...')
       const resp = await WalletService.getWalletHistoryCurrentMonth()
+      console.log('🔄 [Billetera] Respuesta de refresh:', resp)
       if (resp.success && resp.data) {
+        console.log('🔄 [Billetera] Datos actualizados:', resp.data)
         setMonthHistoryItems(resp.data)
       }
     } catch (err) {
-      // Error silencioso
+      console.error('❌ [Billetera] Error refrescando historial del mes:', err)
     } finally {
       setLoadingMonthHistory(false)
     }
@@ -209,11 +208,17 @@ export default function BilleteraPage() {
     })
   }, [paginatedItems, currentPage])
 
-  // Calcular datos del gráfico del mes actual
-  const { pieData, totalExpenses, totalIncomes } = useMemo(() => {
+  // Calcular totales del mes actual
+  const { totalExpenses, totalIncomes } = useMemo(() => {
+    console.log('🔢 [Billetera] Calculando totales del mes...')
+    console.log('🔢 [Billetera] monthHistoryItems:', monthHistoryItems)
+    
     // Separar créditos (cargas de saldo) y débitos (gastos)
     const expenseTx = monthHistoryItems.filter(item => item.tipo === 'EGRESO') // debit = gastos
     const incomeTx = monthHistoryItems.filter(item => item.tipo === 'INGRESO') // credit = cargas de saldo
+    
+    console.log('🔢 [Billetera] Gastos (EGRESO):', expenseTx.length, expenseTx)
+    console.log('🔢 [Billetera] Ingresos (INGRESO):', incomeTx.length, incomeTx)
     
     // Calcular total de gastos (suma absoluta de todos los débitos)
     const totalExpenses = expenseTx.reduce((sum, item) => sum + Math.abs(item.monto), 0)
@@ -221,67 +226,11 @@ export default function BilleteraPage() {
     // Calcular total de ingresos (suma de todos los créditos)
     const totalIncomes = incomeTx.reduce((sum, item) => sum + Math.abs(item.monto), 0)
     
-    // Categorizar gastos para el gráfico
-    const expenseByCategory = expenseTx.reduce<Record<string, number>>((acc, item) => {
-      const cat = categoryFor(item.nombre)
-      acc[cat] = (acc[cat] || 0) + Math.abs(item.monto)
-      return acc
-    }, {})
+    console.log('🔢 [Billetera] Total gastos:', totalExpenses)
+    console.log('🔢 [Billetera] Total ingresos:', totalIncomes)
 
-    // Ordenar por valor descendente
-    const sortedCategories = Object.entries(expenseByCategory)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-
-    // Si hay más de 4 categorías, agrupar las menores en "Otros"
-    let pieData: Array<{ label: string; value: number }>
-    if (sortedCategories.length > 4) {
-      // Tomar las 4 principales
-      const top4 = sortedCategories.slice(0, 4)
-      // Sumar el resto en "Otros"
-      const othersTotal = sortedCategories.slice(4).reduce((sum, cat) => sum + cat.value, 0)
-      if (othersTotal > 0) {
-        pieData = [...top4, { label: 'Otros', value: othersTotal }]
-      } else {
-        pieData = top4
-      }
-    } else {
-      // Si hay 4 o menos, usar todas (solo las que tienen valor)
-      pieData = sortedCategories
-    }
-
-    // Limitar a 5 categorías máximo (solo las que tienen valor)
-    pieData = pieData.slice(0, 5)
-
-    return { pieData, totalExpenses, totalIncomes }
+    return { totalExpenses, totalIncomes }
   }, [monthHistoryItems])
-
-  const colors = ["#334155", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"] // 5 tonos slate para 5 categorías
-
-  const computeArcs = () => {
-    let cumulative = 0
-    // Solo calcular arcos para categorías con valor > 0
-    return pieData
-      .filter(d => d.value > 0)
-      .map((d, idx) => {
-        const fraction = totalExpenses > 0 ? d.value / totalExpenses : 0
-        const startAngle = cumulative * 2 * Math.PI - Math.PI / 2
-        cumulative += fraction
-        const endAngle = cumulative * 2 * Math.PI - Math.PI / 2
-        const r = 38
-        const cx = 50
-        const cy = 50
-        const x1 = cx + r * Math.cos(startAngle)
-        const y1 = cy + r * Math.sin(startAngle)
-        const x2 = cx + r * Math.cos(endAngle)
-        const y2 = cy + r * Math.sin(endAngle)
-        const largeArc = fraction > 0.5 ? 1 : 0
-        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
-        // Encontrar el índice original en pieData para el color correcto
-        const originalIdx = pieData.findIndex(cat => cat.label === d.label)
-        return { path, color: colors[originalIdx % colors.length], label: d.label, value: d.value }
-      })
-  }
 
   const formatCurrency = (amount: number) => {
     const formatted = Math.abs(amount).toLocaleString("es-AR", {
@@ -499,84 +448,29 @@ export default function BilleteraPage() {
             </Link>
           </div>
 
-          {/* Gasto del mes (gráfico dona) */}
+          {/* Resumen del mes */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">
               Resumen del mes {new Date().toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
             </h3>
             {loadingMonthHistory ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center">
-                  <Skeleton className="w-24 h-24 rounded-full" />
-                </div>
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-16" />
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Skeleton className="h-16 rounded-lg" />
-                  <Skeleton className="h-16 rounded-lg" />
-                </div>
+              <div className="grid grid-cols-2 gap-2 md:gap-3">
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
               </div>
             ) : totalExpenses === 0 && totalIncomes === 0 ? (
               <div className="text-sm text-gray-500">Sin movimientos registrados este mes</div>
             ) : (
-              <div className="space-y-4">
-                {/* Gráfico y detalle lado a lado - Solo mostrar si hay gastos */}
-                {totalExpenses > 0 && (
-                  <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6">
-                    {/* Gráfico de torta a la izquierda */}
-                    <div className="flex-shrink-0">
-                      <svg viewBox="0 0 100 100" className="w-24 h-24 md:w-28 md:h-28">
-                        {computeArcs().map((arc, i) => (
-                          <path key={i} d={arc.path} fill={arc.color} />
-                        ))}
-                        {/* agujero para dona */}
-                        <circle cx="50" cy="50" r="24" fill="#fff" />
-                      </svg>
-                    </div>
-                    
-                    {/* Detalle a la derecha */}
-                    <div className="flex-1 w-full">
-                      <div className="grid grid-cols-1 gap-2">
-                        {pieData
-                          .filter(d => d.value > 0) // Solo mostrar categorías con valor > 0
-                          .map((d, i) => {
-                            // Encontrar el índice original en pieData para el color correcto
-                            const originalIdx = pieData.findIndex(cat => cat.label === d.label)
-                            return (
-                              <div key={i} className="flex items-center justify-between text-xs md:text-sm">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[originalIdx % colors.length] }} />
-                                  <span className="text-gray-700">{d.label}</span>
-                                </div>
-                                <span className="font-medium text-gray-900">
-                                  ${Math.round(d.value).toLocaleString("es-AR")}
-                                </span>
-                              </div>
-                            )
-                          })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Totales abajo - Siempre mostrar si hay transacciones */}
-                <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <div className="text-green-700 font-medium">Total depositado (Créditos)</div>
-                    <div className="text-green-900 font-semibold text-base">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
-                    <div className="text-xs text-green-600 mt-1">Cargas de saldo</div>
-                  </div>
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="text-red-700 font-medium">Total gastado (Débitos)</div>
-                    <div className="text-red-900 font-semibold text-base">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
-                    <div className="text-xs text-red-600 mt-1">Gastos del mes</div>
-                  </div>
+              <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="text-green-700 font-medium">Total depositado (Créditos)</div>
+                  <div className="text-green-900 font-semibold text-base">${Math.round(totalIncomes).toLocaleString("es-AR")}</div>
+                  <div className="text-xs text-green-600 mt-1">Cargas de saldo</div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="text-red-700 font-medium">Total gastado (Débitos)</div>
+                  <div className="text-red-900 font-semibold text-base">${Math.round(totalExpenses).toLocaleString("es-AR")}</div>
+                  <div className="text-xs text-red-600 mt-1">Gastos del mes</div>
                 </div>
               </div>
             )}
