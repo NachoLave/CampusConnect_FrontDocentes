@@ -158,11 +158,20 @@ export class CoursesService {
    */
   private static async getDocenteInscripciones(teacherUUID: string): Promise<ExternalInscripcion[]> {
     try {
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers
       })
 
       if (!response.ok) {
@@ -187,13 +196,22 @@ export class CoursesService {
    */
   private static async getCursoDetalle(cursoUUID: string): Promise<ExternalCursoDetalle | null> {
     try {
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const url = `${CURSOS_API_URL}/cursos/${cursoUUID}`
       
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers
       })
       
       if (!response.ok) {
@@ -218,11 +236,20 @@ export class CoursesService {
    */
   private static async getCursoInscripciones(cursoUUID: string): Promise<ExternalInscripcion[]> {
     try {
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(`${CURSOS_API_URL}/inscripciones?uuid_curso=${cursoUUID}`, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers
       })
 
       if (!response.ok) {
@@ -476,8 +503,14 @@ export class CoursesService {
       ? `${API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)}:confirm`
       : `/teaching/courses/${courseId}/acts:confirm`
 
-    const url = `${API_CONFIG.BASE_URL}${endpoint}`
-    const headers = this.getOnlyTeacherIdHeaders()
+    // Usar proxy de Next.js para evitar CORS
+    const teacherUUID = this.getTeacherUUID()
+    const url = `/api/teaching/courses/${courseId}/acts/confirm`
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Teacher-Id': teacherUUID
+    }
     const body = {}
 
     try {
@@ -504,12 +537,13 @@ export class CoursesService {
   // Obtener actas (acts) asociadas a un curso
   // Solo envía header X-Teacher-Id con el UUID del docente
   static async getActs(courseId: number | string): Promise<ApiResponse<any[]>> {
-    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
-      ? API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)
-      : `/teaching/courses/${courseId}/acts`
-
-    const url = `${API_CONFIG.BASE_URL}${endpoint}`
-    const headers = this.getOnlyTeacherIdHeaders()
+    // Usar proxy de Next.js para evitar CORS
+    const teacherUUID = this.getTeacherUUID()
+    const url = `/api/teaching/courses/${courseId}/acts`
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'X-Teacher-Id': teacherUUID
+    }
 
     try {
       const response = await fetch(url, { method: 'GET', headers })
@@ -554,12 +588,13 @@ export class CoursesService {
   // Obtener preview del acta de un curso
   // Solo envía header X-Teacher-Id con el UUID del docente
   static async getCourseActsPreview(courseId: number | string): Promise<ApiResponse<any>> {
-    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW === 'function'
-      ? API_CONFIG.ENDPOINTS.COURSE_ACTS_PREVIEW(courseId)
-      : `/teaching/courses/${courseId}/acts:preview`
-
-    const url = `${API_CONFIG.BASE_URL}${endpoint}`
-    const headers = this.getOnlyTeacherIdHeaders()
+    // Usar proxy de Next.js para evitar CORS
+    const teacherUUID = this.getTeacherUUID()
+    const url = `/api/teaching/courses/${courseId}/acts/preview`
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'X-Teacher-Id': teacherUUID
+    }
 
     try {
       const response = await fetch(url, { method: 'GET', headers })
@@ -923,9 +958,17 @@ export class CoursesService {
         ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
         : `/teaching/courses/${courseId}/assessments`
       
-      const assessmentsUrl = `${API_CONFIG.BASE_URL}${assessmentsEndpoint}`
+      // Usar proxy de Next.js para evitar CORS
+      const teacherUUID = this.getTeacherUUID()
+      const assessmentsUrl = `/api/teaching/courses/${courseId}/assessments`
 
-      const assessmentsResponse = await fetch(assessmentsUrl, { method: 'GET', headers })
+      const assessmentsResponse = await fetch(assessmentsUrl, { 
+        method: 'GET', 
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
+      })
       const assessmentsText = await assessmentsResponse.text()
       let assessmentsData: any = null
       try { assessmentsData = assessmentsText ? JSON.parse(assessmentsText) : null } catch { assessmentsData = null }
@@ -1070,13 +1113,17 @@ export class CoursesService {
     
     try {
       // Paso 1: Obtener las evaluaciones existentes del curso
-      const assessmentsEndpoint = typeof API_CONFIG.ENDPOINTS.ASSESSMENTS === 'function'
-        ? API_CONFIG.ENDPOINTS.ASSESSMENTS(courseId)
-        : `/teaching/courses/${courseId}/assessments`
+      // Usar proxy de Next.js para evitar CORS
+      const teacherUUID = this.getTeacherUUID()
+      const assessmentsUrl = `/api/teaching/courses/${courseId}/assessments`
       
-      const assessmentsUrl = `${API_CONFIG.BASE_URL}${assessmentsEndpoint}`
-      
-      const assessmentsResponse = await fetch(assessmentsUrl, { method: 'GET', headers })
+      const assessmentsResponse = await fetch(assessmentsUrl, { 
+        method: 'GET', 
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
+      })
       const assessmentsText = await assessmentsResponse.text()
       let assessmentsData: any = null
       try { assessmentsData = assessmentsText ? JSON.parse(assessmentsText) : null } catch { assessmentsData = null }

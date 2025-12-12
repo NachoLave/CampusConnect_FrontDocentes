@@ -1,6 +1,7 @@
 import { Subject, ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
+import { authService } from './auth'
 
 // URL de la API externa de Materias (Módulo Académico)
 const MATERIAS_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api/materias'
@@ -52,11 +53,20 @@ export class SubjectsService {
     try {
       console.log('🎓 Llamando a API externa de materias...')
       
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(MATERIAS_API_URL, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+        headers
       })
 
       if (!response.ok) {
@@ -93,11 +103,20 @@ export class SubjectsService {
     try {
       console.log(`🎓 Obteniendo materia ${uuid}...`)
       
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(`${MATERIAS_API_URL}/${uuid}`, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+        headers
       })
 
       if (!response.ok) {

@@ -2,6 +2,7 @@ import { ApiResponse } from '@/lib/types'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
+import { authService } from './auth'
 
 export interface Notification {
   id: string
@@ -112,22 +113,27 @@ export class NotificationsService {
     try {
       console.log('Intentando obtener notificaciones reales del backend...')
       
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}`
-      
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+      // Obtener UUID del docente para pasarlo al proxy
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
+        return {
+          data: [],
+          success: false,
+          error: 'No hay docente autenticado'
+        }
       }
-
-      console.log(`Llamando al backend real: ${url}`)
+      
+      // Usar proxy de Next.js para evitar CORS
+      const url = `/api/teachers/me/notifications`
+      
+      console.log(`Llamando al proxy de notificaciones: ${url}`)
       
       const response = await fetch(url, {
         method: 'GET',
-        headers: headers
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
       })
 
       if (!response.ok) {
@@ -182,19 +188,25 @@ export class NotificationsService {
     }
 
     try {
-      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${notificationId}:read`
-      
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': '*/*',
-        'User-Agent': 'PostmanRuntime/7.49.0',
-        'Content-Type': 'application/json'
+      // Obtener UUID del docente para pasarlo al proxy
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
+        return {
+          data: undefined,
+          success: false,
+          error: 'No hay docente autenticado'
+        }
       }
 
+      // Usar proxy de Next.js para evitar CORS
+      const url = `/api/teachers/me/notifications/${notificationId}/read`
+      
       const response = await fetch(url, {
-        method: 'POST',
-        headers: headers
+        method: 'PATCH',
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
       })
 
       if (!response.ok) {

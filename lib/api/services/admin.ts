@@ -1,4 +1,5 @@
 import { Campus, ApiResponse } from '@/lib/types'
+import { authService } from './auth'
 
 // URL del proxy local para evitar CORS
 // En desarrollo: /api/sedes
@@ -25,12 +26,21 @@ export class AdminService {
     try {
       console.log('🏢 Obteniendo sedes...')
       
+      // Obtener el JWT del servicio de autenticación
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      }
+      
+      // Agregar Bearer Token si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       // Intentar primero con el proxy local (evita CORS)
       let response = await fetch(SEDES_PROXY_URL, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+        headers
       })
 
       // Si el proxy falla, intentar directamente (solo funciona en localhost)
@@ -38,9 +48,7 @@ export class AdminService {
         console.log('⚠️ Proxy falló, intentando conexión directa...')
         response = await fetch(`${SEDES_API_URL}/?skip=0&limit=100`, {
           method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          }
+          headers
         })
       }
 

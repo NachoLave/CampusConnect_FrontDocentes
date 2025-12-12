@@ -1,6 +1,7 @@
 import { Course, ApiResponse } from '@/lib/types'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
+import { authService } from './auth'
 
 export interface CalendarEvent {
   id: string
@@ -30,15 +31,20 @@ export class CalendarService {
   // Obtener eventos del calendario para una semana específica
   static async getWeeklyEvents(startDate: string, endDate: string): Promise<ApiResponse<CalendarEvent[]>> {
     try {
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': 'application/json'
+      // Usar proxy de Next.js para evitar CORS
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
+        throw new Error('No hay docente autenticado')
       }
-
-      // Obtener cursos del docente para ambos cuatrimestres
-      const coursesUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=2025Q2&includePrevious=true`
-      const coursesResponse = await fetch(coursesUrl, { method: 'GET', headers })
+      
+      const coursesUrl = `/api/teaching/courses/mine?term=2025Q2&includePrevious=true`
+      const coursesResponse = await fetch(coursesUrl, { 
+        method: 'GET', 
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
+      })
 
       if (!coursesResponse.ok) {
         throw new Error(`Error del servidor cursos: ${coursesResponse.status}`)
@@ -49,12 +55,17 @@ export class CalendarService {
   // Convertir cursos a eventos del calendario (incluye exámenes)
   const classEvents = await this.convertCoursesToEvents(courses, startDate, endDate)
 
-      // Obtener reservas de comedor
-      const canteenUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CANTEEN_RESERVATIONS}`
+      // Obtener reservas de comedor (ya usa proxy)
+      const canteenUrl = `/api/canteen/reservations?userId=${authService.getTeacherUUID()}`
       let canteenEvents: CalendarEvent[] = []
       
       try {
-        const canteenResponse = await fetch(canteenUrl, { method: 'GET', headers })
+        const canteenResponse = await fetch(canteenUrl, { 
+          method: 'GET', 
+          headers: {
+            'Accept': 'application/json'
+          }
+        })
         if (canteenResponse.ok) {
           const canteenData = await canteenResponse.json()
           canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
@@ -97,14 +108,25 @@ export class CalendarService {
         term = `${year}Q2`
       }
       
-      const coursesUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MY_COURSES}?term=${term}&includePrevious=false`
-      const headers = {
-        'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-        'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-        'Accept': 'application/json'
+      // Usar proxy de Next.js para evitar CORS
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
+        return {
+          data: null,
+          success: false,
+          error: 'No hay docente autenticado'
+        }
       }
       
-      const response = await fetch(coursesUrl, { method: 'GET', headers })
+      const coursesUrl = `/api/teaching/courses/mine?term=${term}&includePrevious=false`
+      
+      const response = await fetch(coursesUrl, { 
+        method: 'GET', 
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
+      })
       
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`)

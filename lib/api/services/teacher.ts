@@ -65,12 +65,16 @@ export class TeacherService {
    */
   static async getProposals(): Promise<ApiResponse<Proposal[]>> {
     try {
-      const headers = this.getHeaders()
-      console.log(`📋 Obteniendo propuestas para docente ${headers['X-Teacher-Id']}...`)
+      const teacherUUID = this.getTeacherUUID()
+      console.log(`📋 Obteniendo propuestas para docente ${teacherUUID}...`)
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/teachers/me/proposals`, {
         method: 'GET',
-        headers
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
       })
 
       if (!response.ok) {
@@ -130,12 +134,17 @@ export class TeacherService {
    */
   static async createProposal(request: CreateProposalRequest): Promise<ApiResponse<Proposal>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`📝 Creando propuesta para materia ${request.subjectId}...`)
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/teachers/me/proposals`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        },
         body: JSON.stringify(request)
       })
 
@@ -168,14 +177,18 @@ export class TeacherService {
    */
   static async deleteProposal(subjectId: number | string): Promise<ApiResponse<void>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`🗑️ Eliminando propuesta de materia ${subjectId}...`)
 
+      // Usar proxy de Next.js para evitar CORS
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}?subjectId=${subjectId}`,
+        `/api/teachers/me/proposals?subjectId=${subjectId}`,
         {
           method: 'DELETE',
-          headers
+          headers: {
+            'Accept': 'application/json',
+            'X-Teacher-Id': teacherUUID
+          }
         }
       )
 
@@ -205,14 +218,19 @@ export class TeacherService {
    */
   static async resendProposal(proposalId: number | string): Promise<ApiResponse<Proposal>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`🔄 Reenviando propuesta ${proposalId}...`)
 
+      // Usar proxy de Next.js para evitar CORS
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}`,
+        `/api/teachers/me/proposals/${proposalId}`,
         {
           method: 'PUT',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Teacher-Id': teacherUUID
+          },
           body: JSON.stringify({ decision: 'PENDIENTE' })
         }
       )
@@ -245,14 +263,18 @@ export class TeacherService {
    */
   static async toggleProposalAvailability(proposalId: number | string): Promise<ApiResponse<Proposal>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`🔄 Cambiando disponibilidad de propuesta ${proposalId}...`)
 
+      // Usar proxy de Next.js para evitar CORS
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}/${proposalId}/toggle-availability`,
+        `/api/teachers/me/proposals/${proposalId}`,
         {
           method: 'PATCH',
-          headers
+          headers: {
+            'Accept': 'application/json',
+            'X-Teacher-Id': teacherUUID
+          }
         }
       )
 
@@ -285,12 +307,16 @@ export class TeacherService {
    */
   static async getAvailability(): Promise<ApiResponse<AvailabilityBlock[]>> {
     try {
-      const headers = this.getHeaders()
-      console.log(`📅 Obteniendo disponibilidad para docente ${headers['X-Teacher-Id']}...`)
+      const teacherUUID = this.getTeacherUUID()
+      console.log(`📅 Obteniendo disponibilidad para docente ${teacherUUID}...`)
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/teachers/me/availability`, {
         method: 'GET',
-        headers
+        headers: {
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        }
       })
 
       if (!response.ok) {
@@ -372,12 +398,17 @@ export class TeacherService {
    */
   static async addAvailabilityBlock(request: CreateAvailabilityBlockRequest): Promise<ApiResponse<AvailabilityBlock>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`➕ Agregando bloque de disponibilidad...`)
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/teachers/me/availability`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Teacher-Id': teacherUUID
+        },
         body: JSON.stringify(request)
       })
 
@@ -409,14 +440,18 @@ export class TeacherService {
    */
   static async deleteAvailabilityBlock(blockId: number): Promise<ApiResponse<void>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`🗑️ Eliminando bloque ${blockId}...`)
 
+      // Usar proxy de Next.js para evitar CORS
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
+        `/api/teachers/me/availability/${blockId}`,
         {
           method: 'DELETE',
-          headers
+          headers: {
+            'Accept': 'application/json',
+            'X-Teacher-Id': teacherUUID
+          }
         }
       )
 
@@ -449,14 +484,19 @@ export class TeacherService {
     data: { campuses: string[], modality?: string }
   ): Promise<ApiResponse<void>> {
     try {
-      const headers = this.getHeaders()
+      const teacherUUID = this.getTeacherUUID()
       console.log(`✏️ Actualizando bloque ${blockId}...`)
 
+      // Usar proxy de Next.js para evitar CORS
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}/${blockId}`,
+        `/api/teachers/me/availability/${blockId}`,
         {
           method: 'PATCH',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Teacher-Id': teacherUUID
+          },
           body: JSON.stringify(data)
         }
       )

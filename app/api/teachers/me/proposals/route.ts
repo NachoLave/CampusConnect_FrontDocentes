@@ -1,0 +1,116 @@
+import { NextResponse } from 'next/server'
+import { API_CONFIG } from '@/lib/config/api'
+
+const BACKEND_BASE_URL = API_CONFIG.BASE_URL
+
+/**
+ * Proxy API para los endpoints de propuestas del módulo docente
+ * Resuelve problemas de CORS al hacer las peticiones desde el servidor
+ */
+export async function GET(request: Request) {
+  try {
+    // Leer X-Teacher-Id del header de la request (enviado desde el frontend)
+    const teacherUUID = request.headers.get('X-Teacher-Id')
+    if (!teacherUUID) {
+      return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
+    }
+
+    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Teacher-Id': teacherUUID
+      },
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data, { status: 200 })
+  } catch (error: any) {
+    console.error('Error in proposals proxy (GET):', error)
+    return NextResponse.json({ error: error?.message || 'Proxy error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    // Leer X-Teacher-Id del header de la request (enviado desde el frontend)
+    const teacherUUID = request.headers.get('X-Teacher-Id')
+    if (!teacherUUID) {
+      return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}`
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Teacher-Id': teacherUUID
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data, { status: 200 })
+  } catch (error: any) {
+    console.error('Error in proposals proxy (POST):', error)
+    return NextResponse.json({ error: error?.message || 'Proxy error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    // Leer X-Teacher-Id del header de la request (enviado desde el frontend)
+    const teacherUUID = request.headers.get('X-Teacher-Id')
+    if (!teacherUUID) {
+      return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const subjectId = searchParams.get('subjectId')
+    
+    if (!subjectId) {
+      return NextResponse.json({ error: 'Missing subjectId parameter' }, { status: 400 })
+    }
+
+    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_PROPOSALS}?subjectId=${subjectId}`
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Teacher-Id': teacherUUID
+      },
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error: any) {
+    console.error('Error in proposals proxy (DELETE):', error)
+    return NextResponse.json({ error: error?.message || 'Proxy error' }, { status: 500 })
+  }
+}
+
