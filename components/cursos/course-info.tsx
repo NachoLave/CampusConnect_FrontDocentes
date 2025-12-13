@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { CoursesService, mapBackendCourseToFrontend } from '@/lib/api/services/courses'
+import { CalendarService, ClaseIndividual } from '@/lib/api/services/calendar'
 import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
@@ -672,6 +673,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [gradesData])
 
   // Load grades from backend (cargar siempre para estadísticas, no solo cuando se abre la pestaña)
+  // Cargar calificaciones una sola vez al montar el componente (no al cambiar de pestaña)
   useEffect(() => {
     let mounted = true
     const loadGrades = async () => {
@@ -760,7 +762,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
     loadGrades()
     return () => { mounted = false }
-  }, [activeTab, courseId])
+  }, [courseId]) // Removido activeTab de las dependencias
 
   // Start with a minimal placeholder (do NOT show full mock data)
   const placeholderCourse = {
@@ -1227,24 +1229,61 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     const monthIdx = monthToIndex[monthName]
     if (monthIdx === undefined) return false
     const date = new Date(courseStartDate.getFullYear(), monthIdx, day)
-    // Verificar que esté en el rango Y que sea el día de cursada correcto
-    return date >= courseStartDate && date <= courseEndDate && date.getDay() === courseWeekday
+    // Verificar que esté en el rango (ya no verificamos courseWeekday porque usamos fechas reales)
+    return date >= courseStartDate && date <= courseEndDate
   }
 
   // --- CSV Preview (export) helpers ---
   // studentId es UUID string
+  // Calcular porcentaje de asistencia basado en TODAS las clases del curso (fechas reales)
   const computeAttendancePercentByStudent = (): Record<string, number> => {
     const totals: Record<string, { score: number; count: number }> = {}
-    const dateEntries = Object.values(attendanceData || {}) as Array<Record<string, "P" | "1/2" | "A">>
-    for (const perDate of dateEntries) {
-      for (const [studentId, status] of Object.entries(perDate)) {
-        const current = totals[studentId] ?? { score: 0, count: 0 }
-        current.count += 1
-        if (status === "P") current.score += 1
-        else if (status === "1/2") current.score += 0.5
-        totals[studentId] = current
+    
+    // Usar fechas reales de clases individuales si están disponibles, sino usar fechas teóricas
+    const datesToCheck = individualClasses.length > 0 
+      ? individualClasses.map(c => c.fecha_clase).filter(Boolean)
+      : allCourseDates.map(d => d.toISOString().split('T')[0])
+    
+    // Inicializar contadores para todos los estudiantes con todas las fechas
+    students.forEach((student) => {
+      const sid = String(student.id)
+      totals[sid] = { score: 0, count: datesToCheck.length }
+    })
+    
+    // Crear un mapa de fecha -> asistencia para acceso rápido
+    const attendanceByDate: Record<string, Record<string, "P" | "1/2" | "A">> = {}
+    const dateEntries = Object.entries(attendanceData || {})
+    for (const [dateKey, perDate] of dateEntries) {
+      // dateKey puede ser "Agosto-11" o "2025-08-11", normalizar
+      let normalizedDate = dateKey
+      if (dateKey.includes('-') && !dateKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Formato "Mes-día", convertir a YYYY-MM-DD
+        const [monthName, day] = dateKey.split('-')
+        const monthIdx = monthToIndex[monthName] ?? 0
+        const year = courseStartDate.getFullYear()
+        normalizedDate = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
       }
+      attendanceByDate[normalizedDate] = perDate as Record<string, "P" | "1/2" | "A">
     }
+    
+    // Para cada fecha de clase, verificar asistencia de cada estudiante
+    datesToCheck.forEach((dateStr) => {
+      const dateAttendance = attendanceByDate[dateStr] || {}
+      students.forEach((student) => {
+        const sid = String(student.id)
+        const status = dateAttendance[sid]
+        const current = totals[sid]
+        if (current) {
+          if (status === "P") {
+            current.score += 1
+          } else if (status === "1/2") {
+            current.score += 0.5
+          }
+          // Si no hay status o es "A", no suma puntos (pero cuenta como clase)
+        }
+      })
+    })
+    
     const result: Record<string, number> = {}
     for (const [studentId, { score, count }] of Object.entries(totals)) {
       result[studentId] = count > 0 ? Math.round((score / count) * 100) : 0
@@ -1474,40 +1513,98 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
   const courseWeekday = weekdayMap[(course.day || '').toUpperCase()] ?? 0
 
-  // Generar TODAS las fechas válidas del curso (día de cursada)
+  // Fechas reales de asistencia según backend (records), indexadas por mes -> días
+  const [attendanceRecordsByMonth, setAttendanceRecordsByMonth] = useState<Record<number, Set<number>>>({})
+  
+  // Clases individuales del curso (fechas reales de clases) - DECLARAR ANTES DE allCourseDates
+  const [individualClasses, setIndividualClasses] = useState<ClaseIndividual[]>([])
+  const [loadingClasses, setLoadingClasses] = useState(false)
+
+  // Generar TODAS las fechas válidas del curso - SOLO fechas reales de clases individuales
   const allCourseDates = useMemo(() => {
     const dates: Date[] = []
-    const current = new Date(courseStartDate)
-    
-    while (current <= courseEndDate) {
-      if (current.getDay() === courseWeekday) {
-        dates.push(new Date(current))
+    individualClasses.forEach((clase) => {
+      if (clase.fecha_clase) {
+        // Parsear fecha sin timezone para evitar problemas de día anterior
+        // fecha_clase viene como "2025-08-11" (YYYY-MM-DD)
+        const [year, month, day] = clase.fecha_clase.split('-').map(Number)
+        const dateObj = new Date(year, month - 1, day) // month es 0-indexed
+        if (!Number.isNaN(dateObj.getTime())) {
+          dates.push(dateObj)
+        }
       }
-      current.setDate(current.getDate() + 1)
-    }
-    
+    })
+    // Ordenar fechas
+    dates.sort((a, b) => a.getTime() - b.getTime())
     return dates
-  }, [courseStartDate, courseEndDate, courseWeekday])
+  }, [individualClasses])
 
   // Fecha seleccionada como objeto Date completo
   const [selectedDateObj, setSelectedDateObj] = useState<Date | null>(null)
 
   const availableMonthsIdx = useMemo(() => {
-    const monthsIdx: number[] = []
-    const start = new Date(courseStartDate.getFullYear(), courseStartDate.getMonth(), 1)
-    const end = new Date(courseEndDate.getFullYear(), courseEndDate.getMonth(), 1)
-    for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
-      monthsIdx.push(d.getMonth())
-    }
-    return monthsIdx
-  }, [courseStartDate, courseEndDate])
+    // Solo incluir meses que tengan clases reales
+    const monthsSet = new Set<number>()
+    individualClasses.forEach((clase) => {
+      if (clase.fecha_clase) {
+        const [y, m] = clase.fecha_clase.split('-').map(Number)
+        monthsSet.add(m - 1) // month es 0-indexed
+      }
+    })
+    return Array.from(monthsSet).sort((a, b) => a - b)
+  }, [individualClasses])
 
   const months = useMemo(() => availableMonthsIdx.map((m) => monthNamesEs[m]), [availableMonthsIdx])
 
-  // Fechas reales de asistencia según backend (records), indexadas por mes -> días
-  const [attendanceRecordsByMonth, setAttendanceRecordsByMonth] = useState<Record<number, Set<number>>>({})
+  // Cargar clases individuales del curso para obtener fechas reales
+  useEffect(() => {
+    let mounted = true
+    const loadClasses = async () => {
+      if (!course.uuid) return
+      
+      setLoadingClasses(true)
+      try {
+        // Usar el mismo método que CalendarService para obtener clases individuales
+        const token = authService.getToken()
+        const url = `/api/clases-individuales/curso/${course.uuid}?skip=0&limit=100`
+        const headers: Record<string, string> = {
+          'Accept': 'application/json'
+        }
+        
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers
+        })
 
-  // Cargar los registros de asistencia para conocer fechas reales existentes (cargar siempre para estadísticas)
+        if (!mounted) return
+
+        if (response.ok) {
+          const data = await response.json()
+          if (Array.isArray(data)) {
+            setIndividualClasses(data)
+          }
+        }
+      } catch (err) {
+        console.warn('Error obteniendo clases individuales:', err)
+      } finally {
+        if (mounted) {
+          setLoadingClasses(false)
+        }
+      }
+    }
+
+    if (course.uuid) {
+      loadClasses()
+    }
+    
+    return () => { mounted = false }
+  }, [course.uuid])
+
+  // Cargar los registros de asistencia una sola vez al montar el componente (no al cambiar de pestaña)
   useEffect(() => {
     let mounted = true
     const loadRecords = async () => {
@@ -1595,31 +1692,113 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
     loadRecords()
     return () => { mounted = false }
-  }, [activeTab, courseId])
+  }, [courseId]) // Removido activeTab de las dependencias
+
+  // Mapear tipo de clase a texto legible (sin el nombre del curso)
+  const mapClaseTypeToLabel = (tipo: string): string => {
+    switch (tipo) {
+      case 'regular':
+        return 'Clase Regular'
+      case 'parcial_1':
+        return 'Primer Parcial'
+      case 'parcial_2':
+        return 'Segundo Parcial'
+      case 'recuperatorio':
+        return 'Recuperatorio'
+      case 'final':
+        return 'Examen Final'
+      default:
+        return 'Clase'
+    }
+  }
+
+  // Mapa de fecha (YYYY-MM-DD) -> tipo de clase
+  const classTypeByDate = useMemo(() => {
+    const map: Record<string, string> = {}
+    individualClasses.forEach((clase) => {
+      if (clase.fecha_clase) {
+        // Usar fecha_clase directamente como key (ya viene en formato YYYY-MM-DD)
+        map[clase.fecha_clase] = clase.tipo
+      }
+    })
+    return map
+  }, [individualClasses])
+
+  // Mapa de fecha (mes-día) -> tipo de clase para el mes actual
+  const classTypeByMonthDay = useMemo(() => {
+    const map: Record<string, string> = {}
+    const monthIdx = monthToIndex[selectedMonth] ?? courseStartDate.getMonth()
+    const year = courseStartDate.getFullYear()
+    
+    individualClasses.forEach((clase) => {
+      if (clase.fecha_clase) {
+        // Parsear fecha sin timezone
+        const [y, m, d] = clase.fecha_clase.split('-').map(Number)
+        const dateObj = new Date(y, m - 1, d) // month es 0-indexed
+        if (dateObj.getMonth() === monthIdx && dateObj.getFullYear() === year) {
+          const day = dateObj.getDate()
+          map[day] = clase.tipo
+        }
+      }
+    })
+    return map
+  }, [individualClasses, selectedMonth, courseStartDate])
 
   const getDatesForMonthIdx = (monthIdx: number): number[] => {
     const year = courseStartDate.getFullYear()
-    const first = new Date(year, monthIdx, 1)
-    const last = new Date(year, monthIdx + 1, 0)
-    const days: number[] = []
-    // Solo mostrar días que coincidan con el día de cursada (ej: solo Lunes)
-    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-      if (d.getDay() === courseWeekday && d >= courseStartDate && d <= courseEndDate) {
-        days.push(d.getDate())
+    const datesSet = new Set<number>()
+    // Solo mostrar días que existen en las clases reales
+    individualClasses.forEach((clase) => {
+      if (clase.fecha_clase) {
+        // Parsear fecha sin timezone para evitar problemas de día anterior
+        const [y, m, d] = clase.fecha_clase.split('-').map(Number)
+        const dateObj = new Date(y, m - 1, d) // month es 0-indexed
+        if (dateObj.getMonth() === monthIdx && dateObj.getFullYear() === year) {
+          datesSet.add(dateObj.getDate())
+        }
       }
-    }
-    return days
+    })
+    return Array.from(datesSet).sort((a, b) => a - b)
   }
 
   const dates = useMemo(() => {
     const idx = monthToIndex[selectedMonth] ?? courseStartDate.getMonth()
     return getDatesForMonthIdx(idx)
-  }, [selectedMonth, courseStartDate, courseEndDate, attendanceRecordsByMonth])
+  }, [selectedMonth, courseStartDate, courseEndDate, attendanceRecordsByMonth, individualClasses])
 
-  // Seleccionabilidad: clases pasadas y la de esta semana
+  // Seleccionabilidad: clases pasadas y la de hoy (solo si ya pasó la hora de la clase)
   const getThisWeekClassDate = (): Date => {
     const today = new Date()
-    // Inicio de semana (lunes)
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    
+    // Extraer hora de inicio de la clase del curso (ej: "18:00" de "18:00 - 22:00")
+    const timeMatch = course.schedule?.match(/(\d{1,2}):\d{2}/)
+    const classHour = timeMatch ? parseInt(timeMatch[1], 10) : 18 // Default 18hs si no se encuentra
+    const classMinute = timeMatch ? parseInt(course.schedule.match(/\d{1,2}:(\d{2})/)?.[1] || '0', 10) : 0
+    
+    // Crear fecha/hora de la clase de hoy
+    const todayClassTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), classHour, classMinute)
+    
+    // Verificar si hay una clase hoy en allCourseDates
+    const hasClassToday = allCourseDates.some(date => 
+      date.getFullYear() === todayDate.getFullYear() &&
+      date.getMonth() === todayDate.getMonth() &&
+      date.getDate() === todayDate.getDate()
+    )
+    
+    // Si hay clase hoy
+    if (hasClassToday) {
+      // Si ya pasó la hora de la clase, permitir seleccionar hoy
+      if (today.getTime() >= todayClassTime.getTime()) {
+        return todayDate
+      }
+      // Si aún no es la hora, retornar ayer para bloquear hoy
+      const yesterday = new Date(todayDate)
+      yesterday.setDate(yesterday.getDate() - 1)
+      return yesterday
+    }
+    
+    // Para otros días, usar la lógica anterior (clase de esta semana)
     const day = today.getDay() // 0 dom .. 6 sab
     const diffToMonday = (day + 6) % 7
     const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diffToMonday)
@@ -1630,26 +1809,25 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     return target
   }
 
-  // Cargar asistencia de la fecha seleccionada cada vez que cambia la fecha
+  // Cargar TODAS las asistencias de TODAS las fechas de una vez al entrar a la pestaña de asistencia
   useEffect(() => {
+    if (activeTab !== 'Asistencia') {
+      setIsLoadingAttendance(false)
+      return
+    }
+    
+    // Si no hay fechas aún o aún se están cargando las clases, mostrar loading
+    if (allCourseDates.length === 0 || loadingClasses) {
+      setIsLoadingAttendance(true)
+      return
+    }
+    
     let mounted = true
-    const loadByDate = async () => {
-      if (activeTab !== 'Asistencia') return
-      if (!selectedDateObj) return
-      
-      // Mostrar loading
+    const loadAllAttendance = async () => {
+      // Mostrar loading desde el principio
       setIsLoadingAttendance(true)
       
       try {
-        const yyyy = selectedDateObj.getFullYear()
-        const mm = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
-        const dd = String(selectedDateObj.getDate()).padStart(2, '0')
-        const iso = `${yyyy}-${mm}-${dd}`
-        const resp = await CoursesService.getAttendanceByDate(getCourseIdForApi(), iso)
-        if (!mounted) return
-
-        const key = `${monthNamesEs[selectedDateObj.getMonth()]}-${selectedDateObj.getDate()}`
-
         const normalize = (raw: any): "P" | "1/2" | "A" | null => {
           if (raw === null || raw === undefined) return null
           const s = String(raw).trim().toUpperCase()
@@ -1659,27 +1837,53 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           return null
         }
 
-        // studentId es UUID string, no número
-        const nextForDate: { [key: string]: "P" | "1/2" | "A" } = {}
-        if (resp && resp.success && resp.data) {
-          const payload = resp.data as any
-          const items: any[] = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload.flatMap((r: any) => r?.items || []) : []
-          
-          for (const it of items) {
-            const mapped = normalize((it as any).status)
-            const sid = String((it as any).studentId)  // studentId es UUID string
-            if (mapped && sid) {
-              nextForDate[sid] = mapped
+        // Cargar asistencia para todas las fechas del curso en paralelo
+        const attendancePromises = allCourseDates.map(async (dateObj) => {
+          try {
+            const iso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`
+            const key = `${monthNamesEs[dateObj.getMonth()]}-${dateObj.getDate()}`
+            
+            const resp = await CoursesService.getAttendanceByDate(getCourseIdForApi(), iso)
+            if (!mounted) return null
+            
+            if (resp && resp.success && resp.data) {
+              const payload = resp.data as any
+              const items: any[] = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload.flatMap((r: any) => r?.items || []) : []
+              
+              const dateData: { [key: string]: "P" | "1/2" | "A" } = {}
+              for (const it of items) {
+                const mapped = normalize((it as any).status)
+                const sid = String((it as any).studentId)  // studentId es UUID string
+                if (mapped && sid) {
+                  dateData[sid] = mapped
+                }
+              }
+              
+              if (Object.keys(dateData).length > 0) {
+                return { key, iso, dateData }
+              }
             }
+          } catch (err) {
+            // Ignorar errores individuales
+          }
+          return null
+        })
+        
+        const results = await Promise.all(attendancePromises)
+        if (!mounted) return
+        
+        const newAttendanceData: { [key: string]: { [key: string]: "P" | "1/2" | "A" } } = {}
+        for (const result of results) {
+          if (result) {
+            newAttendanceData[result.key] = result.dateData
+            newAttendanceData[result.iso] = result.dateData // También guardar con formato ISO
           }
         }
-
-        setAttendanceData((prev) => ({
-          ...prev,
-          [key]: nextForDate
-        }))
+        
+        setAttendanceData(prev => ({ ...prev, ...newAttendanceData }))
         setHasUnsavedAttendance(false)
       } catch (err) {
+        console.error('Error cargando asistencias:', err)
       } finally {
         if (mounted) {
           setIsLoadingAttendance(false)
@@ -1687,28 +1891,45 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       }
     }
 
-    loadByDate()
+    loadAllAttendance()
     return () => { mounted = false }
-  }, [activeTab, selectedDateObj, courseId])
+  }, [activeTab, allCourseDates, courseId, loadingClasses])
 
   const isDateSelectable = (monthName: string, day: number): boolean => {
     if (!isDateInCourseRange(monthName, day)) return false
     const year = courseStartDate.getFullYear()
-    const d = new Date(year, monthToIndex[monthName] ?? 0, day)
+    const monthIdx = monthToIndex[monthName] ?? courseStartDate.getMonth()
+    const d = new Date(year, monthIdx, day)
+    
     const limit = getThisWeekClassDate()
     // Si la fecha existe en los registros del backend, permitir seleccionarla siempre
-    const monthIdx = monthToIndex[monthName] ?? d.getMonth()
     const extra = attendanceRecordsByMonth[monthIdx]
     if (extra && extra.has(day)) return true
+    // Solo bloquear fechas futuras (después de esta semana)
     return d.getTime() <= limit.getTime()
   }
 
   const isDateObjSelectable = (dateObj: Date): boolean => {
+    const today = new Date()
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const dateObjDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate())
+    
+    // Si es hoy, verificar la hora
+    if (dateObjDate.getTime() === todayDate.getTime()) {
+      const timeMatch = course.schedule?.match(/(\d{1,2}):\d{2}/)
+      const classHour = timeMatch ? parseInt(timeMatch[1], 10) : 18
+      const classMinute = timeMatch ? parseInt(course.schedule.match(/\d{1,2}:(\d{2})/)?.[1] || '0', 10) : 0
+      const todayClassTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), classHour, classMinute)
+      // Solo permitir si ya pasó la hora de la clase
+      return today.getTime() >= todayClassTime.getTime()
+    }
+    
+    // Para otros días, usar la lógica normal
     const limit = getThisWeekClassDate()
     return dateObj.getTime() <= limit.getTime()
   }
 
-  // Navegar entre fechas (día por día)
+  // Navegar entre fechas (día por día) - permite navegar a fechas futuras para verlas, aunque estén bloqueadas
   const navigateDate = (direction: "prev" | "next") => {
     if (!selectedDateObj) return
     
@@ -1724,13 +1945,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       setSelectedMonth(monthNamesEs[newDate.getMonth()])
       setSelectedDate(newDate.getDate())
     } else if (direction === "next" && currentIndex < allCourseDates.length - 1) {
+      // Permitir navegar a fechas futuras (aunque estén bloqueadas) para poder verlas
       const newDate = allCourseDates[currentIndex + 1]
-      // Solo navegar si la fecha es seleccionable
-      if (isDateObjSelectable(newDate)) {
-        setSelectedDateObj(newDate)
-        setSelectedMonth(monthNamesEs[newDate.getMonth()])
-        setSelectedDate(newDate.getDate())
-      }
+      setSelectedDateObj(newDate)
+      setSelectedMonth(monthNamesEs[newDate.getMonth()])
+      setSelectedDate(newDate.getDate())
     }
   }
 
@@ -2867,8 +3086,31 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         {activeTab === "Asistencia" && (
           <div className="space-y-4 lg:space-y-6">
-            <div className="bg-white rounded-lg p-4 lg:p-6">
-              <h2 className="text-lg lg:text-xl font-semibold mb-4 lg:mb-6">Carga de Asistencia</h2>
+            {isLoadingAttendance ? (
+              <div className="bg-white rounded-lg p-4 lg:p-6">
+                <Skeleton className="h-6 lg:h-7 w-48 mb-4 lg:mb-6" />
+                <div className="space-y-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-6 w-32" />
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <Skeleton className="w-8 h-8 rounded-full" />
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-4 w-48" />
+                        <div className="flex gap-2">
+                          <Skeleton className="w-8 h-8 rounded-full" />
+                          <Skeleton className="w-8 h-8 rounded-full" />
+                          <Skeleton className="w-8 h-8 rounded-full" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg p-4 lg:p-6">
+                <h2 className="text-lg lg:text-xl font-semibold mb-4 lg:mb-6">Carga de Asistencia</h2>
 
               <div className="mb-4 lg:mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -2899,10 +3141,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                               onClick={() => {
                                 if (selectable) {
                                   setSelectedDate(date)
-                                  // Actualizar selectedDateObj
+                                  // Actualizar selectedDateObj - buscar la fecha exacta en allCourseDates
                                   const year = courseStartDate.getFullYear()
-                                  const newDateObj = new Date(year, monthToIndex[selectedMonth] ?? 0, date)
-                                  setSelectedDateObj(newDateObj)
+                                  const monthIdx = monthToIndex[selectedMonth] ?? courseStartDate.getMonth()
+                                  const dateObj = new Date(year, monthIdx, date)
+                                  const exactDate = allCourseDates.find(d => 
+                                    d.getFullYear() === dateObj.getFullYear() &&
+                                    d.getMonth() === dateObj.getMonth() &&
+                                    d.getDate() === dateObj.getDate()
+                                  )
+                                  if (exactDate) {
+                                    setSelectedDateObj(exactDate)
+                                  }
                                 }
                               }}
                               disabled={!selectable}
@@ -2920,12 +3170,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
                       <button
                         onClick={() => navigateDate("next")}
-                        disabled={
-                          !selectedDateObj || 
-                          allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) === allCourseDates.length - 1 ||
-                          (allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) < allCourseDates.length - 1 &&
-                           !isDateObjSelectable(allCourseDates[allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) + 1]))
-                        }
+                        disabled={!selectedDateObj || allCourseDates.findIndex(d => d.getTime() === selectedDateObj.getTime()) === allCourseDates.length - 1}
                         className="p-0.5 lg:p-1 mx-0.5 sm:mx-1 lg:mx-2 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                         title="Clase siguiente"
                       >
@@ -2934,7 +3179,26 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                     </div>
                   </div>
                 </div>
+                
               </div>
+              
+              {/* Tipo de clase para la fecha seleccionada - Diseño más sutil e integrado */}
+              {selectedDateObj && (() => {
+                // Formatear fecha como YYYY-MM-DD para buscar en classTypeByDate
+                const year = selectedDateObj.getFullYear()
+                const month = String(selectedDateObj.getMonth() + 1).padStart(2, '0')
+                const day = String(selectedDateObj.getDate()).padStart(2, '0')
+                const selectedDateStr = `${year}-${month}-${day}`
+                const selectedClassType = classTypeByDate[selectedDateStr]
+                const selectedClassTypeLabel = selectedClassType ? mapClaseTypeToLabel(selectedClassType) : null
+                
+                return selectedClassTypeLabel ? (
+                  <div className="mt-2 mb-3 lg:mb-4">
+                    <span className="text-xs lg:text-sm text-gray-500 font-medium">Tipo de Clase: </span>
+                    <span className="text-xs lg:text-sm text-gray-700 font-semibold">{selectedClassTypeLabel}</span>
+                  </div>
+                ) : null
+              })()}
 
               {/* Students Section */}
               <div className="mb-4">
@@ -3164,7 +3428,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                   </table>
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 

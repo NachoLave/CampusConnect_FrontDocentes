@@ -34,7 +34,7 @@ export interface CanteenReservation {
   timeRange?: string // Horario formateado (HH:mm)
   cost: number // Costo de la reserva
   sede?: string // Nombre de la sede
-  status: 'Finalizado' | 'Cancelado' | 'Pendiente' | 'Activa'
+  status: 'Activa' | 'Confirmada' | 'Cancelada' | 'Ausente'
 }
 
 // Helper para crear un fetch con timeout
@@ -63,15 +63,14 @@ function mapStatus(backendStatus: string): CanteenReservation['status'] {
   const statusMap: Record<string, CanteenReservation['status']> = {
     'ACTIVA': 'Activa',
     'ACTIVO': 'Activa',
-    'CONSUMIDO': 'Finalizado',
-    'FINALIZADO': 'Finalizado',
-    'CANCELADO': 'Cancelado',
-    'CANCELADA': 'Cancelado',
-    'PENDIENTE': 'Pendiente',
-    'RESERVADO': 'Pendiente'
+    'CONFIRMADA': 'Confirmada',
+    'CONFIRMADO': 'Confirmada',
+    'CANCELADA': 'Cancelada',
+    'CANCELADO': 'Cancelada',
+    'AUSENTE': 'Ausente'
   }
   
-  return statusMap[backendStatus.toUpperCase()] || 'Pendiente'
+  return statusMap[backendStatus.toUpperCase()] || 'Activa'
 }
 
 // Función para mapear mealTime a formato legible

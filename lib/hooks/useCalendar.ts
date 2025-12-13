@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { CalendarService, CalendarEvent, NextClass } from '@/lib/api/services/calendar'
+import { CalendarService, CalendarEvent, NextClass, CalendarEventsResponse } from '@/lib/api/services/calendar'
 import { LoadingState } from '@/lib/types'
 
 export function useWeeklyCalendar(startDate: string, endDate: string) {
@@ -9,16 +9,31 @@ export function useWeeklyCalendar(startDate: string, endDate: string) {
     isLoading: true,
     error: null
   })
+  const [eventTypeErrors, setEventTypeErrors] = useState<{ classes?: string; canteen?: string; events?: string }>({})
 
   const fetchEvents = useCallback(async () => {
     setLoadingState({ isLoading: true, error: null })
 
     try {
-      const response = await CalendarService.getWeeklyEvents(startDate, endDate)
+      const response = await CalendarService.getWeeklyEvents(startDate, endDate) as CalendarEventsResponse
 
       if (response.success && response.data) {
         setEvents(response.data)
+        // Guardar errores por tipo si existen
+        if (response.errors) {
+          setEventTypeErrors(response.errors)
+          // Auto-ocultar errores después de 10 segundos
+          setTimeout(() => {
+            setEventTypeErrors({})
+          }, 10000)
+        } else {
+          setEventTypeErrors({})
+        }
       } else {
+        // Aún así, si hay datos parciales, mostrarlos
+        if (response.data && response.data.length > 0) {
+          setEvents(response.data)
+        }
         setLoadingState({
           isLoading: false,
           error: response.error || 'Error al cargar eventos del calendario'
@@ -44,6 +59,7 @@ export function useWeeklyCalendar(startDate: string, endDate: string) {
     events,
     isLoading: loadingState.isLoading,
     error: loadingState.error,
+    eventTypeErrors,
     refetch: fetchEvents
   }
 }

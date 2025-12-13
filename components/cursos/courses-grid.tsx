@@ -27,13 +27,17 @@ type CoursesGridProps = {
   externalSelectedPeriod?: string
   externalSelectedSedes?: string[]
   externalSelectedDays?: string[]
+  externalSelectedModalities?: string[]
   onChangeSedes?: (sedes: string[]) => void
   onChangeDays?: (days: string[]) => void
+  onChangeModalities?: (modalities: string[]) => void
   onAvailableSedesChange?: (sedes: string[]) => void
   onAvailableDaysChange?: (days: string[]) => void
+  onAvailablePeriodsChange?: (periods: string[]) => void
+  onAvailableModalitiesChange?: (modalities: string[]) => void
 }
 
-export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays, onChangeSedes, onChangeDays, onAvailableSedesChange, onAvailableDaysChange }: CoursesGridProps) {
+export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, externalSelectedDays, externalSelectedModalities, onChangeSedes, onChangeDays, onChangeModalities, onAvailableSedesChange, onAvailableDaysChange, onAvailablePeriodsChange, onAvailableModalitiesChange }: CoursesGridProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [showSedeDropdown, setShowSedeDropdown] = useState(false)
   const [showDayDropdown, setShowDayDropdown] = useState(false)
@@ -43,6 +47,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   const selectedPeriod = externalSelectedPeriod ?? "Todos"
   const selectedSedes = externalSelectedSedes ?? []
   const selectedDays = externalSelectedDays ?? []
+  const selectedModalities = externalSelectedModalities ?? []
 
   // Obtener todos los cursos del docente desde la API externa
   const { courses: allCourses, isLoading, error, refetch } = useCourses()
@@ -57,6 +62,21 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
   const sedes = availableSedes
   const days = availableDays
 
+  // Obtener modalidades disponibles desde los cursos
+  const availableModalities = useMemo(() => {
+    const modalities = new Set<string>()
+    allCourses.forEach((course) => {
+      if (course.modality) {
+        modalities.add(course.modality.toUpperCase())
+      } else if (course.isVirtual) {
+        modalities.add('VIRTUAL')
+      } else {
+        modalities.add('PRESENCIAL')
+      }
+    })
+    return Array.from(modalities).sort()
+  }, [allCourses])
+
   // Pasar datos dinámicos al componente padre
   useEffect(() => {
     if (onAvailableSedesChange) {
@@ -65,12 +85,15 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     if (onAvailableDaysChange) {
       onAvailableDaysChange(availableDays)
     }
-  }, [availableSedes, availableDays, onAvailableSedesChange, onAvailableDaysChange])
+    if (onAvailableModalitiesChange) {
+      onAvailableModalitiesChange(availableModalities)
+    }
+  }, [availableSedes, availableDays, availableModalities, onAvailableSedesChange, onAvailableDaysChange, onAvailableModalitiesChange])
 
   const periods = useMemo(() => {
     const uniquePeriods = [...new Set(allCourses.map((course) => course.period))]
     const currentYear = new Date().getFullYear().toString()
-    // Ordenar: primero año actual (2do, luego 1er), luego años anteriores descendente
+    // Ordenar: primero año actual (2do, luego 1er, luego Verano), luego años anteriores descendente
     return uniquePeriods.sort((a, b) => {
       const aYear = (a.match(/\d{4}/)?.[0] ?? "0")
       const bYear = (b.match(/\d{4}/)?.[0] ?? "0")
@@ -79,11 +102,21 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       if (aIsCurrent && !bIsCurrent) return -1
       if (!aIsCurrent && bIsCurrent) return 1
       if (aYear !== bYear) return Number(bYear) - Number(aYear)
-      if (a.includes("2do") && b.includes("1er")) return -1
-      if (a.includes("1er") && b.includes("2do")) return 1
+      // Ordenar dentro del mismo año: 2do, 1er, Verano
+      if (a.includes("2do") && !b.includes("2do")) return -1
+      if (!a.includes("2do") && b.includes("2do")) return 1
+      if (a.includes("1er") && b.includes("Verano")) return -1
+      if (a.includes("Verano") && b.includes("1er")) return 1
       return a.localeCompare(b)
     })
   }, [allCourses])
+
+  // Pasar períodos disponibles al componente padre
+  useEffect(() => {
+    if (onAvailablePeriodsChange) {
+      onAvailablePeriodsChange(periods)
+    }
+  }, [periods, onAvailablePeriodsChange])
 
   // Cursos del período actual (para el contador)
   const coursesInPeriod = useMemo(() => {
@@ -109,7 +142,11 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       
       const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
 
-      const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod
+      // Filtro de modalidad
+      const courseModality = course.modality?.toUpperCase() || (course.isVirtual ? 'VIRTUAL' : 'PRESENCIAL')
+      const matchesModality = selectedModalities.length === 0 || selectedModalities.some(mod => mod.toUpperCase() === courseModality)
+
+      const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod && matchesModality
 
       return matches
     })
@@ -120,7 +157,7 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       if (dayComparison !== 0) return dayComparison
       return shiftOrder[a.shift as keyof typeof shiftOrder] - shiftOrder[b.shift as keyof typeof shiftOrder]
     })
-  }, [allCourses, searchTerm, selectedSedes, selectedDays, selectedPeriod])
+  }, [allCourses, searchTerm, selectedSedes, selectedDays, selectedPeriod, selectedModalities])
 
   const resetFilters = () => {
     setSearchTerm("")
@@ -128,6 +165,9 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
     setShowDayDropdown(false)
     setShowPeriodDropdown(false)
     // Los filtros externos se resetean desde la página padre
+    if (onChangeSedes) onChangeSedes([])
+    if (onChangeDays) onChangeDays([])
+    if (onChangeModalities) onChangeModalities([])
   }
 
   // Cerrar dropdowns cuando se hace clic fuera

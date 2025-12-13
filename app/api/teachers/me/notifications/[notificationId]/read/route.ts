@@ -17,7 +17,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
     }
 
-    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${params.notificationId}:read`
+    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${params.notificationId}/read`
+    
+    console.log(`[Notifications Proxy PATCH] Calling backend: ${url} with X-Teacher-Id: ${teacherUUID}`)
     
     const response = await fetch(url, {
       method: 'PATCH',
@@ -29,8 +31,11 @@ export async function PATCH(
       cache: 'no-store'
     })
 
+    console.log(`[Notifications Proxy PATCH] Backend response status: ${response.status}`)
+
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`[Notifications Proxy PATCH] Backend error (${response.status}):`, errorText)
       return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
     }
 

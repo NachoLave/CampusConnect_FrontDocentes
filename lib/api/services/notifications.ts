@@ -17,12 +17,13 @@ export interface Notification {
 
 // Interfaz para la respuesta del backend
 interface BackendNotification {
-  notificationId: number
+  id: string
   title: string
   message: string
-  link?: string
+  link?: string | null
   read: boolean
   createdAt: string
+  type?: string | null
 }
 
 export class NotificationsService {
@@ -53,13 +54,13 @@ export class NotificationsService {
     })
 
     return {
-      id: backendNotif.notificationId.toString(),
+      id: backendNotif.id,
       type,
       title: backendNotif.title,
       message: backendNotif.message,
       time,
       actionText: backendNotif.link ? "Ver más" : undefined,
-      link: backendNotif.link,
+      link: backendNotif.link || null,
       isRead: backendNotif.read
     }
   }
@@ -128,13 +129,16 @@ export class NotificationsService {
       
       console.log(`Llamando al proxy de notificaciones: ${url}`)
       
+      // Usar cache: 'no-store' y priority: 'high' para cargar lo más rápido posible
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'X-Teacher-Id': teacherUUID
-        }
-      })
+        },
+        cache: 'no-store', // No cachear para obtener datos frescos
+        priority: 'high' // Prioridad alta para cargar rápido
+      } as RequestInit)
 
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`)
@@ -144,9 +148,12 @@ export class NotificationsService {
       console.log('Notificaciones obtenidas del backend real:', data)
       
       // Convertir las notificaciones del backend al formato del frontend
-      const convertedNotifications = data.map((backendNotif: BackendNotification) => 
-        this.convertBackendNotification(backendNotif)
-      )
+      // Filtrar solo las no leídas (read: false)
+      const convertedNotifications = data
+        .filter((backendNotif: BackendNotification) => !backendNotif.read)
+        .map((backendNotif: BackendNotification) => 
+          this.convertBackendNotification(backendNotif)
+        )
       
       return {
         data: convertedNotifications,
@@ -205,12 +212,14 @@ export class NotificationsService {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
           'X-Teacher-Id': teacherUUID
         }
       })
 
       if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
+        const errorText = await response.text()
+        throw new Error(`Error del servidor: ${response.status} - ${errorText}`)
       }
 
       return {

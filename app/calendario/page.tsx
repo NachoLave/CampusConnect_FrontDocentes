@@ -6,9 +6,9 @@ import coursesData from "@/lib/data/courses.json"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Clock, ChevronLeft, ChevronRight } from "lucide-react"
+import { MapPin, Clock, ChevronLeft, ChevronRight, X, AlertTriangle } from "lucide-react"
 import { es } from "date-fns/locale/es"
-import { CalendarService, CalendarEvent as BackendCalendarEvent } from '@/lib/api/services/calendar'
+import { CalendarService, CalendarEvent as BackendCalendarEvent, CalendarEventsResponse } from '@/lib/api/services/calendar'
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -246,7 +246,8 @@ export default function CalendarioPage() {
   const [backendEvents, setBackendEvents] = useState<BackendCalendarEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(true) // Iniciar en true para mostrar skeleton desde el primer render
   const [eventsError, setEventsError] = useState<string | null>(null)
-  const [fetchedMonths, setFetchedMonths] = useState<Set<string>>(new Set()) // Track de meses ya fetched
+  const [fetchedMonths, setFetchedMonths] = useState<Set<string>>(new Set()) // Track de si ya se cargaron todos los eventos
+  const [eventTypeErrors, setEventTypeErrors] = useState<{ classes?: string; canteen?: string; events?: string }>({})
   const [filters, setFilters] = useState({
     clases: true,
     examenes: true,
@@ -338,8 +339,9 @@ export default function CalendarioPage() {
   const mapBackendType = (t: BackendCalendarEvent['type'], eventId?: string, title?: string): string => {
     if (t === 'class') return 'clase'
     if (t === 'exam') return 'examen'
-    // Detectar eventos de comedor por el id o título
-    if (eventId?.startsWith('canteen-') || title?.toLowerCase().includes('comedor')) return 'comedor'
+    // Detectar eventos de comedor por el id, tipo o título
+    if (t === 'canteen' || eventId?.startsWith('canteen-') || title?.toLowerCase().includes('comedor')) return 'comedor'
+    if (t === 'event') return 'evento'
     if (t === 'meeting') return 'evento'
     return 'evento'
   }
@@ -369,6 +371,7 @@ export default function CalendarioPage() {
       return {
         id: e.id,
         courseId: (e as any).courseId,
+        courseUUID: (e as any).courseUUID,
         type: mappedType,
         title: e.title,
         date: eventDate,
@@ -401,6 +404,17 @@ export default function CalendarioPage() {
   const handleViewMore = (event: any) => {
     if (!event) return
     if (event.type === 'clase' || event.type === 'examen') {
+      // Buscar el evento original en backendEvents para obtener courseUUID
+      const backendEvent = backendEvents.find(e => e.id === event.id)
+      const courseUUID = (backendEvent as any)?.courseUUID
+      
+      // Preferir UUID si está disponible
+      if (courseUUID) {
+        router.push(`/cursos/${courseUUID}`)
+        return
+      }
+      
+      // Fallback: usar courseId numérico
       const id = event.courseId || event.courseId === 0 ? String(event.courseId) : null
       if (id && id !== '0') {
         router.push(`/cursos/${id}`)
@@ -426,79 +440,68 @@ export default function CalendarioPage() {
     router.push('/calendario')
   }
 
-  // Fetch backend events for the two-month window (currentMonth and next month)
+  // Fetch ALL backend events al cargar la página (rango amplio: año completo)
   useEffect(() => {
-    const fetchEvents = async () => {
-      // Generar claves de los meses que necesitamos
-      const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-      const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
-      const currentKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth()}`
-      const prevKey = `${prevMonth.getFullYear()}-${prevMonth.getMonth()}`
-      const nextKey = `${nextMonth.getFullYear()}-${nextMonth.getMonth()}`
-      
-      // Verificar si ya tenemos todos los meses necesarios
-      const hasAllMonths = fetchedMonths.has(prevKey) && fetchedMonths.has(currentKey) && fetchedMonths.has(nextKey)
-      
-      if (hasAllMonths) {
-        // Ya tenemos los datos, no hacer fetch
+    const fetchAllEvents = async () => {
+      // Si ya cargamos todos los eventos, no volver a cargar
+      if (fetchedMonths.has('all-events-loaded')) {
         return
       }
       
-      // Solo mostrar loading en la primera carga
-      if (fetchedMonths.size === 0) {
-        setLoadingEvents(true)
-      }
-      
+      // Mostrar loading solo en la primera carga
+      setLoadingEvents(true)
       setEventsError(null)
+      
       try {
-        // Fetch a slightly wider window (previous month -> next month) to avoid missing events
-        const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-        const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 0) // last day of next month
+        // Cargar eventos para todo el año actual (desde enero hasta diciembre)
+        const currentYear = new Date().getFullYear()
+        const from = new Date(currentYear, 0, 1) // 1 de enero
+        const to = new Date(currentYear, 11, 31) // 31 de diciembre
+        
         const fromIso = from.toISOString().split('T')[0]
         const toIso = to.toISOString().split('T')[0]
-        const res = await CalendarService.getWeeklyEvents(fromIso, toIso)
+        
+        console.log(`Cargando todos los eventos del año ${currentYear}: ${fromIso} a ${toIso}`)
+        
+        const res = await CalendarService.getWeeklyEvents(fromIso, toIso) as CalendarEventsResponse
+        
         if (res.success && Array.isArray(res.data)) {
-          // Agregar nuevos eventos sin borrar los existentes
-          setBackendEvents(prevEvents => {
-            // Crear un mapa de eventos existentes por id
-            const eventsMap = new Map(prevEvents.map(e => [e.id, e]))
-            // Agregar/actualizar con los nuevos eventos
-            res.data.forEach((e: BackendCalendarEvent) => {
-              eventsMap.set(e.id, e)
-            })
-            return Array.from(eventsMap.values())
-          })
+          console.log(`Eventos cargados: ${res.data.length}`)
+          setBackendEvents(res.data)
           
-          // Marcar los meses como fetched
+          // Guardar errores por tipo si existen
+          if (res.errors) {
+            setEventTypeErrors(res.errors)
+            // Auto-ocultar errores después de 10 segundos
+            setTimeout(() => {
+              setEventTypeErrors({})
+            }, 10000)
+          } else {
+            setEventTypeErrors({})
+          }
+          
+          // Marcar que ya cargamos todos los eventos
           setFetchedMonths(prev => {
             const newSet = new Set(prev)
-            newSet.add(prevKey)
-            newSet.add(currentKey)
-            newSet.add(nextKey)
+            newSet.add('all-events-loaded')
             return newSet
           })
         } else {
-          // Solo establecer error si no hay eventos previos
-          if (fetchedMonths.size === 0) {
-            setBackendEvents([])
-            setEventsError(res.message || 'No events')
-          }
+          setBackendEvents([])
+          setEventsError(res.message || 'No se pudieron cargar los eventos')
         }
       } catch (err: any) {
         console.error('Error fetching calendar events', err)
-        // Solo establecer error en la primera carga
-        if (fetchedMonths.size === 0) {
-          setBackendEvents([])
-          setEventsError(String(err?.message || err))
-        }
+        setBackendEvents([])
+        setEventsError(String(err?.message || err))
       } finally {
         setLoadingEvents(false)
       }
     }
 
-    fetchEvents()
+    fetchAllEvents()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonth]) // Solo refetch cuando cambia el mes - fetchedMonths se lee pero no debe estar en deps para evitar loops
+  }, []) // Solo ejecutar una vez al montar el componente
 
   const upcoming = useMemo(() => {
     // Show backend events for the current day only (no mocks)
@@ -732,6 +735,48 @@ export default function CalendarioPage() {
       <div className="mb-6 md:mb-8">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Calendario</h1>
         <p className="text-sm md:text-base text-gray-600">Podes visualizar tus clases, eventos y turnos programados</p>
+        
+        {/* Badges de errores temporales */}
+        {(eventTypeErrors.classes || eventTypeErrors.canteen || eventTypeErrors.events) && (
+          <div className="mt-4 space-y-2">
+            {eventTypeErrors.classes && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>No se pudieron cargar clases/exámenes</span>
+                <button
+                  onClick={() => setEventTypeErrors(prev => ({ ...prev, classes: undefined }))}
+                  className="ml-auto"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {eventTypeErrors.canteen && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>No se pudieron cargar reservas de comedor</span>
+                <button
+                  onClick={() => setEventTypeErrors(prev => ({ ...prev, canteen: undefined }))}
+                  className="ml-auto"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {eventTypeErrors.events && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>No se pudieron cargar eventos académicos</span>
+                <button
+                  onClick={() => setEventTypeErrors(prev => ({ ...prev, events: undefined }))}
+                  className="ml-auto"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-8">

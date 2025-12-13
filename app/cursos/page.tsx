@@ -20,8 +20,11 @@ export default function CursosPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod)
   const [selectedSedes, setSelectedSedes] = useState<string[]>([])
   const [selectedDays, setSelectedDays] = useState<string[]>([])
+  const [selectedModalities, setSelectedModalities] = useState<string[]>([])
   const [availableSedes, setAvailableSedes] = useState<string[]>([])
   const [availableDays, setAvailableDays] = useState<string[]>([])
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>([])
+  const [availableModalities, setAvailableModalities] = useState<string[]>([])
 
   return (
     <>
@@ -32,17 +35,25 @@ export default function CursosPage() {
         onChangeSedes={setSelectedSedes}
         selectedDays={selectedDays}
         onChangeDays={setSelectedDays}
+        selectedModalities={selectedModalities}
+        onChangeModalities={setSelectedModalities}
         availableSedes={availableSedes}
         availableDays={availableDays}
+        availablePeriods={availablePeriods}
+        availableModalities={availableModalities}
       />
       <CoursesGrid
         externalSelectedPeriod={selectedPeriod}
         externalSelectedSedes={selectedSedes}
         externalSelectedDays={selectedDays}
+        externalSelectedModalities={selectedModalities}
         onChangeSedes={setSelectedSedes}
         onChangeDays={setSelectedDays}
+        onChangeModalities={setSelectedModalities}
         onAvailableSedesChange={setAvailableSedes}
         onAvailableDaysChange={setAvailableDays}
+        onAvailablePeriodsChange={setAvailablePeriods}
+        onAvailableModalitiesChange={setAvailableModalities}
       />
     </>
   )

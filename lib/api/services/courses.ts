@@ -68,6 +68,8 @@ export class CoursesService {
   /**
    * Normaliza el periodo al formato del frontend
    * API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
+   * API: "2do Cuatrimestre 2025" → Frontend: "2do Cuatr. 2025"
+   * API: "verano 2025" → Frontend: "Verano 2025"
    */
   private static normalizePeriodToFrontend(rawPeriod: string): string {
     if (!rawPeriod) return 'Todos'
@@ -81,6 +83,9 @@ export class CoursesService {
     }
     if (lower.includes('2do') || lower.includes('segundo')) {
       return `2do Cuatr. ${year}`
+    }
+    if (lower.includes('verano')) {
+      return `Verano ${year}`
     }
     if (lower.includes('q1')) {
       return `1er Cuatr. ${year}`
@@ -344,6 +349,7 @@ export class CoursesService {
     // Normalizar el periodo al formato del frontend
     // API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
     // API: "2do Cuatrimestre 2025" → Frontend: "2do Cuatr. 2025"
+    // API: "verano 2025" → Frontend: "Verano 2025"
     const normalizePeriod = (rawPeriod: string): string => {
       if (!rawPeriod) return 'Todos'
       
@@ -351,13 +357,16 @@ export class CoursesService {
       const yearMatch = rawPeriod.match(/\d{4}/)
       const year = yearMatch ? yearMatch[0] : new Date().getFullYear().toString()
       
-      // Detectar cuatrimestre
+      // Detectar cuatrimestre o verano
       const lower = rawPeriod.toLowerCase()
       if (lower.includes('1er') || lower.includes('primer')) {
         return `1er Cuatr. ${year}`
       }
       if (lower.includes('2do') || lower.includes('segundo')) {
         return `2do Cuatr. ${year}`
+      }
+      if (lower.includes('verano')) {
+        return `Verano ${year}`
       }
       
       // Si tiene Q1 o Q2 (formato backend antiguo)
@@ -1313,8 +1322,10 @@ const shiftToSchedule: Record<string, string> = {
 
 function convertTermToFrontendPeriod(term: string): string {
   const year = term.match(/\d{4}/)?.[0] || ''
-  if (term.includes('Q1')) return `1er Cuatr. ${year}`
-  if (term.includes('Q2')) return `2do Cuatr. ${year}`
+  const lower = term.toLowerCase()
+  if (lower.includes('q1')) return `1er Cuatr. ${year}`
+  if (lower.includes('q2')) return `2do Cuatr. ${year}`
+  if (lower.includes('verano')) return `Verano ${year}`
   return term
 }
 

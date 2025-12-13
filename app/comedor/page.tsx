@@ -92,10 +92,11 @@ export default function ComedorPage() {
         if (!matchesTipo) return false
       }
 
-      // Status filtering
+      // Status filtering - normalizar a lowercase para comparar
       if (estados.length > 0) {
+        const reservationStatusLower = (reservation.status || '').toLowerCase()
         const matchesEstado = estados.some(estado => 
-          (reservation.status || '').toLowerCase() === estado.toLowerCase()
+          reservationStatusLower === estado.toLowerCase()
         )
         if (!matchesEstado) return false
       }
@@ -149,15 +150,15 @@ export default function ComedorPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Activa":
-        return "text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs font-medium"
-      case "Finalizado":
-        return "text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium"
-      case "Cancelado":
-        return "text-orange-600 bg-orange-50 px-2 py-1 rounded-full text-xs font-medium"
-      case "Pendiente":
-        return "text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium"
+        return "text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded-full text-xs font-medium"
+      case "Confirmada":
+        return "text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full text-xs font-medium"
+      case "Cancelada":
+        return "text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-full text-xs font-medium"
+      case "Ausente":
+        return "text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded-full text-xs font-medium"
       default:
-        return "text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium"
+        return "text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 rounded-full text-xs font-medium"
     }
   }
 
@@ -335,7 +336,7 @@ export default function ComedorPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      {["Activa", "Pendiente", "Finalizado", "Cancelado"].map((estado) => (
+                      {["Activa", "Confirmada", "Cancelada", "Ausente"].map((estado) => (
                         <label key={estado} className="flex items-center space-x-2 cursor-pointer">
                           <input
                             type="checkbox"

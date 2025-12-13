@@ -7,34 +7,32 @@ import { LoadingState } from '@/lib/types'
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loadingState, setLoadingState] = useState<LoadingState>({
-    isLoading: true,
+    isLoading: false, // Iniciar en false para no bloquear la UI
     error: null
   })
 
   const fetchNotifications = useCallback(async () => {
-    setLoadingState({ isLoading: true, error: null })
+    // No establecer isLoading en true para no bloquear la UI
+    // Las notificaciones se cargarán en background
     
     try {
       const response = await NotificationsService.getNotifications()
       
       if (response.success) {
         setNotifications(response.data)
+        setLoadingState({ isLoading: false, error: null })
       } else {
         setLoadingState({ 
           isLoading: false, 
           error: response.error || 'Error al cargar notificaciones' 
         })
-        return
       }
     } catch (error) {
       setLoadingState({ 
         isLoading: false, 
         error: 'Error inesperado al cargar notificaciones' 
       })
-      return
     }
-
-    setLoadingState({ isLoading: false, error: null })
   }, [])
 
   const markAsRead = useCallback(async (notificationId: string) => {
@@ -123,9 +121,13 @@ export function useNotifications() {
     }
   }, [notifications])
 
+  // Cargar notificaciones inmediatamente al montar el hook
+  // No esperar a que termine ningún otro proceso
   useEffect(() => {
+    // Ejecutar inmediatamente sin esperar
     fetchNotifications()
-  }, [fetchNotifications])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Dependencias vacías intencionalmente - solo ejecutar una vez al montar
 
   const unreadCount = notifications.filter(n => !n.isRead).length
 

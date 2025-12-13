@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { Calendar, Clock, BookOpen, ChevronLeft, ChevronRight, Zap, Users, ArrowRight, Wallet } from "lucide-react"
+import { Calendar, Clock, BookOpen, ChevronLeft, ChevronRight, Zap, Users, ArrowRight, Wallet, AlertTriangle, X } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
@@ -35,7 +35,7 @@ const carouselImages = [
 type EventType = {
   time: string
   title: string
-  type: "class" | "meeting" | "exam"
+  type: "class" | "meeting" | "exam" | "event" | "canteen"
 }
 
 export default function DashboardPage() {
@@ -64,11 +64,11 @@ export default function DashboardPage() {
   const { nextClass, isLoading: nextClassLoading } = useNextClass()
   const { reservations, isLoading: reservationsLoading, error: reservationsError } = useCanteenReservations()
 
-  // Calcular rango de semana para eventos
-  const getWeekRange = () => {
-    const start = new Date(currentWeekStart)
-    const end = new Date(currentWeekStart)
-    end.setDate(end.getDate() + 6)
+  // Cargar TODOS los eventos del año de una vez (no solo la semana actual)
+  const getAllEventsRange = () => {
+    const currentYear = new Date().getFullYear()
+    const start = new Date(currentYear, 0, 1) // 1 de enero
+    const end = new Date(currentYear, 11, 31) // 31 de diciembre
     
     const formatDate = (date: Date) => date.toISOString().split('T')[0]
     
@@ -78,12 +78,32 @@ export default function DashboardPage() {
     }
   }
 
-  const weekRange = getWeekRange()
-  const { events: weeklyEvents, isLoading: eventsLoading } = useWeeklyCalendar(weekRange.start, weekRange.end)
+  const allEventsRange = getAllEventsRange()
+  const { events: weeklyEvents, isLoading: eventsLoading, eventTypeErrors } = useWeeklyCalendar(allEventsRange.start, allEventsRange.end)
+  
+  // Estado para controlar visibilidad de badges de error en dashboard
+  const [visibleErrors, setVisibleErrors] = useState<{ classes?: boolean; canteen?: boolean; events?: boolean }>({})
+  
+  // Mostrar errores cuando se detecten
+  useEffect(() => {
+    if (eventTypeErrors.classes || eventTypeErrors.canteen || eventTypeErrors.events) {
+      setVisibleErrors({
+        classes: !!eventTypeErrors.classes,
+        canteen: !!eventTypeErrors.canteen,
+        events: !!eventTypeErrors.events
+      })
+      // Auto-ocultar después de 10 segundos
+      const timer = setTimeout(() => {
+        setVisibleErrors({})
+      }, 10000)
+      return () => clearTimeout(timer)
+    } else {
+      setVisibleErrors({})
+    }
+  }, [eventTypeErrors])
 
   // Debug: Log de eventos recibidos
-  console.log('Dashboard - Eventos semanales recibidos:', weeklyEvents)
-  console.log('Dashboard - Rango de semana:', weekRange)
+  console.log('Dashboard - Eventos cargados:', weeklyEvents.length)
 
 
   const startAutoTransition = () => {
@@ -260,7 +280,7 @@ export default function DashboardPage() {
     .map((event) => ({
       time: event.time,
       title: event.title,
-      type: event.type as "class" | "meeting" | "exam",
+      type: event.type as "class" | "meeting" | "exam" | "event" | "canteen",
     }))
 
   // Tipos de eventos por día de la semana (para los puntitos)
@@ -284,6 +304,48 @@ export default function DashboardPage() {
 
   return (
     <>
+      {/* Badges de errores temporales en dashboard */}
+      {(visibleErrors.classes || visibleErrors.canteen || visibleErrors.events) && (
+        <div className="max-w-[95rem] mx-auto px-4 pt-4 space-y-2">
+          {visibleErrors.classes && eventTypeErrors.classes && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>No se pudieron cargar clases/exámenes</span>
+              <button
+                onClick={() => setVisibleErrors(prev => ({ ...prev, classes: false }))}
+                className="ml-auto"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {visibleErrors.canteen && eventTypeErrors.canteen && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>No se pudieron cargar reservas de comedor</span>
+              <button
+                onClick={() => setVisibleErrors(prev => ({ ...prev, canteen: false }))}
+                className="ml-auto"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {visibleErrors.events && eventTypeErrors.events && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>No se pudieron cargar eventos académicos</span>
+              <button
+                onClick={() => setVisibleErrors(prev => ({ ...prev, events: false }))}
+                className="ml-auto"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className="mb-6 flex items-center justify-end max-w-[95rem] mx-auto px-4"></div>
 
       <div className="mb-8">
@@ -526,8 +588,10 @@ export default function DashboardPage() {
                       return (
                         <div className="flex items-center justify-center gap-1 mt-1 h-1.5">
                           {types.has("class") && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                          {types.has("meeting") && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
+                          {types.has("canteen") && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
                           {types.has("exam") && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
+                          {types.has("event") && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+                          {types.has("meeting") && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
                         </div>
                       )
                     })()}
@@ -545,19 +609,27 @@ export default function DashboardPage() {
                       className={`p-3 rounded-lg border ${
                         event.type === "class"
                           ? "bg-blue-50 border-blue-200"
-                          : event.type === "meeting"
-                            ? "bg-yellow-50 border-yellow-200"
-                            : "bg-orange-50 border-orange-200"
+                          : event.type === "exam"
+                            ? "bg-orange-50 border-orange-200"
+                            : event.type === "canteen"
+                              ? "bg-yellow-50 border-yellow-200"
+                              : event.type === "event"
+                                ? "bg-green-50 border-green-200"
+                                : "bg-yellow-50 border-yellow-200"
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-2 h-2 rounded-full ${
                             event.type === "class"
-                                ? "bg-slate-600"
-                                : event.type === "meeting"
-                                  ? "bg-yellow-400"
-                                  : "bg-orange-500"
+                                ? "bg-blue-500"
+                                : event.type === "exam"
+                                  ? "bg-orange-500"
+                                  : event.type === "canteen"
+                                    ? "bg-yellow-500"
+                                    : event.type === "event"
+                                      ? "bg-green-500"
+                                      : "bg-yellow-400"
                           }`}
                         ></div>
                         <span className="text-sm text-slate-700 font-medium">
@@ -602,7 +674,9 @@ export default function DashboardPage() {
                   <>
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-4 w-4 text-slate-600" />
-                      <h3 className="font-semibold text-lg text-slate-800">{nextClass.title.replace(/^Clase:\s*/i, '')}</h3>
+                      <h3 className="font-semibold text-lg text-slate-800">
+                        {nextClass.courseTitle || nextClass.title.replace(/^.*?-\s*/, '')}
+                      </h3>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Building, Calendar, ChevronDown } from "lucide-react"
+import { Building, Calendar, ChevronDown, Monitor } from "lucide-react"
 type CoursesHeaderProps = {
   selectedPeriod: string
   onSelectPeriod: (period: string) => void
@@ -9,13 +9,18 @@ type CoursesHeaderProps = {
   onChangeSedes: (sedes: string[]) => void
   selectedDays: string[]
   onChangeDays: (days: string[]) => void
+  selectedModalities: string[]
+  onChangeModalities: (modalities: string[]) => void
   availableSedes: string[]
   availableDays: string[]
+  availablePeriods: string[]
+  availableModalities: string[]
 }
 
-export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, onChangeSedes, selectedDays, onChangeDays, availableSedes, availableDays }: CoursesHeaderProps) {
+export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, onChangeSedes, selectedDays, onChangeDays, selectedModalities, onChangeModalities, availableSedes, availableDays, availablePeriods, availableModalities }: CoursesHeaderProps) {
   const [showSedesDropdown, setShowSedesDropdown] = useState(false)
   const [showDaysDropdown, setShowDaysDropdown] = useState(false)
+  const [showModalityDropdown, setShowModalityDropdown] = useState(false)
   
 
   const toggleSede = (sede: string) => {
@@ -34,6 +39,14 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
     }
   }
 
+  const toggleModality = (modality: string) => {
+    if (selectedModalities.includes(modality)) {
+      onChangeModalities(selectedModalities.filter((m) => m !== modality))
+    } else {
+      onChangeModalities([...selectedModalities, modality])
+    }
+  }
+
   // Cerrar dropdowns cuando se hace clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -41,21 +54,15 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
       if (!target.closest('.relative')) {
         setShowSedesDropdown(false)
         setShowDaysDropdown(false)
+        setShowModalityDropdown(false)
       }
     }
 
-    if (showSedesDropdown || showDaysDropdown) {
+    if (showSedesDropdown || showDaysDropdown || showModalityDropdown) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showSedesDropdown, showDaysDropdown])
-  
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1 // 1-12
-
-  const firstSemesterLabel = `1er Cuatr. ${year}`
-  const secondSemesterLabel = `2do Cuatr. ${year}`
+  }, [showSedesDropdown, showDaysDropdown, showModalityDropdown])
 
   const isActive = (label: string) => selectedPeriod === label || (label === "Todos" && selectedPeriod === "Todos")
 
@@ -68,32 +75,43 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
     onSelectPeriod(label)
   }
 
-  // Si el período actual no coincide con ninguno, no hacemos nada especial aquí;
-  // el valor por defecto se decide en la página contenedora.
+  // Siempre mostrar todas las pestañas de períodos, independientemente de si hay cursos
+  const now = new Date()
+  const year = now.getFullYear()
+  const periodButtons = [
+    `2do Cuatr. ${year}`,
+    `1er Cuatr. ${year}`,
+    `Verano ${year}`,
+    "Todas"
+  ]
 
   return (
     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 lg:mb-6 gap-3 lg:gap-4">
       <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden w-full lg:w-auto">
-        <button
-          onClick={() => handleClick(secondSemesterLabel)}
-          className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium ${isActive(secondSemesterLabel) ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-        >
-          <span className="hidden sm:inline">{secondSemesterLabel}</span>
-          <span className="sm:hidden">2do {year}</span>
-        </button>
-        <button
-          onClick={() => handleClick(firstSemesterLabel)}
-          className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium border-l border-gray-300 ${isActive(firstSemesterLabel) ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-        >
-          <span className="hidden sm:inline">{firstSemesterLabel}</span>
-          <span className="sm:hidden">1er {year}</span>
-        </button>
-        <button
-          onClick={() => handleClick("Todas")}
-          className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium border-l border-gray-300 ${selectedPeriod === "Todos" ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-        >
-          Todas
-        </button>
+        {periodButtons.map((period, index) => {
+          const isLast = index === periodButtons.length - 1
+          const displayText = period === "Todas" ? "Todas" : period
+          const shortText = period === "Todas" ? "Todas" : period.includes("Verano") 
+            ? period.replace(/\d{4}/, "").trim() 
+            : period.includes("2do") 
+              ? `2do ${period.match(/\d{4}/)?.[0] || ""}` 
+              : period.includes("1er")
+                ? `1er ${period.match(/\d{4}/)?.[0] || ""}`
+                : period
+          
+          return (
+            <button
+              key={period}
+              onClick={() => handleClick(period === "Todas" ? "Todos" : period)}
+              className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium ${
+                index > 0 ? "border-l border-gray-300" : ""
+              } ${isActive(period === "Todas" ? "Todos" : period) ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+            >
+              <span className="hidden sm:inline">{displayText}</span>
+              <span className="sm:hidden">{shortText}</span>
+            </button>
+          )
+        })}
       </div>
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-3">
         {/* Selector de sedes */}
@@ -102,6 +120,7 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
             onClick={() => {
               setShowSedesDropdown(!showSedesDropdown)
               setShowDaysDropdown(false)
+              setShowModalityDropdown(false)
             }}
             className="flex items-center gap-1.5 lg:gap-2 pl-8 lg:pl-10 pr-2 lg:pr-3 py-2 border border-gray-200 rounded-lg bg-white min-w-[140px] lg:min-w-[160px] text-left hover:border-gray-300 transition-colors"
           >
@@ -134,6 +153,7 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
             onClick={() => {
               setShowDaysDropdown(!showDaysDropdown)
               setShowSedesDropdown(false)
+              setShowModalityDropdown(false)
             }}
             className="flex items-center gap-1.5 lg:gap-2 pl-8 lg:pl-10 pr-2 lg:pr-3 py-2 border border-gray-200 rounded-lg bg-white min-w-[140px] lg:min-w-[160px] text-left hover:border-gray-300 transition-colors"
           >
@@ -156,6 +176,42 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
                   <span className="text-sm">{day}</span>
                 </label>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Selector de modalidad */}
+        <div className="relative flex-shrink-0">
+          <button 
+            onClick={() => {
+              setShowModalityDropdown(!showModalityDropdown)
+              setShowSedesDropdown(false)
+              setShowDaysDropdown(false)
+            }}
+            className="flex items-center gap-1.5 lg:gap-2 pl-8 lg:pl-10 pr-2 lg:pr-3 py-2 border border-gray-200 rounded-lg bg-white min-w-[140px] lg:min-w-[160px] text-left hover:border-gray-300 transition-colors"
+          >
+            <Monitor className="absolute left-2 lg:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-400" />
+            <span className="flex-1 text-xs lg:text-sm truncate">
+              {selectedModalities.length === 0 ? "Modalidad" : `${selectedModalities.length} modalidad${selectedModalities.length > 1 ? "es" : ""}`}
+            </span>
+            <ChevronDown className={`h-3.5 w-3.5 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0 transition-transform ${showModalityDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          {showModalityDropdown && (
+            <div className="absolute left-0 lg:right-0 lg:left-auto mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+              {availableModalities.map((modality) => {
+                const displayName = modality === 'PRESENCIAL' ? 'Presencial' : modality === 'VIRTUAL' ? 'Virtual' : modality
+                return (
+                  <label key={modality} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedModalities.includes(modality)}
+                      onChange={() => toggleModality(modality)}
+                      className="rounded border-gray-300 text-slate-600 focus:ring-slate-500 flex-shrink-0"
+                    />
+                    <span className="text-sm">{displayName}</span>
+                  </label>
+                )
+              })}
             </div>
           )}
         </div>

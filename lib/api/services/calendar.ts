@@ -2,18 +2,33 @@ import { Course, ApiResponse } from '@/lib/types'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import { authService } from './auth'
+import { CoursesService } from './courses'
 
 export interface CalendarEvent {
   id: string
   title: string
-  courseId: number
+  courseId: number | string
   courseTitle: string
+  courseUUID?: string
   date: string // YYYY-MM-DD
   time: string // HH:MM
   duration: number // minutos
   classroom: string
   sede: string
-  type: 'class' | 'exam' | 'meeting'
+  type: 'class' | 'exam' | 'meeting' | 'event' | 'canteen'
+}
+
+// Interfaz para las clases individuales del endpoint de backoffice
+export interface ClaseIndividual {
+  id_clase: string
+  id_curso: string
+  titulo: string
+  descripcion: string
+  fecha_clase: string // YYYY-MM-DD
+  tipo: 'regular' | 'parcial_1' | 'parcial_2' | 'recuperatorio' | 'final'
+  estado: string
+  observaciones: string
+  status: boolean
 }
 
 export interface NextClass {
@@ -27,115 +42,164 @@ export interface NextClass {
   daysUntil: number
 }
 
+// Interfaz extendida para incluir errores por tipo de evento
+export interface CalendarEventsResponse extends ApiResponse<CalendarEvent[]> {
+  errors?: {
+    classes?: string
+    canteen?: string
+    events?: string
+  }
+}
+
 export class CalendarService {
-  // Obtener eventos del calendario para una semana específica
-  static async getWeeklyEvents(startDate: string, endDate: string): Promise<ApiResponse<CalendarEvent[]>> {
+  // Obtener clases individuales de un curso desde el endpoint de backoffice (a través del proxy)
+  private static async getClasesIndividuales(cursoUUID: string): Promise<ClaseIndividual[]> {
     try {
-      // Usar proxy de Next.js para evitar CORS
-      const teacherUUID = authService.getTeacherUUID()
-      if (!teacherUUID) {
-        throw new Error('No hay docente autenticado')
+      // Obtener el token para enviarlo en el header
+      const token = authService.getToken()
+      
+      // Usar el proxy de Next.js para evitar CORS y problemas de DNS
+      const url = `/api/clases-individuales/curso/${cursoUUID}?skip=0&limit=100`
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
       }
       
-      const coursesUrl = `/api/teaching/courses/mine?term=2025Q2&includePrevious=true`
-      const coursesResponse = await fetch(coursesUrl, { 
-        method: 'GET', 
-        headers: {
-          'Accept': 'application/json',
-          'X-Teacher-Id': teacherUUID
-        }
+      // Agregar el token en el header si está disponible
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
       })
 
-      if (!coursesResponse.ok) {
-        throw new Error(`Error del servidor cursos: ${coursesResponse.status}`)
+      if (!response.ok) {
+        console.warn(`Error obteniendo clases individuales para curso ${cursoUUID}: ${response.status}`)
+        return []
       }
 
-      const courses = await coursesResponse.json()
-      
-  // Convertir cursos a eventos del calendario (incluye exámenes)
-  const classEvents = await this.convertCoursesToEvents(courses, startDate, endDate)
-
-      // Obtener reservas de comedor (ya usa proxy)
-      const canteenUrl = `/api/canteen/reservations?userId=${authService.getTeacherUUID()}`
-      let canteenEvents: CalendarEvent[] = []
-      
-      try {
-        const canteenResponse = await fetch(canteenUrl, { 
-          method: 'GET', 
-          headers: {
-            'Accept': 'application/json'
-          }
-        })
-        if (canteenResponse.ok) {
-          const canteenData = await canteenResponse.json()
-          canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
-        }
-      } catch (err) {
-        console.warn('Error obteniendo reservas de comedor:', err)
-      }
-
-      // Combinar eventos de clases y comedor
-      const allEvents = [...classEvents, ...canteenEvents]
-
-      return {
-        data: allEvents,
-        success: true,
-        message: 'Eventos del calendario obtenidos correctamente'
-      }
+      const data = await response.json()
+      return Array.isArray(data) ? data : []
     } catch (error) {
-      console.error('Error obteniendo eventos del calendario:', error)
+      console.warn(`Error obteniendo clases individuales para curso ${cursoUUID}:`, error)
+      return []
+    }
+  }
 
+  // Mapear tipo de clase a título para el calendario
+  private static mapClaseTypeToTitle(tipo: string, cursoNombre: string): string {
+    switch (tipo) {
+      case 'regular':
+        return `${cursoNombre} - Clase Regular`
+      case 'parcial_1':
+        return `${cursoNombre} - Primer Parcial`
+      case 'parcial_2':
+        return `${cursoNombre} - Segundo Parcial`
+      case 'recuperatorio':
+        return `${cursoNombre} - Recuperatorio`
+      case 'final':
+        return `${cursoNombre} - Examen Final`
+      default:
+        return `${cursoNombre} - Clase`
+    }
+  }
+
+  // Determinar si un tipo de clase es examen o clase regular
+  private static isExamType(tipo: string): boolean {
+    return ['parcial_1', 'parcial_2', 'recuperatorio', 'final'].includes(tipo)
+  }
+
+  // Obtener eventos del calendario para una semana específica
+  static async getWeeklyEvents(startDate: string, endDate: string): Promise<CalendarEventsResponse> {
+    const errors: { classes?: string; canteen?: string; events?: string } = {}
+    const allEvents: CalendarEvent[] = []
+    
+    // Usar proxy de Next.js para evitar CORS
+    const teacherUUID = authService.getTeacherUUID()
+    if (!teacherUUID) {
       return {
         data: [],
         success: false,
-        message: 'No se pudieron obtener eventos del backend'
+        message: 'No hay docente autenticado',
+        errors: { classes: 'No hay docente autenticado', canteen: 'No hay docente autenticado', events: 'No hay docente autenticado' }
       }
+    }
+    
+    // Obtener clases/exámenes (manejar errores independientemente)
+    try {
+      const coursesResponse = await CoursesService.getCourses()
+      if (coursesResponse.success && coursesResponse.data) {
+        const courses = coursesResponse.data
+        const classEvents = await this.convertClasesIndividualesToEvents(courses, startDate, endDate)
+        allEvents.push(...classEvents)
+      } else {
+        errors.classes = 'No se pudieron obtener los cursos del docente'
+      }
+    } catch (error: any) {
+      console.warn('Error obteniendo clases/exámenes:', error)
+      errors.classes = error?.message || 'Error al cargar clases y exámenes'
+    }
+
+    // Obtener reservas de comedor (manejar errores independientemente)
+    try {
+      const canteenUrl = `/api/canteen/reservations?userId=${teacherUUID}`
+      const canteenResponse = await fetch(canteenUrl, { 
+        method: 'GET', 
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+      if (canteenResponse.ok) {
+        const canteenData = await canteenResponse.json()
+        const canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
+        allEvents.push(...canteenEvents)
+      } else {
+        errors.canteen = `Error ${canteenResponse.status} al cargar reservas de comedor`
+      }
+    } catch (err: any) {
+      console.warn('Error obteniendo reservas de comedor:', err)
+      errors.canteen = err?.message || 'Error al cargar reservas de comedor'
+    }
+
+    // Obtener eventos académicos (manejar errores independientemente)
+    try {
+      const eventEvents = await this.getEvents(startDate, endDate)
+      allEvents.push(...eventEvents)
+    } catch (err: any) {
+      console.warn('Error obteniendo eventos académicos:', err)
+      errors.events = err?.message || 'Error al cargar eventos académicos'
+    }
+
+    // Retornar eventos cargados exitosamente, incluso si algunos tipos fallaron
+    const hasErrors = Object.keys(errors).length > 0
+    return {
+      data: allEvents,
+      success: true, // Siempre true si al menos algunos eventos se cargaron
+      message: hasErrors 
+        ? 'Algunos eventos no pudieron cargarse' 
+        : 'Eventos del calendario obtenidos correctamente',
+      errors: hasErrors ? errors : undefined
     }
   }
 
   // Obtener la próxima clase
   static async getNextClass(): Promise<ApiResponse<NextClass | null>> {
     try {
-      // Obtener cursos del período actual
-      const currentDate = new Date()
-      const year = currentDate.getFullYear()
-      const month = currentDate.getMonth() + 1
-      
-      let term = '2025Q2' // Por defecto
-      if (month >= 3 && month <= 7) {
-        term = `${year}Q1`
-      } else if (month >= 8 && month <= 12) {
-        term = `${year}Q2`
-      }
-      
-      // Usar proxy de Next.js para evitar CORS
-      const teacherUUID = authService.getTeacherUUID()
-      if (!teacherUUID) {
+      // Obtener cursos del docente
+      const coursesResponse = await CoursesService.getCourses()
+      if (!coursesResponse.success || !coursesResponse.data) {
         return {
           data: null,
           success: false,
-          error: 'No hay docente autenticado'
+          error: 'No se pudieron obtener los cursos del docente'
         }
       }
+
+      const courses = coursesResponse.data
       
-      const coursesUrl = `/api/teaching/courses/mine?term=${term}&includePrevious=false`
-      
-      const response = await fetch(coursesUrl, { 
-        method: 'GET', 
-        headers: {
-          'Accept': 'application/json',
-          'X-Teacher-Id': teacherUUID
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`)
-      }
-      
-      const courses = await response.json()
-      
-      // Encontrar la próxima clase
-      const nextClass = this.findNextClass(courses)
+      // Encontrar la próxima clase usando clases individuales
+      const nextClass = await this.findNextClassFromClases(courses)
       
       return {
         data: nextClass,
@@ -153,32 +217,161 @@ export class CalendarService {
     }
   }
 
+  // Mapear mealTime a formato legible
+  private static mapMealTime(mealTime: string): string {
+    const mealTimeMap: Record<string, string> = {
+      'ALMUERZO': 'Almuerzo',
+      'CENA': 'Cena',
+      'DESAYUNO': 'Desayuno',
+      'MERIENDA': 'Merienda'
+    }
+    return mealTimeMap[mealTime?.toUpperCase()] || mealTime || 'Reserva'
+  }
+
+  // Mapear estado a formato legible
+  private static mapCanteenStatus(status: string): string {
+    const statusMap: Record<string, string> = {
+      'ACTIVA': 'Activa',
+      'CONFIRMADA': 'Confirmada',
+      'CANCELADA': 'Cancelada',
+      'AUSENTE': 'Ausente'
+    }
+    return statusMap[status?.toUpperCase()] || status || 'Pendiente'
+  }
+
+  // Obtener eventos académicos desde el endpoint de eventos
+  private static async getEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
+    try {
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
+        console.warn('No hay docente autenticado para obtener eventos')
+        return []
+      }
+
+      // Usar proxy de Next.js para evitar CORS
+      const url = `/api/events?endDate=9999-12-02`
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'userId': teacherUUID
+        }
+      })
+
+      if (!response.ok) {
+        console.warn(`Error obteniendo eventos académicos: ${response.status}`)
+        return []
+      }
+
+      const data = await response.json()
+      return this.convertEventsToCalendarEvents(data, startDate, endDate)
+    } catch (error) {
+      console.warn('Error obteniendo eventos académicos:', error)
+      return []
+    }
+  }
+
+  // Convertir eventos académicos a eventos del calendario
+  private static convertEventsToCalendarEvents(events: any[], startDate: string, endDate: string): CalendarEvent[] {
+    const calendarEvents: CalendarEvent[] = []
+    
+    events.forEach((event: any) => {
+      if (!event.startTime) return
+      
+      // Parsear fecha de inicio (ISO string)
+      const startDateTime = new Date(event.startTime)
+      const dateStr = startDateTime.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      // Solo agregar si está en el rango solicitado
+      if (dateStr >= startDate && dateStr <= endDate) {
+        // Extraer hora de inicio
+        const hours = startDateTime.getHours().toString().padStart(2, '0')
+        const minutes = startDateTime.getMinutes().toString().padStart(2, '0')
+        const time = `${hours}:${minutes}`
+        
+        // Calcular duración en minutos
+        let duration = 60 // Por defecto 1 hora
+        if (event.endTime) {
+          const endDateTime = new Date(event.endTime)
+          duration = Math.round((endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60))
+        }
+        
+        // Construir ubicación completa: nombre + dirección
+        const locationName = event.location?.name || ''
+        const locationAddress = event.location?.address || ''
+        const fullLocation = locationName && locationAddress 
+          ? `${locationName}, ${locationAddress}`
+          : locationName || locationAddress || ''
+        
+        calendarEvents.push({
+          id: `event-${event.id}`,
+          title: event.name || 'Evento',
+          courseId: 0,
+          courseTitle: event.name || 'Evento',
+          date: dateStr,
+          time: time,
+          duration: duration,
+          classroom: fullLocation,
+          sede: '', // No hay información de sede en eventos
+          type: 'event'
+        })
+      }
+    })
+    
+    return calendarEvents
+  }
+
   // Convertir reservas de comedor a eventos del calendario
   private static convertCanteenToEvents(reservations: any[], startDate: string, endDate: string): CalendarEvent[] {
     const events: CalendarEvent[] = []
     
     reservations.forEach((reservation: any) => {
-      // scheduledAt viene en formato ISO con timezone: "2025-11-09T12:59:09.816054401-03:00"
-      const scheduledAt = reservation.scheduledAt
-      if (!scheduledAt) return
+      // reservationDate viene en formato ISO: "2025-12-10T12:00:00"
+      const reservationDate = reservation.reservationDate
+      if (!reservationDate) return
       
-      const dateObj = new Date(scheduledAt)
-      const dateStr = dateObj.toISOString().split('T')[0]
-      const time = dateObj.toTimeString().slice(0, 5)
+      // Extraer la fecha directamente del string ISO para evitar problemas de zona horaria
+      // Formato: "2025-12-10T12:00:00" -> "2025-12-10"
+      const dateStr = reservationDate.split('T')[0]
+      
+      // Usar slotStartTime y slotEndTime si están disponibles, sino extraer de reservationDate
+      let time = ''
+      let duration = 60 // 1 hora por defecto
+      
+      if (reservation.slotStartTime && reservation.slotEndTime) {
+        // Formato: "12:00:00" -> "12:00"
+        time = reservation.slotStartTime.slice(0, 5)
+        const startTime = reservation.slotStartTime.split(':').map(Number)
+        const endTime = reservation.slotEndTime.split(':').map(Number)
+        const startMinutes = startTime[0] * 60 + startTime[1]
+        const endMinutes = endTime[0] * 60 + endTime[1]
+        duration = endMinutes - startMinutes
+      } else {
+        // Fallback: extraer hora directamente del string ISO
+        // Formato: "2025-12-10T12:00:00" -> "12:00"
+        const timeMatch = reservationDate.match(/T(\d{2}:\d{2})/)
+        time = timeMatch ? timeMatch[1] : '12:00'
+      }
       
       // Solo agregar si está en el rango solicitado
       if (dateStr >= startDate && dateStr <= endDate) {
+        const mealTime = this.mapMealTime(reservation.mealTime || '')
+        
+        // Título simplificado: solo el tipo de comida (el contexto visual ya indica que es comedor)
+        const title = `Comedor - ${mealTime}`
+        
         events.push({
-          id: `canteen-${reservation.reservationId}`,
-          title: `Comedor: ${reservation.menu || 'Reserva'}`,
+          id: `canteen-${reservation.id}`,
+          title: title,
           courseId: 0,
-          courseTitle: reservation.menu || 'Reserva de comedor',
+          courseTitle: mealTime, // Solo el tipo de comida para courseTitle
           date: dateStr,
           time: time,
-          duration: 60, // 1 hora por defecto
-          classroom: reservation.menu || '',
-          sede: reservation.campus || '',
-          type: 'meeting' // Usamos 'meeting' para comedor, se mapeará a 'comedor' en el frontend
+          duration: duration,
+          classroom: mealTime || '',
+          sede: '', // No hay información de sede en el nuevo formato
+          type: 'canteen'
         })
       }
     })
@@ -186,155 +379,154 @@ export class CalendarService {
     return events
   }
 
-  // Convertir cursos del backend a eventos del calendario
-  private static async convertCoursesToEvents(courses: any[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
+  // Convertir clases individuales a eventos del calendario
+  private static async convertClasesIndividualesToEvents(courses: Course[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
     const events: CalendarEvent[] = []
 
-    const headers = {
-      'X-Teacher-Id': APP_CONFIG.MOCK_TEACHER_ID,
-      'X-Teacher-Roles': APP_CONFIG.MOCK_TEACHER_ROLES,
-      'Accept': 'application/json'
-    }
-
-    // Process courses in parallel to fetch assessments for each course
-    await Promise.all((courses || []).map(async (course: any) => {
+    // Procesar todos los cursos en paralelo
+    await Promise.all(courses.map(async (course) => {
       try {
-        // Determinar rango de fechas según el periodo (Q1 o Q2)
-        const periodo = String(course.periodo || '').toUpperCase()
-        let courseStart: Date
-        let courseEnd: Date
-
-        if (periodo.includes('Q1')) {
-          // Q1: 01/03/YYYY - 31/07/YYYY
-          const year = (periodo.match(/\d{4}/) || [])[0] || '2025'
-          courseStart = new Date(Number(year), 2, 1)
-          courseEnd = new Date(Number(year), 6, 31)
-        } else if (periodo.includes('Q2')) {
-          // Q2: 01/08/YYYY - 23/12/YYYY
-          const year = (periodo.match(/\d{4}/) || [])[0] || '2025'
-          courseStart = new Date(Number(year), 7, 1)
-          courseEnd = new Date(Number(year), 11, 23)
-        } else {
-          // If no valid period, skip
+        // Obtener UUID del curso
+        const cursoUUID = course.uuid
+        if (!cursoUUID) {
+          console.warn(`Curso sin UUID: ${course.title}`)
           return
         }
 
-        // Obtener el día de la semana del curso
-        const dayOfWeek = this.getDayOfWeekNumber(course.diaSemana)
-        const time = this.getTimeFromShift(course.turno)
+        // Obtener clases individuales del curso
+        const clases = await this.getClasesIndividuales(cursoUUID)
 
-        // Generate class occurrences
-        const currentDate = new Date(courseStart)
-        while (currentDate <= courseEnd) {
-          if (currentDate.getDay() === dayOfWeek) {
-            const dateStr = currentDate.toISOString().split('T')[0]
-            if (dateStr >= startDate && dateStr <= endDate) {
-              events.push({
-                id: `${course.courseId}-${dateStr}`,
-                title: `Clase: ${course.materia}`,
-                courseId: course.courseId,
-                courseTitle: course.materia,
-                date: dateStr,
-                time: time,
-                duration: 240,
-                classroom: course.aula || '',
-                sede: course.campus || '',
-                type: 'class'
-              })
-            }
+        // Convertir cada clase a un evento del calendario
+        clases.forEach((clase) => {
+          const fechaClase = clase.fecha_clase
+          
+          // Solo incluir si está en el rango de fechas solicitado
+          if (fechaClase >= startDate && fechaClase <= endDate) {
+            const isExam = this.isExamType(clase.tipo)
+            const title = this.mapClaseTypeToTitle(clase.tipo, course.title)
+            
+            // Obtener hora del curso (usar el turno del curso)
+            const time = this.getTimeFromCourse(course)
+            
+            events.push({
+              id: `clase-${clase.id_clase}`,
+              title,
+              courseId: course.id || 0,
+              courseUUID: cursoUUID,
+              courseTitle: course.title,
+              date: fechaClase,
+              time: time,
+              duration: 240, // 4 horas por defecto
+              classroom: course.location || '',
+              sede: course.sede || '',
+              type: isExam ? 'exam' : 'class'
+            })
           }
-          currentDate.setDate(currentDate.getDate() + 1)
-        }
-
-        // Fetch assessments for this course and convert them to exam events
-        try {
-          const assessmentsUrl = `${API_CONFIG.BASE_URL}/teaching/courses/${course.courseId}/assessments`
-          const resp = await fetch(assessmentsUrl, { method: 'GET', headers })
-          if (resp.ok) {
-            const assessments = await resp.json()
-            if (Array.isArray(assessments)) {
-              assessments.forEach((a: any) => {
-                // Expecting a.date in YYYY-MM-DD
-                const aDate = String(a.date || '')
-                if (!aDate) return
-                if (aDate >= startDate && aDate <= endDate) {
-                  events.push({
-                    id: `exam-${a.assessmentId}-${course.courseId}`,
-                    // Include assessment type and course name in the label
-                    title: `Examen: ${a.type || 'Evaluación'} • ${course.materia}`,
-                    courseId: course.courseId,
-                    courseTitle: course.materia,
-                    date: aDate,
-                    time: this.getTimeFromShift(course.turno),
-                    duration: 120,
-                    classroom: course.aula || '',
-                    sede: course.campus || '',
-                    type: 'exam'
-                  })
-                }
-              })
-            }
-          }
-        } catch (err) {
-          // swallow assessment fetch errors for this course
-          console.warn(`Error fetching assessments for course ${course.courseId}:`, err)
-        }
-
+        })
       } catch (err) {
-        console.warn('Error processing course for calendar events:', err)
+        console.warn(`Error procesando curso ${course.title} para eventos del calendario:`, err)
       }
     }))
 
-    return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    return events.sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time}:00`)
+      const dateB = new Date(`${b.date}T${b.time}:00`)
+      return dateA.getTime() - dateB.getTime()
+    })
   }
 
-  // Encontrar la próxima clase
-  private static findNextClass(courses: any[]): NextClass | null {
-    const today = new Date()
-    const todayStr = today.toISOString().split('T')[0]
+  // Obtener hora del curso basado en su turno
+  private static getTimeFromCourse(course: Course): string {
+    // Si el curso tiene un schedule, extraer la hora de inicio
+    if (course.schedule) {
+      const match = course.schedule.match(/(\d{1,2}):(\d{2})/)
+      if (match) {
+        return `${match[1].padStart(2, '0')}:${match[2]}`
+      }
+    }
+
+    // Fallback: usar el turno
+    const shift = course.shift?.toUpperCase() || ''
+    return this.getTimeFromShift(shift)
+  }
+
+  // Encontrar la próxima clase usando clases individuales
+  private static async findNextClassFromClases(courses: Course[]): Promise<NextClass | null> {
+    const now = new Date() // Usar fecha y hora actual completa
     
     const upcomingClasses: NextClass[] = []
-    
-    courses.forEach((course: any) => {
-      const dayOfWeek = this.getDayOfWeekNumber(course.diaSemana)
-      const time = this.getTimeFromShift(course.turno)
-      
-      // Buscar la próxima ocurrencia de esta clase
-      for (let i = 0; i < 14; i++) { // Buscar en las próximas 2 semanas
-        const date = new Date(today)
-        date.setDate(today.getDate() + i)
-        
-        if (date.getDay() === dayOfWeek) {
-          const dateStr = date.toISOString().split('T')[0]
-          const classDateTime = new Date(`${dateStr}T${time}:00`)
-          
-          // Solo incluir clases futuras
-          if (classDateTime > today) {
-            const daysUntil = Math.ceil((classDateTime.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    // Procesar todos los cursos en paralelo
+    await Promise.all(courses.map(async (course) => {
+      try {
+        const cursoUUID = course.uuid
+        if (!cursoUUID) return
+
+        // Obtener clases individuales del curso
+        const clases = await this.getClasesIndividuales(cursoUUID)
+
+        // Filtrar TODAS las clases (regulares y exámenes) que estén programadas y sean futuras
+        clases
+          .filter(clase => clase.estado === 'programada')
+          .forEach((clase) => {
+            const time = this.getTimeFromCourse(course)
             
-            upcomingClasses.push({
-              id: `${course.courseId}-${dateStr}`,
-              title: `Clase: ${course.materia}`,
-              courseTitle: course.materia,
-              date: dateStr,
-              time: time,
-              classroom: course.aula || 'XXX',
-              sede: course.campus || 'XXX',
-              daysUntil: daysUntil
-            })
-          }
-        }
+            // Crear fecha y hora completa de la clase
+            const classDateTime = new Date(`${clase.fecha_clase}T${time}:00`)
+            
+            // Solo incluir clases que aún no han pasado (fecha y hora futuras)
+            if (classDateTime > now) {
+              // Calcular días hasta la clase
+              const diffTime = classDateTime.getTime() - now.getTime()
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+              
+              // Si es hoy pero aún no pasó la hora, daysUntil = 0
+              // Si es mañana, daysUntil = 1, etc.
+              const daysUntil = diffDays
+
+              // Generar título según el tipo de clase
+              const title = this.mapClaseTypeToTitle(clase.tipo, course.title)
+
+              upcomingClasses.push({
+                id: `clase-${clase.id_clase}`,
+                title: title,
+                courseTitle: course.title,
+                date: clase.fecha_clase,
+                time: time,
+                classroom: course.location || '',
+                sede: course.sede || '',
+                daysUntil: daysUntil
+              })
+            }
+          })
+      } catch (err) {
+        console.warn(`Error obteniendo próxima clase para curso ${course.title}:`, err)
       }
-    })
-    
+    }))
+
     // Ordenar por fecha y tiempo, y tomar la más cercana
     upcomingClasses.sort((a, b) => {
       const dateA = new Date(`${a.date}T${a.time}:00`)
       const dateB = new Date(`${b.date}T${b.time}:00`)
       return dateA.getTime() - dateB.getTime()
     })
-    
-    return upcomingClasses.length > 0 ? upcomingClasses[0] : null
+
+    if (upcomingClasses.length > 0) {
+      const next = upcomingClasses[0]
+      console.log('Próxima clase encontrada:', {
+        title: next.title,
+        courseTitle: next.courseTitle,
+        date: next.date,
+        time: next.time,
+        daysUntil: next.daysUntil,
+        classroom: next.classroom,
+        sede: next.sede
+      })
+      return next
+    }
+
+    console.log('No se encontraron clases próximas')
+    return null
   }
 
   // Convertir día de la semana a número
