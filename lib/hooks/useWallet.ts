@@ -56,6 +56,11 @@ export function useWallet() {
   }
 }
 
+import { LocalStorageCache } from '@/lib/utils/cache'
+
+const BALANCE_CACHE_KEY = 'wallet_balance'
+const BALANCE_CACHE_TTL = 1 * 60 * 1000 // 1 minuto (balance cambia más frecuentemente)
+
 export function useBalance() {
   const [balance, setBalance] = useState<number>(0)
   const [loadingState, setLoadingState] = useState<LoadingState>({
@@ -64,29 +69,46 @@ export function useBalance() {
   })
 
   const fetchBalance = useCallback(async () => {
-    setLoadingState({ isLoading: true, error: null })
+    // Intentar cargar desde cache primero
+    const cachedBalance = LocalStorageCache.get<number>(BALANCE_CACHE_KEY)
     
+    if (cachedBalance !== null && cachedBalance !== undefined) {
+      // Mostrar balance cacheado inmediatamente
+      setBalance(cachedBalance)
+      setLoadingState({ isLoading: false, error: null })
+    } else {
+      // Si no hay cache, mantener loading mientras se carga
+      setLoadingState({ isLoading: true, error: null })
+    }
+
+    // Siempre hacer fetch para actualizar en background
     try {
       const response = await WalletService.getBalance()
       
       if (response.success) {
         setBalance(response.data)
+        // Guardar en cache
+        LocalStorageCache.set(BALANCE_CACHE_KEY, response.data, BALANCE_CACHE_TTL)
         setLoadingState({ isLoading: false, error: null })
       } else {
-        // Si hay error, mantener el balance en 0 y marcar como no loading
+        // Si hay error y no hay cache, mostrar error
+        if (cachedBalance === null || cachedBalance === undefined) {
+          setBalance(0)
+          setLoadingState({ 
+            isLoading: false, 
+            error: response.error || 'Error al cargar saldo' 
+          })
+        }
+      }
+    } catch (error) {
+      // Si hay error y no hay cache, mostrar error
+      if (cachedBalance === null || cachedBalance === undefined) {
         setBalance(0)
         setLoadingState({ 
           isLoading: false, 
-          error: response.error || 'Error al cargar saldo' 
+          error: 'Error inesperado al cargar saldo' 
         })
       }
-    } catch (error) {
-      // Si hay error, mantener el balance en 0 y marcar como no loading
-      setBalance(0)
-      setLoadingState({ 
-        isLoading: false, 
-        error: 'Error inesperado al cargar saldo' 
-      })
     }
   }, [])
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_CONFIG } from '@/lib/config/api'
+import { errorTracker } from '@/lib/utils/error-tracker'
 
 const BACKEND_BASE_URL = API_CONFIG.BASE_URL
 
@@ -34,6 +35,17 @@ export async function GET(request: Request) {
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`[Notifications Proxy] Backend error (${response.status}):`, errorText)
+      
+      // Registrar error en el tracker
+      errorTracker.trackError(
+        'Notificaciones',
+        '/teachers/me/notifications',
+        'GET',
+        response.status,
+        errorText || response.statusText,
+        { url, teacherUUID }
+      )
+      
       return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
     }
 

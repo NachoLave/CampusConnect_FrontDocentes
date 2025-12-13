@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { errorTracker } from '@/lib/utils/error-tracker'
 
 const BACKOFFICE_URL = 'https://backoffice-production-df78.up.railway.app/api/v1'
 
@@ -49,6 +50,17 @@ export async function GET(
     if (!resp.ok) {
       const text = await resp.text()
       console.error(`Error obteniendo clases individuales: ${resp.status} - ${text}`)
+      
+      // Registrar error en el tracker
+      errorTracker.trackError(
+        'Clases',
+        `/api/clases-individuales/curso/${cursoUUID}`,
+        'GET',
+        resp.status,
+        text || resp.statusText,
+        { url, cursoUUID }
+      )
+      
       return NextResponse.json({ error: text || resp.statusText }, { status: resp.status })
     }
 

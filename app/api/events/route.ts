@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { errorTracker } from '@/lib/utils/error-tracker'
 
 const EVENTS_API_URL = 'https://eventos-academicos-service-1.onrender.com/api/events'
 
@@ -37,6 +38,17 @@ export async function GET(request: Request) {
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`[Events Proxy] Backend error (${response.status}):`, errorText)
+      
+      // Registrar error en el tracker
+      errorTracker.trackError(
+        'Eventos Académicos',
+        '/api/events',
+        'GET',
+        response.status,
+        errorText || response.statusText,
+        { url, userId }
+      )
+      
       return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
     }
 

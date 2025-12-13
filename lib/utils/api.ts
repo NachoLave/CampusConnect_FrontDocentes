@@ -1,9 +1,25 @@
 import { API_CONFIG, DEFAULT_HEADERS } from '@/lib/config/api'
 import { ApiResponse } from '@/lib/types'
 import { APP_CONFIG } from '@/lib/config/app'
+import { errorTracker, extractEndpointInfo } from '@/lib/utils/error-tracker'
 
 // Simulación de delay para hacer más realista la experiencia mock
 const mockDelay = (ms: number = 500) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Helper para registrar errores de manera consistente
+function trackApiError(endpoint: string, method: string, statusCode: number | undefined, message: string, details?: any) {
+  const { module, endpoint: endpointPath } = extractEndpointInfo(endpoint)
+  const errorId = errorTracker.trackError(
+    module,
+    endpointPath,
+    method,
+    statusCode,
+    message,
+    details
+  )
+  // Auto-eliminar después de 10 segundos
+  errorTracker.autoRemoveError(errorId, 10000)
+}
 
 // Cliente HTTP básico
 class ApiClient {
@@ -192,6 +208,17 @@ class ApiClient {
           }
         } catch {}
         
+        // Registrar error en el tracker
+        const { module, endpoint } = extractEndpointInfo(endpoint)
+        errorTracker.trackError(
+          module,
+          endpoint,
+          'GET',
+          response.status,
+          errorDetail,
+          { url, statusText: response.statusText, errorBody }
+        )
+        
         console.error('🔴 [apiClient.get] Error:', {
           url,
           status: response.status,
@@ -211,10 +238,18 @@ class ApiClient {
         message: 'Datos obtenidos correctamente'
       }
     } catch (error) {
+      // Registrar errores de red/excepción
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        trackApiError(endpoint, 'GET', undefined, 'Error de red: ' + errorMessage, { type: 'NetworkError' })
+      } else {
+        trackApiError(endpoint, 'GET', undefined, errorMessage, { type: 'Exception' })
+      }
+      
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
+        error: errorMessage
       }
     }
   }
@@ -269,6 +304,9 @@ class ApiClient {
           } catch {}
         }
         
+        // Registrar error en el tracker
+        trackApiError(endpoint, 'POST', response.status, errorDetail, { url: endpoint, statusText: response.statusText, errorBody })
+        
         // Log detallado del error para debugging
         console.error(`[apiClient.post] Error ${response.status} en ${endpoint}:`, {
           status: response.status,
@@ -298,10 +336,18 @@ class ApiClient {
         message: 'Operación realizada correctamente'
       }
     } catch (error) {
+      // Registrar errores de red/excepción
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        trackApiError(endpoint, 'GET', undefined, 'Error de red: ' + errorMessage, { type: 'NetworkError' })
+      } else {
+        trackApiError(endpoint, 'GET', undefined, errorMessage, { type: 'Exception' })
+      }
+      
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
+        error: errorMessage
       }
     }
   }
@@ -363,6 +409,9 @@ class ApiClient {
           responseHeaders[key] = value
         })
         
+        // Registrar error en el tracker
+        trackApiError(endpoint, 'PUT', response.status, errorDetail, { url: fullUrl, statusText: response.statusText, errorBody })
+        
         console.error(`[apiClient.put] Error ${response.status} en ${endpoint}:`, {
           status: response.status,
           statusText: response.statusText,
@@ -395,10 +444,18 @@ class ApiClient {
         message: 'Datos actualizados correctamente'
       }
     } catch (error) {
+      // Registrar errores de red/excepción
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        trackApiError(endpoint, 'PUT', undefined, 'Error de red: ' + errorMessage, { type: 'NetworkError' })
+      } else {
+        trackApiError(endpoint, 'PUT', undefined, errorMessage, { type: 'Exception' })
+      }
+      
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
+        error: errorMessage
       }
     }
   }
@@ -416,7 +473,24 @@ class ApiClient {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        let errorDetail = `HTTP error! status: ${response.status}`
+        let errorBody: any = null
+        try {
+          const text = await response.text()
+          if (text) {
+            try {
+              errorBody = JSON.parse(text)
+              errorDetail = errorBody.message || errorBody.error || errorBody.detail || errorDetail
+            } catch {
+              errorDetail += ` - ${text}`
+            }
+          }
+        } catch {}
+        
+        // Registrar error en el tracker
+        trackApiError(endpoint, 'DELETE', response.status, errorDetail, { statusText: response.statusText, errorBody })
+        
+        throw new Error(errorDetail)
       }
 
       const data = await response.json()
@@ -426,10 +500,18 @@ class ApiClient {
         message: 'Elemento eliminado correctamente'
       }
     } catch (error) {
+      // Registrar errores de red/excepción
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        trackApiError(endpoint, 'DELETE', undefined, 'Error de red: ' + errorMessage, { type: 'NetworkError' })
+      } else {
+        trackApiError(endpoint, 'DELETE', undefined, errorMessage, { type: 'Exception' })
+      }
+      
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
+        error: errorMessage
       }
     }
   }
@@ -448,7 +530,24 @@ class ApiClient {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        let errorDetail = `HTTP error! status: ${response.status}`
+        let errorBody: any = null
+        try {
+          const text = await response.text()
+          if (text) {
+            try {
+              errorBody = JSON.parse(text)
+              errorDetail = errorBody.message || errorBody.error || errorBody.detail || errorDetail
+            } catch {
+              errorDetail += ` - ${text}`
+            }
+          }
+        } catch {}
+        
+        // Registrar error en el tracker
+        trackApiError(endpoint, 'PATCH', response.status, errorDetail, { statusText: response.statusText, errorBody })
+        
+        throw new Error(errorDetail)
       }
 
       const data = await response.json()
@@ -458,10 +557,18 @@ class ApiClient {
         message: 'Datos actualizados correctamente'
       }
     } catch (error) {
+      // Registrar errores de red/excepción
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        trackApiError(endpoint, 'PATCH', undefined, 'Error de red: ' + errorMessage, { type: 'NetworkError' })
+      } else {
+        trackApiError(endpoint, 'PATCH', undefined, errorMessage, { type: 'Exception' })
+      }
+      
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
+        error: errorMessage
       }
     }
   }

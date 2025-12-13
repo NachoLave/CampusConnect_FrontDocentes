@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { errorTracker } from '@/lib/utils/error-tracker'
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +25,17 @@ export async function GET(request: Request) {
 
     if (!resp.ok) {
       const text = await resp.text()
+      
+      // Registrar error en el tracker
+      errorTracker.trackError(
+        'Comedor',
+        '/api/canteen/reservations',
+        'GET',
+        resp.status,
+        text || resp.statusText,
+        { url, userId }
+      )
+      
       return NextResponse.json({ error: text || resp.statusText }, { status: resp.status })
     }
 

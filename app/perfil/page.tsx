@@ -205,7 +205,7 @@ function getShiftTime(shift: string): string {
 
 // Función para obtener el nombre completo del campus
 // Maneja tanto códigos legacy como UUIDs
-function getCampusName(codeOrUUID: string): string {
+function getCampusName(codeOrUUID: string, allCampuses: Array<{ uuid?: string; name: string; code?: string }> = []): string {
   // Mapeo de códigos legacy (para compatibilidad)
   const legacyMap: Record<string, string> = {
     'MON': 'Monserrat',
@@ -221,22 +221,43 @@ function getCampusName(codeOrUUID: string): string {
     return legacyMap[codeOrUUID]
   }
   
-  // Si parece un UUID (contiene guiones), devolver un placeholder o el UUID corto
+  // Si es VIR (Virtual), devolver Virtual
+  if (codeOrUUID === 'VIR') {
+    return 'Virtual'
+  }
+  
+  // Buscar el campus por UUID en la lista de campuses
   if (codeOrUUID.includes('-')) {
-    return codeOrUUID.substring(0, 8) + '...' // Mostrar primeros 8 caracteres del UUID
+    const campus = allCampuses.find(c => c.uuid === codeOrUUID)
+    if (campus && campus.name) {
+      return campus.name
+    }
+    // Si no se encuentra, intentar buscar por code
+    const campusByCode = allCampuses.find(c => c.code === codeOrUUID)
+    if (campusByCode && campusByCode.name) {
+      return campusByCode.name
+    }
+    // Fallback: mostrar primeros 8 caracteres del UUID
+    return codeOrUUID.substring(0, 8) + '...'
+  }
+  
+  // Si no es UUID, intentar buscar por code
+  const campusByCode = allCampuses.find(c => c.code === codeOrUUID)
+  if (campusByCode && campusByCode.name) {
+    return campusByCode.name
   }
   
   return codeOrUUID
 }
 
 // Función helper para obtener el nombre de una sede desde un bloque de disponibilidad
-function getCampusDisplayName(block: AvailabilityBlock, index: number, campusId: string): string {
+function getCampusDisplayName(block: AvailabilityBlock, index: number, campusId: string, allCampuses: Array<{ uuid?: string; name: string; code?: string }> = []): string {
   // Si tenemos nombres enriquecidos, usarlos
   if (block.campusNames && block.campusNames[index]) {
     return block.campusNames[index]
   }
   // Fallback a la función de mapeo
-  return getCampusName(campusId)
+  return getCampusName(campusId, allCampuses)
 }
 
 // Función para formatear el día
@@ -731,7 +752,7 @@ export default function PerfilPage() {
           const updatedCampuses = [...campusesEnAmbas, ...sedesNuevas, 'VIR'] // Mantener VIR
           const updatedBlock = { ...ambasBlock, campuses: updatedCampuses }
           
-          console.log(`Agregando sedes a bloque AMBAS existente:`, sedesNuevas.map(c => getCampusName(c)).join(', '))
+          console.log(`Agregando sedes a bloque AMBAS existente:`, sedesNuevas.map(c => getCampusName(c, allCampuses)).join(', '))
           console.log(`PATCH /teachers/me/availability/${ambasBlockId}`)
           console.log('Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
           
@@ -746,7 +767,7 @@ export default function PerfilPage() {
             if (success) {
               failedAvailabilityAttemptsRef.current = 0
               // Mostrar mensaje informativo
-              const sedesAgregadas = sedesNuevas.map(c => getCampusName(c)).join(', ')
+              const sedesAgregadas = sedesNuevas.map(c => getCampusName(c, allCampuses)).join(', ')
               setInfoMessage(
                 `Se ${sedesNuevas.length > 1 ? 'agregaron las sedes' : 'agregó la sede'} ${sedesAgregadas} al bloque existente de "Ambas (Presencial y Virtual)" para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}.`
               )
@@ -773,7 +794,7 @@ export default function PerfilPage() {
           return // Salir de la función, ya procesamos
         } else if (sedesYaIncluidas.length > 0) {
           // Todas las sedes ya están incluidas
-          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code)).join(', ')
+          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code, allCampuses)).join(', ')
           setInfoMessage(
             `Ya existe una disponibilidad con modalidad "Ambas (Presencial y Virtual)" para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}, que ya incluye ${sedesYaIncluidas.length > 1 ? 'las sedes' : 'la sede'}: ${sedesNombres}.`
           )
@@ -807,7 +828,7 @@ export default function PerfilPage() {
       
       // Si hay consolidación, actualizar el payload
       if (sedesPresencialesExistentes.size > 0) {
-        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c))
+        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c, allCampuses))
         console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
         
         // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
@@ -1045,7 +1066,7 @@ export default function PerfilPage() {
         )
         
         if (sedesYaIncluidas.length > 0) {
-          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code)).join(', ')
+          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code, allCampuses)).join(', ')
           setShowEditAvailabilityModal(false)
           setEditingBlock(null)
           setInfoMessage(
@@ -1082,7 +1103,7 @@ export default function PerfilPage() {
       
       // Si hay consolidación, actualizar los campuses
       if (sedesPresencialesExistentes.size > 0) {
-        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c))
+        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c, allCampuses))
         console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
         
         // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
@@ -1828,7 +1849,7 @@ export default function PerfilPage() {
                                     onChange={() => toggleCampusFilter(campus)}
                                     className="rounded border-gray-300 text-slate-800 focus:ring-slate-500 w-3.5 h-3.5"
                                   />
-                                  <span className="text-xs sm:text-sm text-gray-700">{getCampusName(campus)}</span>
+                                  <span className="text-xs sm:text-sm text-gray-700">{getCampusName(campus, allCampuses)}</span>
                                 </label>
                               ))}
                             </div>
@@ -1876,7 +1897,7 @@ export default function PerfilPage() {
                       key={campus}
                       className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-100 text-emerald-800"
                     >
-                      {getCampusName(campus)}
+                      {getCampusName(campus, allCampuses)}
                       <button
                         onClick={() => toggleCampusFilter(campus)}
                         className="hover:bg-black/10 rounded-full p-0.5"
@@ -2008,7 +2029,7 @@ export default function PerfilPage() {
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-medium"
                                 >
                                   <MapPin className="w-3.5 h-3.5" />
-                                  {getCampusDisplayName(block, originalIndex, campus)}
+                                  {getCampusDisplayName(block, originalIndex, campus, allCampuses)}
                                 </span>
                               )
                             })}

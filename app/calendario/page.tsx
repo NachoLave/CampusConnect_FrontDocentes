@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { MapPin, Clock, ChevronLeft, ChevronRight, X, AlertTriangle } from "lucide-react"
 import { es } from "date-fns/locale/es"
 import { CalendarService, CalendarEvent as BackendCalendarEvent, CalendarEventsResponse } from '@/lib/api/services/calendar'
+import { LocalStorageCache } from '@/lib/utils/cache'
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -448,19 +449,45 @@ export default function CalendarioPage() {
         return
       }
       
-      // Mostrar loading solo en la primera carga
-      setLoadingEvents(true)
-      setEventsError(null)
+      // Intentar cargar desde cache primero
+      const currentYear = new Date().getFullYear()
+      const from = new Date(currentYear, 0, 1) // 1 de enero
+      const to = new Date(currentYear, 11, 31) // 31 de diciembre
+      const fromIso = from.toISOString().split('T')[0]
+      const toIso = to.toISOString().split('T')[0]
       
+      const cacheKey = `calendar_events_${fromIso}_${toIso}`
+      const cachedData = LocalStorageCache.get<{ events: BackendCalendarEvent[]; errors?: { classes?: string; canteen?: string; events?: string } }>(cacheKey)
+      
+      if (cachedData) {
+        // Mostrar datos cacheados inmediatamente
+        console.log(`Eventos cargados desde cache: ${cachedData.events.length}`)
+        setBackendEvents(cachedData.events)
+        if (cachedData.errors) {
+          setEventTypeErrors(cachedData.errors)
+          setTimeout(() => {
+            setEventTypeErrors({})
+          }, 10000)
+        } else {
+          setEventTypeErrors({})
+        }
+        setLoadingEvents(false)
+        setEventsError(null)
+        
+        // Marcar que ya cargamos (desde cache)
+        setFetchedMonths(prev => {
+          const newSet = new Set(prev)
+          newSet.add('all-events-loaded')
+          return newSet
+        })
+      } else {
+        // Si no hay cache, mostrar loading
+        setLoadingEvents(true)
+        setEventsError(null)
+      }
+      
+      // Siempre hacer fetch para actualizar en background
       try {
-        // Cargar eventos para todo el año actual (desde enero hasta diciembre)
-        const currentYear = new Date().getFullYear()
-        const from = new Date(currentYear, 0, 1) // 1 de enero
-        const to = new Date(currentYear, 11, 31) // 31 de diciembre
-        
-        const fromIso = from.toISOString().split('T')[0]
-        const toIso = to.toISOString().split('T')[0]
-        
         console.log(`Cargando todos los eventos del año ${currentYear}: ${fromIso} a ${toIso}`)
         
         const res = await CalendarService.getWeeklyEvents(fromIso, toIso) as CalendarEventsResponse
@@ -468,6 +495,12 @@ export default function CalendarioPage() {
         if (res.success && Array.isArray(res.data)) {
           console.log(`Eventos cargados: ${res.data.length}`)
           setBackendEvents(res.data)
+          
+          // Guardar en cache (3 minutos TTL)
+          LocalStorageCache.set(cacheKey, {
+            events: res.data,
+            errors: res.errors
+          }, 3 * 60 * 1000)
           
           // Guardar errores por tipo si existen
           if (res.errors) {
@@ -492,8 +525,11 @@ export default function CalendarioPage() {
         }
       } catch (err: any) {
         console.error('Error fetching calendar events', err)
-        setBackendEvents([])
-        setEventsError(String(err?.message || err))
+        // Si hay error y no hay cache, mostrar error
+        if (!cachedData) {
+          setBackendEvents([])
+          setEventsError(String(err?.message || err))
+        }
       } finally {
         setLoadingEvents(false)
       }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_CONFIG } from '@/lib/config/api'
+import { errorTracker } from '@/lib/utils/error-tracker'
 
 const BACKEND_BASE_URL = API_CONFIG.BASE_URL
 
@@ -17,7 +18,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
     }
 
-    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_NOTIFICATIONS}/${params.notificationId}/read`
+    // El endpoint del backend es: /teachers/me/notifications/notificationId/read
+    const url = `${BACKEND_BASE_URL}/teachers/me/notifications/${params.notificationId}/read`
     
     console.log(`[Notifications Proxy PATCH] Calling backend: ${url} with X-Teacher-Id: ${teacherUUID}`)
     
@@ -36,6 +38,17 @@ export async function PATCH(
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`[Notifications Proxy PATCH] Backend error (${response.status}):`, errorText)
+      
+      // Registrar error en el tracker
+      errorTracker.trackError(
+        'Notificaciones',
+        `/teachers/me/notifications/${params.notificationId}/read`,
+        'PATCH',
+        response.status,
+        errorText || response.statusText,
+        { url, teacherUUID, notificationId: params.notificationId }
+      )
+      
       return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })
     }
 

@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { StoreOrder, StoreOrderSummary, LoadingState } from '@/lib/types'
 import { StoreService } from '@/lib/api/services'
+import { LocalStorageCache } from '@/lib/utils/cache'
+
+const STORE_ORDERS_CACHE_KEY = 'store_orders'
+const STORE_ORDERS_CACHE_TTL = 3 * 60 * 1000 // 3 minutos
 
 export function useStoreOrders() {
   const [orders, setOrders] = useState<StoreOrder[]>([])
@@ -12,19 +16,35 @@ export function useStoreOrders() {
   })
 
   const fetchOrders = useCallback(async () => {
-    setLoadingState({ isLoading: true, error: null })
+    // Intentar cargar desde cache primero
+    const cachedData = LocalStorageCache.get<StoreOrder[]>(STORE_ORDERS_CACHE_KEY)
     
+    if (cachedData) {
+      // Mostrar datos cacheados inmediatamente
+      setOrders(cachedData)
+      setLoadingState({ isLoading: false, error: null })
+    } else {
+      // Si no hay cache, mantener loading mientras se carga
+      setLoadingState({ isLoading: true, error: null })
+    }
+
+    // Siempre hacer fetch para actualizar en background
     try {
       const response = await StoreService.getOrders()
       
       if (response.success) {
         setOrders(response.data || [])
+        // Guardar en cache
+        LocalStorageCache.set(STORE_ORDERS_CACHE_KEY, response.data || [], STORE_ORDERS_CACHE_TTL)
         setLoadingState({ isLoading: false, error: null })
       } else {
-        setLoadingState({ 
-          isLoading: false, 
-          error: response.error || 'Error al cargar órdenes de tienda' 
-        })
+        // Si hay error y no hay cache, mostrar error
+        if (!cachedData) {
+          setLoadingState({ 
+            isLoading: false, 
+            error: response.error || 'Error al cargar órdenes de tienda' 
+          })
+        }
       }
     } catch (error) {
       console.error('Error en fetchOrders:', error)
@@ -32,10 +52,13 @@ export function useStoreOrders() {
         ? error.message 
         : 'Error inesperado al cargar órdenes de tienda'
       
-      setLoadingState({ 
-        isLoading: false, 
-        error: errorMessage
-      })
+      // Si hay error y no hay cache, mostrar error
+      if (!cachedData) {
+        setLoadingState({ 
+          isLoading: false, 
+          error: errorMessage
+        })
+      }
     }
   }, [])
 
