@@ -23,15 +23,41 @@ export async function GET(request: Request) {
     const url = `${EVENTS_API_URL}?endDate=${endDate}`
     console.log(`[Events Proxy] Calling backend: ${url} with userId: ${userId}`)
     
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'userId': userId
-      },
-      cache: 'no-store'
-    })
+    // Timeout de 7 segundos en el proxy para no bloquear
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 7000) // 7 segundos
+    
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'userId': userId
+        },
+        cache: 'no-store',
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId)
+      
+      if (fetchError.name === 'AbortError') {
+        console.error('[Events Proxy] Timeout: El endpoint tardó más de 7 segundos')
+        errorTracker.trackError(
+          'Eventos Académicos',
+          '/api/events',
+          'GET',
+          504, // Gateway Timeout
+          'El endpoint tardó demasiado en responder (timeout)',
+          { url, userId, timeout: true }
+        )
+        return NextResponse.json({ error: 'Timeout: El endpoint tardó demasiado en responder' }, { status: 504 })
+      }
+      
+      throw fetchError
+    }
 
     console.log(`[Events Proxy] Backend response status: ${response.status}`)
 

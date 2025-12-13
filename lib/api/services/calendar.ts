@@ -163,12 +163,21 @@ export class CalendarService {
     }
 
     // Obtener eventos académicos (manejar errores independientemente)
+    // Usamos Promise.race con timeout adicional como seguridad extra
     try {
-      const eventEvents = await this.getEvents(startDate, endDate)
+      const eventEventsPromise = this.getEvents(startDate, endDate)
+      const timeoutPromise = new Promise<CalendarEvent[]>((resolve) => {
+        setTimeout(() => {
+          console.warn('Timeout adicional en getEvents, retornando array vacío para no bloquear')
+          resolve([])
+        }, 9000) // 9 segundos máximo total (8s del fetch + 1s de margen)
+      })
+      
+      const eventEvents = await Promise.race([eventEventsPromise, timeoutPromise])
       allEvents.push(...eventEvents)
     } catch (err: any) {
       console.warn('Error obteniendo eventos académicos:', err)
-      errors.events = err?.message || 'Error al cargar eventos académicos'
+      errors.events = err?.message || 'Error al cargar eventos académicos (puede ser timeout o error de conexión)'
     }
 
     // Retornar eventos cargados exitosamente, incluso si algunos tipos fallaron
@@ -240,6 +249,7 @@ export class CalendarService {
   }
 
   // Obtener eventos académicos desde el endpoint de eventos
+  // Con timeout corto y manejo de errores independiente para no bloquear otros eventos
   private static async getEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
     try {
       const teacherUUID = authService.getTeacherUUID()
@@ -251,23 +261,45 @@ export class CalendarService {
       // Usar proxy de Next.js para evitar CORS
       const url = `/api/events?endDate=9999-12-02`
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'userId': teacherUUID
+      // Timeout de 8 segundos para eventos (un poco más que el proxy de 7s para dar margen)
+      // Si tarda más, cancelamos y retornamos array vacío para no bloquear
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 segundos timeout
+      
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'userId': teacherUUID
+          },
+          signal: controller.signal // Agregar signal para poder cancelar
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          console.warn(`Error obteniendo eventos académicos: ${response.status}`)
+          return []
         }
-      })
 
-      if (!response.ok) {
-        console.warn(`Error obteniendo eventos académicos: ${response.status}`)
-        return []
+        const data = await response.json()
+        return this.convertEventsToCalendarEvents(data, startDate, endDate)
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        
+        // Si es un abort (timeout), loguear específicamente
+        if (fetchError.name === 'AbortError') {
+          console.warn('Timeout obteniendo eventos académicos (más de 8 segundos)')
+          return []
+        }
+        
+        // Para otros errores, re-lanzar para que el catch externo lo maneje
+        throw fetchError
       }
-
-      const data = await response.json()
-      return this.convertEventsToCalendarEvents(data, startDate, endDate)
     } catch (error) {
       console.warn('Error obteniendo eventos académicos:', error)
+      // Siempre retornar array vacío para no bloquear otros eventos
       return []
     }
   }
