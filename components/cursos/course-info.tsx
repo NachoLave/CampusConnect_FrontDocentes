@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   Eye,
+  Calendar,
 } from "lucide-react"
 import { CardSkeleton, Skeleton, ButtonSkeleton, CircleSkeleton } from "@/components/ui/loaders/skeleton"
 import { useState, useEffect, useMemo } from "react"
@@ -1560,7 +1561,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   useEffect(() => {
     let mounted = true
     const loadClasses = async () => {
-      if (!course.uuid) return
+      if (!course.uuid) {
+        // Si no hay UUID, establecer como vacío y no cargar
+        setIndividualClasses([])
+        setLoadingClasses(false)
+        return
+      }
       
       setLoadingClasses(true)
       try {
@@ -1585,11 +1591,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         if (response.ok) {
           const data = await response.json()
           if (Array.isArray(data)) {
-            setIndividualClasses(data)
+            setIndividualClasses(data) // Puede ser un array vacío si no hay clases
+          } else {
+            setIndividualClasses([]) // Si no es un array, establecer como vacío
           }
+        } else {
+          setIndividualClasses([]) // Si hay error, establecer como vacío
         }
       } catch (err) {
         console.warn('Error obteniendo clases individuales:', err)
+        setIndividualClasses([]) // En caso de error, establecer como vacío
       } finally {
         if (mounted) {
           setLoadingClasses(false)
@@ -1597,17 +1608,22 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       }
     }
 
-    if (course.uuid) {
-      loadClasses()
-    }
+    loadClasses()
     
     return () => { mounted = false }
   }, [course.uuid])
 
   // Cargar los registros de asistencia una sola vez al montar el componente (no al cambiar de pestaña)
+  // Solo cargar si hay clases individuales, de lo contrario no tiene sentido cargar registros
   useEffect(() => {
     let mounted = true
     const loadRecords = async () => {
+      // Si no hay clases individuales, no cargar registros de asistencia
+      if (individualClasses.length === 0) {
+        setAttendanceRecordsByMonth({})
+        return
+      }
+      
       // Cargar siempre para poder calcular estadísticas, no solo cuando activeTab === 'Asistencia'
       try {
         const resp = await CoursesService.getAttendanceRecords(getCourseIdForApi())
@@ -1690,9 +1706,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       }
     }
 
-    loadRecords()
+    // Solo cargar registros si ya terminó de cargar las clases individuales
+    if (!loadingClasses) {
+      loadRecords()
+    }
     return () => { mounted = false }
-  }, [courseId]) // Removido activeTab de las dependencias
+  }, [courseId, individualClasses, loadingClasses]) // Agregar individualClasses y loadingClasses como dependencias
 
   // Mapear tipo de clase a texto legible (sin el nombre del curso)
   const mapClaseTypeToLabel = (tipo: string): string => {
@@ -1798,15 +1817,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       return yesterday
     }
     
-    // Para otros días, usar la lógica anterior (clase de esta semana)
-    const day = today.getDay() // 0 dom .. 6 sab
-    const diffToMonday = (day + 6) % 7
-    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diffToMonday)
-    const target = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + courseWeekday)
-    // Limitar al rango del curso
-    if (target < courseStartDate) return courseStartDate
-    if (target > courseEndDate) return courseEndDate
-    return target
+    // Si no hay clase hoy, permitir todas las fechas pasadas (hasta ayer)
+    // Esto permite seleccionar cualquier fecha pasada del curso, no solo de esta semana
+    const yesterday = new Date(todayDate)
+    yesterday.setDate(yesterday.getDate() - 1)
+    return yesterday
   }
 
   // Cargar TODAS las asistencias de TODAS las fechas de una vez al entrar a la pestaña de asistencia
@@ -1816,9 +1831,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       return
     }
     
-    // Si no hay fechas aún o aún se están cargando las clases, mostrar loading
-    if (allCourseDates.length === 0 || loadingClasses) {
+    // Si aún se están cargando las clases, mostrar loading
+    if (loadingClasses) {
       setIsLoadingAttendance(true)
+      return
+    }
+    
+    // Si ya terminó de cargar y no hay fechas, no mostrar loading (mostrar mensaje de "no hay clases")
+    if (allCourseDates.length === 0) {
+      setIsLoadingAttendance(false)
       return
     }
     
@@ -3086,7 +3107,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
         {activeTab === "Asistencia" && (
           <div className="space-y-4 lg:space-y-6">
-            {isLoadingAttendance ? (
+            {isLoadingAttendance || loadingClasses ? (
               <div className="bg-white rounded-lg p-4 lg:p-6">
                 <Skeleton className="h-6 lg:h-7 w-48 mb-4 lg:mb-6" />
                 <div className="space-y-4">
@@ -3106,6 +3127,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            ) : !loadingClasses && allCourseDates.length === 0 ? (
+              <div className="bg-white rounded-lg p-6 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <Calendar className="h-10 w-10 text-gray-400 mb-3" />
+                  <h3 className="text-base font-medium text-gray-900 mb-1.5">
+                    El curso aún no tiene clases creadas
+                  </h3>
+                  <p className="text-xs text-gray-600 max-w-md">
+                    No se han registrado clases individuales para este curso. Una vez que se creen las clases, podrás tomar asistencia.
+                  </p>
                 </div>
               </div>
             ) : (

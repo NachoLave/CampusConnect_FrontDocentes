@@ -96,8 +96,8 @@ export function Sidebar({ currentPage = "Inicio", isOpen = false, onClose }: Sid
           <SemesterProgress animated={true} />
         </div>
 
-        <nav className="p-4 lg:p-6 flex-1 overflow-y-auto">
-          <ul className="space-y-2 lg:space-y-3">
+        <nav className="p-4 lg:p-6 flex-1 overflow-y-auto flex flex-col">
+          <ul className="space-y-2 lg:space-y-3 flex-1">
             {menuItems.map((item, index) => (
               <li key={index}>
                 <Link
@@ -116,18 +116,18 @@ export function Sidebar({ currentPage = "Inicio", isOpen = false, onClose }: Sid
               </li>
             ))}
           </ul>
+          
+          {/* Botón para copiar token - solo icono, alineado abajo a la izquierda */}
+          <div className="mt-auto pt-2">
+            <button
+              onClick={handleCopyToken}
+              className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg transition-all duration-200"
+              title="Copiar token del docente"
+            >
+              <Fingerprint className="h-6 w-6" />
+            </button>
+          </div>
         </nav>
-
-        {/* Botón para copiar token - esquina inferior derecha */}
-        <div className="relative flex-shrink-0">
-          <button
-            onClick={handleCopyToken}
-            className="absolute bottom-4 right-4 p-2.5 bg-slate-700 text-slate-300 hover:text-slate-100 hover:bg-slate-600 rounded-lg transition-all duration-200 shadow-md"
-            title="Copiar token del docente"
-          >
-            <Fingerprint className="h-5 w-5" />
-          </button>
-        </div>
       </aside>
     </>
   )
