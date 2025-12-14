@@ -89,6 +89,17 @@ export default function TiendaPage() {
       newExpanded.delete(orderId)
     } else {
       newExpanded.add(orderId)
+      // Pre-cargar imágenes cuando se expande
+      const order = orders?.find(o => o.id === orderId)
+      if (order) {
+        order.Item_compra.forEach(item => {
+          const imagen = item.Stock?.Articulo?.Imagen?.[0]?.imagen
+          if (imagen) {
+            const img = new Image()
+            img.src = imagen
+          }
+        })
+      }
     }
     setExpandedOrderIds(newExpanded)
   }
@@ -296,6 +307,8 @@ export default function TiendaPage() {
                                         src={imagen} 
                                         alt={articulo?.Titulo}
                                         className="h-16 w-16 object-cover rounded"
+                                        loading="eager"
+                                        decoding="async"
                                       />
                                     )}
                                     <div className="flex-1">
