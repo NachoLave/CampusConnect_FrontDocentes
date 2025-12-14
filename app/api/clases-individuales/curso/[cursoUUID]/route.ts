@@ -4,6 +4,9 @@ import { errorTracker } from '@/lib/utils/error-tracker'
 
 const BACKOFFICE_URL = 'https://backoffice-production-df78.up.railway.app/api/v1'
 
+// Forzar que esta ruta sea dinámica (no generar static paths)
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: Request,
   { params }: { params: { cursoUUID: string } }

@@ -103,13 +103,24 @@ export class CanteenService {
    */
   static async getLocations(): Promise<ApiResponse<CanteenLocation[]>> {
     try {
+      // Obtener el token del usuario autenticado
+      const token = authService.getToken()
+      if (!token) {
+        return {
+          data: [] as CanteenLocation[],
+          success: false,
+          error: 'Usuario no autenticado. No se puede obtener el token.'
+        }
+      }
+
       const url = '/api/canteen/locations'
       
       const response = await fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
       }, 15000)
 
@@ -145,25 +156,24 @@ export class CanteenService {
     try {
       console.log('Llamando al microservicio de comedor...')
       
-      // Obtener el userId del JWT del usuario autenticado
-      const jwtPayload = authService.getJWTPayload()
-      if (!jwtPayload || !jwtPayload.sub) {
+      // Obtener el token del usuario autenticado
+      const token = authService.getToken()
+      if (!token) {
         return {
           data: [] as CanteenReservation[],
           success: false,
-          error: 'Usuario no autenticado. No se puede obtener el UUID.'
+          error: 'Usuario no autenticado. No se puede obtener el token.'
         }
       }
-
-      const userId = jwtPayload.sub
       
       // Obtener reservas y locations en paralelo
       const [reservationsResponse, locationsResponse] = await Promise.all([
-        fetchWithTimeout(`/api/canteen/reservations?userId=${userId}`, {
+        fetchWithTimeout(`/api/canteen/reservations`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           }
         }, 15000),
         this.getLocations()
@@ -177,9 +187,24 @@ export class CanteenService {
       const data = await reservationsResponse.json()
       console.log('Reservas obtenidas del microservicio:', data)
       
-      // Validar que sea un array
+      // Validar que sea un array (puede venir vacío si no hay reservas)
       if (!Array.isArray(data)) {
-        throw new Error('La respuesta del servidor no es un array válido')
+        // Si no es un array, devolver array vacío (puede ser que el endpoint devuelva null o vacío)
+        console.warn('La respuesta del servidor no es un array válido, devolviendo array vacío')
+        return {
+          data: [] as CanteenReservation[],
+          success: true,
+          message: 'No hay reservas de comedor'
+        }
+      }
+      
+      // Si el array está vacío, devolver éxito con array vacío
+      if (data.length === 0) {
+        return {
+          data: [] as CanteenReservation[],
+          success: true,
+          message: 'No hay reservas de comedor'
+        }
       }
 
       // Crear mapa de locationId -> nombre de sede

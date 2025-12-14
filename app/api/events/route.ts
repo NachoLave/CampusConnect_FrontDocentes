@@ -9,11 +9,17 @@ const EVENTS_API_URL = 'https://eventos-academicos-service-1.onrender.com/api/ev
  */
 export async function GET(request: Request) {
   try {
-    // Leer userId del header de la request (enviado desde el frontend)
-    const userId = request.headers.get('userId')
-    if (!userId) {
-      console.error('[Events Proxy] No userId header found')
-      return NextResponse.json({ error: 'No hay usuario autenticado' }, { status: 401 })
+    // Obtener el token desde el header Authorization
+    const authHeader = request.headers.get('Authorization')
+    let token: string | null = null
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7)
+    }
+
+    if (!token) {
+      console.error('[Events Proxy] No Bearer token found')
+      return NextResponse.json({ error: 'Token de autenticación requerido' }, { status: 401 })
     }
 
     // Obtener endDate de query params o usar valor por defecto
@@ -21,7 +27,7 @@ export async function GET(request: Request) {
     const endDate = searchParams.get('endDate') || '9999-12-02'
 
     const url = `${EVENTS_API_URL}?endDate=${endDate}`
-    console.log(`[Events Proxy] Calling backend: ${url} with userId: ${userId}`)
+    console.log(`[Events Proxy] Calling backend: ${url}`)
     
     // Timeout de 7 segundos en el proxy para no bloquear
     const controller = new AbortController()
@@ -34,7 +40,7 @@ export async function GET(request: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'userId': userId
+          'Authorization': `Bearer ${token}`
         },
         cache: 'no-store',
         signal: controller.signal
@@ -51,7 +57,7 @@ export async function GET(request: Request) {
           'GET',
           504, // Gateway Timeout
           'El endpoint tardó demasiado en responder (timeout)',
-          { url, userId, timeout: true }
+          { url, timeout: true }
         )
         return NextResponse.json({ error: 'Timeout: El endpoint tardó demasiado en responder' }, { status: 504 })
       }
@@ -72,7 +78,7 @@ export async function GET(request: Request) {
         'GET',
         response.status,
         errorText || response.statusText,
-        { url, userId }
+        { url }
       )
       
       return NextResponse.json({ error: errorText || response.statusText }, { status: response.status })

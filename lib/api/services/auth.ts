@@ -1,6 +1,7 @@
 import { API_CONFIG, DEFAULT_HEADERS } from '@/lib/config/api'
 import type { AuthUser, LoginCredentials, AuthResponse } from '@/lib/types'
 import { APP_CONFIG } from '@/lib/config/app'
+import { LocalStorageCache } from '@/lib/utils/cache'
 
 // URL del login de Core
 export const CORE_LOGIN_URL = 'https://core-frontend-2025-02.netlify.app'
@@ -132,6 +133,28 @@ class AuthService {
     if (this.isTokenExpired(token)) {
       console.error('❌ El token JWT está expirado')
       return false
+    }
+    
+    // Verificar si es un usuario diferente (cambio de usuario)
+    const currentUserId = this.jwtPayload?.sub
+    const newUserId = payload.sub
+    const isDifferentUser = currentUserId && currentUserId !== newUserId
+    
+    if (isDifferentUser) {
+      console.log('🔄 Detectado cambio de usuario, limpiando cache...')
+      // Limpiar cache cuando cambia el usuario
+      if (typeof window !== 'undefined') {
+        LocalStorageCache.clearAll()
+        // También limpiar datos específicos del usuario anterior
+        const keysToRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && (key.startsWith('attendance_') || key.startsWith('grades_'))) {
+            keysToRemove.push(key)
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key))
+      }
     }
     
     console.log('✅ JWT válido:', {
@@ -276,17 +299,32 @@ class AuthService {
     this.token = null
     this.jwtPayload = null
     
-    // Limpiar localStorage
+    // Limpiar localStorage y cache
     if (typeof window !== 'undefined') {
+      // Limpiar datos de autenticación
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
       localStorage.removeItem('auth_refresh_token')
       localStorage.removeItem('jwt_payload')
       localStorage.removeItem('mock_user')
       localStorage.removeItem('mock_token')
+      
+      // Limpiar toda la cache de datos del usuario
+      LocalStorageCache.clearAll()
+      
+      // Limpiar cualquier otro dato específico del usuario que pueda estar en localStorage
+      // (por ejemplo, datos de asistencia guardados localmente)
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith('attendance_') || key.startsWith('grades_'))) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key))
     }
     
-    console.log('👋 Usuario deslogueado')
+    console.log('👋 Usuario deslogueado - Cache limpiada')
   }
 
   /**

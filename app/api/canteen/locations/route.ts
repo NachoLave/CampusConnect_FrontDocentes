@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Obtener el token desde el header Authorization
+    const authHeader = request.headers.get('Authorization')
+    let token: string | null = null
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7)
+    }
+
+    if (!token) {
+      return NextResponse.json({ error: 'Token de autenticación requerido' }, { status: 401 })
+    }
+
     // Llamar al endpoint de locations de Azure a través del proxy
     const url = 'https://comedorback.azurewebsites.net/locations'
     
@@ -9,7 +21,8 @@ export async function GET() {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       cache: 'no-store'
     })

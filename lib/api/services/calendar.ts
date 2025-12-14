@@ -143,19 +143,55 @@ export class CalendarService {
 
     // Obtener reservas de comedor (manejar errores independientemente)
     try {
-      const canteenUrl = `/api/canteen/reservations?userId=${teacherUUID}`
-      const canteenResponse = await fetch(canteenUrl, { 
-        method: 'GET', 
-        headers: {
-          'Accept': 'application/json'
+      const token = authService.getToken()
+      if (token) {
+        // Obtener reservas y locations en paralelo
+        const [canteenResponse, locationsResponse] = await Promise.all([
+          fetch(`/api/canteen/reservations`, { 
+            method: 'GET', 
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          }),
+          fetch(`/api/canteen/locations`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          })
+        ])
+        
+        if (canteenResponse.ok) {
+          const canteenData = await canteenResponse.json()
+          // Manejar el caso de que la respuesta pueda venir vacía
+          if (Array.isArray(canteenData) && canteenData.length > 0) {
+            // Crear mapa de locationId -> nombre de sede
+            const locationsMap = new Map<number, string>()
+            if (locationsResponse.ok) {
+              try {
+                const locationsData = await locationsResponse.json()
+                if (Array.isArray(locationsData)) {
+                  locationsData.forEach((location: any) => {
+                    locationsMap.set(location.id, location.name)
+                  })
+                }
+              } catch (e) {
+                console.warn('Error parseando locations de comedor:', e)
+              }
+            }
+            
+            const canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate, locationsMap)
+            allEvents.push(...canteenEvents)
+          }
+        } else {
+          errors.canteen = `Error ${canteenResponse.status} al cargar reservas de comedor`
         }
-      })
-      if (canteenResponse.ok) {
-        const canteenData = await canteenResponse.json()
-        const canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate)
-        allEvents.push(...canteenEvents)
       } else {
-        errors.canteen = `Error ${canteenResponse.status} al cargar reservas de comedor`
+        errors.canteen = 'No hay token de autenticación para obtener reservas de comedor'
       }
     } catch (err: any) {
       console.warn('Error obteniendo reservas de comedor:', err)
@@ -252,9 +288,10 @@ export class CalendarService {
   // Con timeout corto y manejo de errores independiente para no bloquear otros eventos
   private static async getEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
     try {
-      const teacherUUID = authService.getTeacherUUID()
-      if (!teacherUUID) {
-        console.warn('No hay docente autenticado para obtener eventos')
+      // Obtener el token del usuario autenticado
+      const token = authService.getToken()
+      if (!token) {
+        console.warn('No hay token de autenticación para obtener eventos')
         return []
       }
 
@@ -271,7 +308,8 @@ export class CalendarService {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'userId': teacherUUID
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
           signal: controller.signal // Agregar signal para poder cancelar
         })
@@ -355,7 +393,7 @@ export class CalendarService {
   }
 
   // Convertir reservas de comedor a eventos del calendario
-  private static convertCanteenToEvents(reservations: any[], startDate: string, endDate: string): CalendarEvent[] {
+  private static convertCanteenToEvents(reservations: any[], startDate: string, endDate: string, locationsMap?: Map<number, string>): CalendarEvent[] {
     const events: CalendarEvent[] = []
     
     reservations.forEach((reservation: any) => {
@@ -390,6 +428,10 @@ export class CalendarService {
       if (dateStr >= startDate && dateStr <= endDate) {
         const mealTime = this.mapMealTime(reservation.mealTime || '')
         
+        // Obtener nombre de la sede desde el mapa de locations
+        const locationId = reservation.locationId
+        const sedeName = (locationsMap && locationId) ? locationsMap.get(locationId) || '' : ''
+        
         // Título simplificado: solo el tipo de comida (el contexto visual ya indica que es comedor)
         const title = `Comedor - ${mealTime}`
         
@@ -401,8 +443,8 @@ export class CalendarService {
           date: dateStr,
           time: time,
           duration: duration,
-          classroom: mealTime || '',
-          sede: '', // No hay información de sede en el nuevo formato
+          classroom: '', // Dejar vacío para comedor, solo usar sede
+          sede: sedeName || '', // Nombre de la sede
           type: 'canteen'
         })
       }
