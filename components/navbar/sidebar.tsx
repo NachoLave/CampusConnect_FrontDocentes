@@ -1,9 +1,11 @@
 "use client"
 
-import { Home, BookOpen, Calendar, Wallet, UtensilsCrossed, ShoppingBag, GraduationCap, X } from "lucide-react"
+import { useState } from "react"
+import { Home, BookOpen, Calendar, Wallet, UtensilsCrossed, ShoppingBag, GraduationCap, X, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { SemesterProgress } from "@/components/ui/semester-progress"
+import { authService } from "@/lib/api/services/auth"
 
 const menuItems = [
   { icon: Home, label: "Inicio", href: "/" },
@@ -21,8 +23,35 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentPage = "Inicio", isOpen = false, onClose }: SidebarProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyToken = async () => {
+    const token = authService.getToken()
+    if (!token) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(token)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error('Error al copiar token:', error)
+    }
+  }
+
   return (
     <>
+      {/* Badge flotante de confirmación - fuera del sidebar */}
+      {copied && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-none">
+          <div className="bg-emerald-600 text-white text-xs px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+            <Fingerprint className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Token copiado en el portapapeles</span>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Overlay */}
       {isOpen && (
         <div
@@ -88,6 +117,17 @@ export function Sidebar({ currentPage = "Inicio", isOpen = false, onClose }: Sid
             ))}
           </ul>
         </nav>
+
+        {/* Botón para copiar token - esquina inferior derecha */}
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={handleCopyToken}
+            className="absolute bottom-4 right-4 p-2.5 bg-slate-700 text-slate-300 hover:text-slate-100 hover:bg-slate-600 rounded-lg transition-all duration-200 shadow-md"
+            title="Copiar token del docente"
+          >
+            <Fingerprint className="h-5 w-5" />
+          </button>
+        </div>
       </aside>
     </>
   )

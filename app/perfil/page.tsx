@@ -433,19 +433,6 @@ export default function PerfilPage() {
   const [showAvailabilityFilterDropdown, setShowAvailabilityFilterDropdown] = useState(false)
   const availabilityFilterDropdownRef = useRef<HTMLDivElement>(null)
 
-  // 🔐 DEBUG: Imprimir token completo en consola
-  useEffect(() => {
-    const token = authService.getToken()
-    if (token) {
-      console.log('========================================')
-      console.log('🔐 TOKEN COMPLETO (copiar desde aquí):')
-      console.log('========================================')
-      console.log(token)
-      console.log('========================================')
-      console.log('🔐 FIN DEL TOKEN')
-      console.log('========================================')
-    }
-  }, [])
 
   // Sincronizar con datos del backend solo cuando está permitido
   useEffect(() => {
@@ -1330,24 +1317,8 @@ export default function PerfilPage() {
     }
   }, [infoMessage])
 
-  // Obtener token para mostrar
-  const currentToken = authService.getToken()
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* 🔐 DEBUG: Token visible para copiar - ELIMINAR DESPUÉS */}
-      {currentToken && (
-        <div className="bg-yellow-100 border-2 border-yellow-500 rounded-lg p-4 mb-4">
-          <p className="font-bold text-yellow-800 mb-2">🔐 URL con JWT (copiar y eliminar este bloque después):</p>
-          <textarea
-            readOnly
-            value={`http://localhost:3000/?JWT=${currentToken}`}
-            className="w-full h-16 p-2 text-xs font-mono bg-white border rounded resize-none"
-            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-          />
-        </div>
-      )}
-
       {/* Mensaje de error */}
       {errorMessage && (
         <div className="fixed top-4 right-4 z-50 max-w-md animate-in slide-in-from-top">
