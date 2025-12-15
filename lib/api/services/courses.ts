@@ -127,7 +127,7 @@ export class CoursesService {
         }
       }
 
-      // Paso 2: Para cada inscripción, obtener detalles del curso y conteo de alumnos
+      // Paso 2: Para cada inscripción, obtener detalles del curso, conteo de alumnos y estado de acta
       const cursosPromises = inscripciones.map(async (inscripcion) => {
         const cursoUUID = inscripcion.uuid_curso
         
@@ -137,8 +137,27 @@ export class CoursesService {
         // Obtener inscripciones del curso para contar alumnos y docentes
         const cursoInscripciones = await this.getCursoInscripciones(cursoUUID)
         
+        // Obtener estado de acta para este curso
+        let hasActa = false
+        try {
+          const actsResp = await this.getActs(cursoUUID)
+          if (actsResp && actsResp.success) {
+            const acts = Array.isArray(actsResp.data) ? actsResp.data : []
+            hasActa = acts.length > 0
+          }
+        } catch (err) {
+          // Ignorar errores al obtener actas, no bloquear carga de cursos
+        }
+        
         // Convertir a formato Course del frontend
-        return this.mapExternalToCourse(inscripcion, cursoDetalle, cursoInscripciones)
+        const course = this.mapExternalToCourse(inscripcion, cursoDetalle, cursoInscripciones)
+        
+        // Agregar información de acta al curso
+        if (hasActa) {
+          course.status = 'ACTA_GENERADA'
+        }
+        
+        return course
       })
 
       const cursos = await Promise.all(cursosPromises)
@@ -533,18 +552,19 @@ export class CoursesService {
   // Confirmar/Generar acta oficial para un curso
   // Solo envía header X-Teacher-Id con el UUID del docente
   static async confirmAct(courseId: number | string): Promise<ApiResponse<any>> {
-    const endpoint = typeof API_CONFIG.ENDPOINTS.COURSE_ACTS === 'function'
-      ? `${API_CONFIG.ENDPOINTS.COURSE_ACTS(courseId)}:confirm`
-      : `/teaching/courses/${courseId}/acts:confirm`
-
-    // Usar proxy de Next.js para evitar CORS
+    // Usar URL directa del backend sin proxy
     const teacherUUID = this.getTeacherUUID()
-    const url = `/api/teaching/courses/${courseId}/acts/confirm`
+    const url = `${API_CONFIG.BASE_URL}/teaching/courses/${courseId}/acts:confirm`
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
     }
+    
+    // Solo enviar X-Teacher-Id (sin Bearer token)
+    if (teacherUUID) {
+      headers['X-Teacher-Id'] = teacherUUID
+    }
+    
     const body = {}
 
     try {
@@ -569,14 +589,17 @@ export class CoursesService {
   }
 
   // Obtener actas (acts) asociadas a un curso
-  // Solo envía header X-Teacher-Id con el UUID del docente
+  // Usa URL directa del backend sin proxy
   static async getActs(courseId: number | string): Promise<ApiResponse<any[]>> {
-    // Usar proxy de Next.js para evitar CORS
     const teacherUUID = this.getTeacherUUID()
-    const url = `/api/teaching/courses/${courseId}/acts`
+    const url = `${API_CONFIG.BASE_URL}/teaching/courses/${courseId}/acts`
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
+    }
+    
+    // Solo enviar X-Teacher-Id (sin Bearer token)
+    if (teacherUUID) {
+      headers['X-Teacher-Id'] = teacherUUID
     }
 
     try {

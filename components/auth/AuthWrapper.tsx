@@ -7,7 +7,7 @@ import { MainLayout } from '@/components/layout/main-layout'
 import { APP_CONFIG } from '@/lib/config/app'
 
 // Páginas que no requieren autenticación
-const PUBLIC_PATHS = ['/login']
+const PUBLIC_PATHS = ['/login', '/unauthorized']
 
 function AuthenticatedContent({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useAuthContext()
@@ -15,6 +15,11 @@ function AuthenticatedContent({ children }: { children: React.ReactNode }) {
 
   // Si es una ruta pública, mostrar sin layout
   if (PUBLIC_PATHS.includes(pathname)) {
+    return <>{children}</>
+  }
+
+  // Si es la página de unauthorized, mostrar sin layout
+  if (pathname === '/unauthorized') {
     return <>{children}</>
   }
 

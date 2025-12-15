@@ -1,8 +1,7 @@
-import { Course, ApiResponse } from '@/lib/types'
+import { ApiResponse } from '@/lib/types'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import { authService } from './auth'
-import { CoursesService } from './courses'
 
 export interface CalendarEvent {
   id: string
@@ -133,14 +132,15 @@ export class CalendarService {
       // 1. Obtener clases/exámenes
       (async () => {
         try {
-          const coursesResponse = await CoursesService.getCourses()
-          if (coursesResponse.success && coursesResponse.data) {
-            const courses = coursesResponse.data
-            const classEvents = await this.convertClasesIndividualesToEvents(courses, startDate, endDate)
-            return { events: classEvents, error: null }
-          } else {
-            return { events: [], error: 'No se pudieron obtener los cursos del docente' }
+          // Obtener inscripciones del docente usando el mismo método que "Mis Cursos"
+          const inscripciones = await this.getDocenteInscripciones(teacherUUID)
+          
+          if (!inscripciones || inscripciones.length === 0) {
+            return { events: [], error: null }
           }
+          
+          const classEvents = await this.convertClasesIndividualesToEvents(inscripciones, startDate, endDate)
+          return { events: classEvents, error: null }
         } catch (error: any) {
           console.warn('Error obteniendo clases/exámenes:', error)
           return { events: [], error: error?.message || 'Error al cargar clases y exámenes' }
@@ -269,20 +269,29 @@ export class CalendarService {
   // Obtener la próxima clase
   static async getNextClass(): Promise<ApiResponse<NextClass | null>> {
     try {
-      // Obtener cursos del docente
-      const coursesResponse = await CoursesService.getCourses()
-      if (!coursesResponse.success || !coursesResponse.data) {
+      // Obtener UUID del docente
+      const teacherUUID = authService.getTeacherUUID()
+      if (!teacherUUID) {
         return {
           data: null,
           success: false,
-          error: 'No se pudieron obtener los cursos del docente'
+          error: 'No hay docente autenticado'
         }
       }
 
-      const courses = coursesResponse.data
+      // Obtener inscripciones del docente usando el mismo método que "Mis Cursos"
+      const inscripciones = await this.getDocenteInscripciones(teacherUUID)
       
-      // Encontrar la próxima clase usando clases individuales
-      const nextClass = await this.findNextClassFromClases(courses)
+      if (!inscripciones || inscripciones.length === 0) {
+        return {
+          data: null,
+          success: true,
+          message: 'No hay cursos asignados'
+        }
+      }
+
+      // Encontrar la próxima clase usando clases individuales de cada curso
+      const nextClass = await this.findNextClassFromInscripciones(inscripciones)
       
       return {
         data: nextClass,
@@ -297,6 +306,41 @@ export class CalendarService {
         success: true,
         message: 'No hay clases próximas'
       }
+    }
+  }
+
+  // Obtener inscripciones del docente (mismo método que CoursesService)
+  private static async getDocenteInscripciones(teacherUUID: string): Promise<any[]> {
+    try {
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const CURSOS_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api'
+      const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
+        method: 'GET',
+        headers
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.data) {
+        return data.data
+      }
+
+      return []
+    } catch (error) {
+      console.warn('Error obteniendo inscripciones del docente:', error)
+      return []
     }
   }
 
@@ -492,21 +536,27 @@ export class CalendarService {
   }
 
   // Convertir clases individuales a eventos del calendario
-  private static async convertClasesIndividualesToEvents(courses: Course[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
+  private static async convertClasesIndividualesToEvents(inscripciones: any[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
     const events: CalendarEvent[] = []
 
-    // Procesar todos los cursos en paralelo
-    await Promise.all(courses.map(async (course) => {
+    // Procesar todas las inscripciones en paralelo
+    await Promise.all(inscripciones.map(async (inscripcion) => {
       try {
         // Obtener UUID del curso
-        const cursoUUID = course.uuid
+        const cursoUUID = inscripcion.uuid_curso
         if (!cursoUUID) {
-          console.warn(`Curso sin UUID: ${course.title}`)
+          console.warn(`Inscripción sin UUID de curso`)
           return
         }
 
-        // Obtener clases individuales del curso
+        // Obtener clases individuales del curso usando el endpoint de backoffice
         const clases = await this.getClasesIndividuales(cursoUUID)
+
+        // Obtener detalles del curso para obtener título, horario, ubicación, etc.
+        const cursoDetalle = await this.getCursoDetalle(cursoUUID)
+
+        // Obtener título del curso (el título está en materia.nombre)
+        const courseTitle = cursoDetalle?.materia?.nombre || 'Curso sin nombre'
 
         // Convertir cada clase a un evento del calendario
         clases.forEach((clase) => {
@@ -515,28 +565,32 @@ export class CalendarService {
           // Solo incluir si está en el rango de fechas solicitado
           if (fechaClase >= startDate && fechaClase <= endDate) {
             const isExam = this.isExamType(clase.tipo)
-            const title = this.mapClaseTypeToTitle(clase.tipo, course.title)
+            const title = this.mapClaseTypeToTitle(clase.tipo, courseTitle)
             
-            // Obtener hora del curso (usar el turno del curso)
-            const time = this.getTimeFromCourse(course)
+            // Obtener horario del curso (desde cursoDetalle o inscripcion)
+            const time = this.getTimeFromInscripcion(inscripcion, cursoDetalle)
+            
+            // Obtener ubicación y sede
+            const classroom = cursoDetalle?.aula || inscripcion.curso?.aula || ''
+            const sede = cursoDetalle?.sede || inscripcion.curso?.sede || ''
             
             events.push({
               id: `clase-${clase.id_clase}`,
               title,
-              courseId: course.id || 0,
+              courseId: 0,
               courseUUID: cursoUUID,
-              courseTitle: course.title,
+              courseTitle: courseTitle,
               date: fechaClase,
               time: time,
               duration: 240, // 4 horas por defecto
-              classroom: course.location || '',
-              sede: course.sede || '',
+              classroom: classroom,
+              sede: sede,
               type: isExam ? 'exam' : 'class'
             })
           }
         })
       } catch (err) {
-        console.warn(`Error procesando curso ${course.title} para eventos del calendario:`, err)
+        console.warn(`Error procesando inscripción ${inscripcion.uuid_curso} para eventos del calendario:`, err)
       }
     }))
 
@@ -547,72 +601,87 @@ export class CalendarService {
     })
   }
 
-  // Obtener hora del curso basado en su turno
-  private static getTimeFromCourse(course: Course): string {
-    // Si el curso tiene un schedule, extraer la hora de inicio
-    if (course.schedule) {
-      const match = course.schedule.match(/(\d{1,2}):(\d{2})/)
-      if (match) {
-        return `${match[1].padStart(2, '0')}:${match[2]}`
-      }
-    }
-
-    // Fallback: usar el turno
-    const shift = course.shift?.toUpperCase() || ''
-    return this.getTimeFromShift(shift)
-  }
 
   // Encontrar la próxima clase usando clases individuales
-  private static async findNextClassFromClases(courses: Course[]): Promise<NextClass | null> {
+  private static async findNextClassFromInscripciones(inscripciones: any[]): Promise<NextClass | null> {
     const now = new Date() // Usar fecha y hora actual completa
-    
+    console.log('🔍 Buscando próxima clase. Hora actual:', now.toISOString(), 'Local:', now.toLocaleString())
+
     const upcomingClasses: NextClass[] = []
 
-    // Procesar todos los cursos en paralelo
-    await Promise.all(courses.map(async (course) => {
+    // Procesar todas las inscripciones en paralelo
+    await Promise.all(inscripciones.map(async (inscripcion) => {
       try {
-        const cursoUUID = course.uuid
+        const cursoUUID = inscripcion.uuid_curso
         if (!cursoUUID) return
 
-        // Obtener clases individuales del curso
+        // Obtener clases individuales del curso usando el endpoint de backoffice
         const clases = await this.getClasesIndividuales(cursoUUID)
+        console.log(`📚 Curso ${cursoUUID}: ${clases.length} clases encontradas`)
+
+        // Obtener detalles del curso para obtener título, horario, ubicación, etc.
+        const cursoDetalle = await this.getCursoDetalle(cursoUUID)
 
         // Filtrar TODAS las clases (regulares y exámenes) que estén programadas y sean futuras
         clases
           .filter(clase => clase.estado === 'programada')
           .forEach((clase) => {
-            const time = this.getTimeFromCourse(course)
-            
+            // Obtener horario del curso (desde cursoDetalle o inscripcion)
+            const time = this.getTimeFromInscripcion(inscripcion, cursoDetalle)
+
             // Crear fecha y hora completa de la clase
+            // Usar formato ISO para evitar problemas de zona horaria
             const classDateTime = new Date(`${clase.fecha_clase}T${time}:00`)
             
+            // Debug: Log de cada clase evaluada
+            const nowStr = now.toISOString()
+            const classStr = classDateTime.toISOString()
+            const isFuture = classDateTime > now
+            console.log(`  📅 Clase ${clase.id_clase}: fecha=${clase.fecha_clase}, hora=${time}`)
+            console.log(`     Ahora: ${nowStr}, Clase: ${classStr}, Es futura: ${isFuture}`)
+
             // Solo incluir clases que aún no han pasado (fecha y hora futuras)
-            if (classDateTime > now) {
-              // Calcular días hasta la clase
-              const diffTime = classDateTime.getTime() - now.getTime()
-              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+            if (isFuture) {
+              // Calcular días hasta la clase comparando solo las fechas (sin hora)
+              // Normalizar ambas fechas a medianoche para comparación precisa
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
               
-              // Si es hoy pero aún no pasó la hora, daysUntil = 0
-              // Si es mañana, daysUntil = 1, etc.
+              // Parsear fecha de la clase (formato YYYY-MM-DD)
+              const [year, month, day] = clase.fecha_clase.split('-').map(Number)
+              const classDate = new Date(year, month - 1, day) // month es 0-indexed
+              
+              const diffTime = classDate.getTime() - today.getTime()
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+              // daysUntil: 0 = hoy, 1 = mañana, 2 = pasado mañana, etc.
               const daysUntil = diffDays
+              
+              console.log(`     Días hasta la clase: ${daysUntil} (hoy=${today.toISOString().split('T')[0]}, clase=${clase.fecha_clase})`)
+
+              // Obtener título del curso (el título está en materia.nombre)
+              const courseTitle = cursoDetalle?.materia?.nombre || 'Curso sin nombre'
 
               // Generar título según el tipo de clase
-              const title = this.mapClaseTypeToTitle(clase.tipo, course.title)
+              const title = this.mapClaseTypeToTitle(clase.tipo, courseTitle)
+
+              // Obtener ubicación y sede
+              const classroom = cursoDetalle?.aula || inscripcion.curso?.aula || ''
+              const sede = cursoDetalle?.sede || inscripcion.curso?.sede || ''
 
               upcomingClasses.push({
                 id: `clase-${clase.id_clase}`,
                 title: title,
-                courseTitle: course.title,
+                courseTitle: courseTitle,
                 date: clase.fecha_clase,
                 time: time,
-                classroom: course.location || '',
-                sede: course.sede || '',
+                classroom: classroom,
+                sede: sede,
                 daysUntil: daysUntil
               })
             }
           })
       } catch (err) {
-        console.warn(`Error obteniendo próxima clase para curso ${course.title}:`, err)
+        console.warn(`Error obteniendo próxima clase para curso ${inscripcion.uuid_curso}:`, err)
       }
     }))
 
@@ -639,6 +708,70 @@ export class CalendarService {
 
     console.log('No se encontraron clases próximas')
     return null
+  }
+
+  // Obtener detalles del curso (mismo método que CoursesService)
+  private static async getCursoDetalle(cursoUUID: string): Promise<any | null> {
+    try {
+      const token = authService.getToken()
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const CURSOS_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api'
+      const url = `${CURSOS_API_URL}/cursos/${cursoUUID}`
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.data) {
+        return data.data
+      }
+
+      return null
+    } catch (error) {
+      console.warn(`Error obteniendo detalle del curso ${cursoUUID}:`, error)
+      return null
+    }
+  }
+
+  // Obtener horario desde inscripción o detalle del curso
+  private static getTimeFromInscripcion(inscripcion: any, cursoDetalle: any | null): string {
+    // Intentar obtener desde cursoDetalle primero
+    if (cursoDetalle?.horario) {
+      return cursoDetalle.horario
+    }
+    
+    // Luego desde inscripcion.curso
+    if (inscripcion.curso?.horario) {
+      return inscripcion.curso.horario
+    }
+    
+    // Fallback: intentar desde inscripcion directamente
+    if (inscripcion.horario) {
+      return inscripcion.horario
+    }
+    
+    // Si no hay horario directo, intentar usar el turno
+    const shift = cursoDetalle?.turno || inscripcion.curso?.turno || inscripcion.turno || ''
+    if (shift) {
+      return this.getTimeFromShift(shift.toUpperCase())
+    }
+    
+    // Si no hay horario ni turno, retornar un horario por defecto (formato HH:MM)
+    return '08:00'
   }
 
   // Convertir día de la semana a número

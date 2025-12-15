@@ -125,8 +125,14 @@ function getTeacherColor(teacherId: number | string): string {
 
 export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [showActions, setShowActions] = useState(false)
-  const [hasActa, setHasActa] = useState(false)
-  const [loadingActa, setLoadingActa] = useState(true)
+  // Si el curso ya viene con status ACTA_GENERADA, inicializar hasActa como true
+  const [hasActa, setHasActa] = useState(() => {
+    return course?.status && String(course.status).toUpperCase().includes('ACTA') ? true : false
+  })
+  // Si el curso ya tiene status, no necesita cargar
+  const [loadingActa, setLoadingActa] = useState(() => {
+    return course?.status && String(course.status).toUpperCase().includes('ACTA') ? false : true
+  })
   const [promocionable, setPromocionable] = useState<boolean | null>(() => {
     // Si ya viene en el curso, usarlo
     if (course?.promocionable !== undefined) {
@@ -184,22 +190,34 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
     router.push(`/cursos/${courseIdentifier}?tab=alumnos`)
   }
 
-  // Check backend for acts for this course and show a lock if an acta exists / is closed
+  // Check if course has acta - usar UUID si está disponible, sino ID
   useEffect(() => {
+    // Si el curso ya viene con status ACTA_GENERADA, no necesitamos hacer fetch
+    if (course?.status && String(course.status).toUpperCase().includes('ACTA')) {
+      setHasActa(true)
+      setLoadingActa(false)
+      return
+    }
+    
     let mounted = true
     const fetchActs = async () => {
       try {
-        if (!course?.id) return
+        const courseIdentifier = course?.uuid || course?.id
+        if (!courseIdentifier) return
         setLoadingActa(true)
-        const resp = await CoursesService.getActs(Number(course.id))
+        // Usar UUID si está disponible, sino ID numérico
+        const resp = await CoursesService.getActs(courseIdentifier)
         if (!mounted) return
         if (resp && resp.success) {
           const acts = Array.isArray(resp.data) ? resp.data : []
-          const closed = acts.some((a: any) => (a && ((a.estado && String(a.estado).toUpperCase() === 'CERRADO') || a.actaId)))
-          setHasActa(closed || acts.length > 0)
+          // Si hay actas (no está vacío), el curso tiene acta generada
+          setHasActa(acts.length > 0)
+        } else {
+          setHasActa(false)
         }
       } catch (err) {
         // ignore errors - don't block UI
+        setHasActa(false)
       } finally {
         if (mounted) {
           setLoadingActa(false)
@@ -209,7 +227,7 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
 
     fetchActs()
     return () => { mounted = false }
-  }, [course?.id])
+  }, [course?.uuid, course?.id, course?.status])
 
   // Obtener información de promocionable del curso
   // Si ya viene en el curso (de la API externa), usarlo directamente

@@ -111,6 +111,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const success = loginWithToken(jwtFromUrl)
         
         if (success) {
+          // Verificar que el rol sea DOCENTE
+          const payload = authService.getJWTPayload()
+          const userRole = payload?.role || (payload?.roles && payload.roles[0])
+          
+          if (userRole !== 'DOCENTE') {
+            console.error('❌ Usuario no tiene rol DOCENTE:', userRole)
+            // Redirigir a página de acceso no autorizado
+            router.push('/unauthorized')
+            setIsLoading(false)
+            return
+          }
+          
           // Limpiar el JWT de la URL por seguridad
           const url = new URL(window.location.href)
           url.searchParams.delete('JWT')
@@ -129,6 +141,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (sessionRestored && authService.isAuthenticated()) {
         console.log('✅ Sesión restaurada desde localStorage')
+        
+        // Verificar que el rol sea DOCENTE
+        const payload = authService.getJWTPayload()
+        const userRole = payload?.role || (payload?.roles && payload.roles[0])
+        
+        if (userRole !== 'DOCENTE') {
+          console.error('❌ Usuario no tiene rol DOCENTE:', userRole)
+          // Redirigir a página de acceso no autorizado
+          router.push('/unauthorized')
+          setIsLoading(false)
+          return
+        }
+        
         setUser(authService.getProfile())
         setIsAuthenticated(true)
         

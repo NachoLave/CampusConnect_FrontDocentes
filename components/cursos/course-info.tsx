@@ -634,6 +634,20 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [gradesData, setGradesData] = useState<Record<string, Record<string, string>>>({})
   // Estado para guardar las calificaciones originales del backend (para comparar cambios)
   const [originalGradesData, setOriginalGradesData] = useState<Record<string, Record<string, string>>>({})
+
+  // Salir del modo edición si cambia de pestaña
+  useEffect(() => {
+    if (activeTab !== 'Calificaciones' && isEditingGrades) {
+      setIsEditingGrades(false)
+    }
+  }, [activeTab, isEditingGrades])
+
+  // Salir del modo edición si cambia de pestaña
+  useEffect(() => {
+    if (activeTab !== 'Calificaciones' && isEditingGrades) {
+      setIsEditingGrades(false)
+    }
+  }, [activeTab, isEditingGrades])
   const [loadingGrades, setLoadingGrades] = useState(false)
   // Estado para guardar los assessmentId de cada tipo de evaluación
   const [assessmentIds, setAssessmentIds] = useState<Record<string, string | number>>({})
@@ -814,15 +828,57 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const { getProfile } = useAuth()
   const isUserAuxiliarInCourse = useMemo(() => {
     try {
+      // Primero intentar usar currentTeacherRole si está disponible (más confiable)
+      if (currentTeacherRole) {
+        const roleUpper = String(currentTeacherRole).toUpperCase()
+        return roleUpper.includes('AUXILIAR') || roleUpper.includes('AUX')
+      }
+
+      // Obtener UUID del docente autenticado
+      const myUUID = authService.getTeacherUUID()
+      if (!myUUID) {
+        // Fallback: intentar obtener desde profile
+        const profile: any = getProfile ? getProfile() : null
+        if (profile && profile.uuid) {
+          const profileUUID = profile.uuid
+          if (course && Array.isArray((course as any).teachers)) {
+            const myTeacher = (course as any).teachers.find((t: any) => {
+              const teacherUUID = t.uuid || t.teacherId || t.id
+              return String(teacherUUID) === String(profileUUID)
+            })
+            if (myTeacher) {
+              const role = String(myTeacher.role || myTeacher.rol || '').toUpperCase()
+              return role.includes('AUXILIAR') || role.includes('AUX')
+            }
+          }
+        }
+        return false
+      }
+
+      // Comparar por UUID con los docentes del curso
+      if (course && Array.isArray((course as any).teachers)) {
+        const myTeacher = (course as any).teachers.find((t: any) => {
+          const teacherUUID = t.uuid || t.teacherId || t.id
+          return String(teacherUUID) === String(myUUID)
+        })
+        
+        if (myTeacher) {
+          const role = String(myTeacher.role || myTeacher.rol || '').toUpperCase()
+          return role.includes('AUXILIAR') || role.includes('AUX')
+        }
+      }
+
+      // Fallback: usar profile id numérico (para compatibilidad legacy)
       const profile: any = getProfile ? getProfile() : null
-      // If we have an auth profile, match by profile id
       if (profile && course && Array.isArray((course as any).teachers)) {
         const myId = Number(profile.id)
-        return (course as any).teachers.some((t: any) => {
-          const tid = Number(t.teacherId ?? t.id ?? 0)
-          const role = String(t.role || t.rol || t.roleName || '').toLowerCase()
-          return tid === myId && role.includes('aux')
-        })
+        if (myId && myId > 0) {
+          return (course as any).teachers.some((t: any) => {
+            const tid = Number(t.teacherId ?? t.id ?? 0)
+            const role = String(t.role || t.rol || t.roleName || '').toUpperCase()
+            return tid === myId && (role.includes('AUXILIAR') || role.includes('AUX'))
+          })
+        }
       }
 
       // Fallback: use apiClient mock headers when profile is not available
@@ -843,17 +899,26 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     } catch (err) {
       return false
     }
-  }, [course, getProfile])
+  }, [course, getProfile, currentTeacherRole])
 
   // Debug: log role detection info to help QA (remove in production)
   useEffect(() => {
     try {
       const profile = getProfile ? getProfile() : null
       const mh = apiClient.getMockHeaders ? apiClient.getMockHeaders() : null
+      const myUUID = authService.getTeacherUUID()
+      const courseTeachers = course && Array.isArray((course as any).teachers) ? (course as any).teachers : []
       // eslint-disable-next-line no-console
-      console.debug('[CourseInfo] role-detect:', { profile, mockHeaders: mh, isUserAuxiliarInCourse })
+      console.debug('[CourseInfo] role-detect:', { 
+        profile, 
+        mockHeaders: mh, 
+        currentTeacherRole,
+        myUUID,
+        courseTeachers: courseTeachers.map((t: any) => ({ uuid: t.uuid, id: t.id, role: t.role })),
+        isUserAuxiliarInCourse 
+      })
     } catch {}
-  }, [course, getProfile, isUserAuxiliarInCourse])
+  }, [course, getProfile, isUserAuxiliarInCourse, currentTeacherRole])
 
   // Helper to normalize condition/status values (function declaration so it's available to earlier code)
   function formatConditionKey(raw?: string | null): string {
@@ -1490,7 +1555,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `${course.title.replace(/\s+/g, "_")}.xlsx`
+      // Usar el mismo formato que generateActaFilename
+      const filename = generateActaFilename()
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -2504,6 +2571,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           setGradesAlertMessage('No hay cambios en las calificaciones para guardar')
           setShowGradesAlertModal(true)
           setSavingGrades(false)
+          // Salir del modo edición si no hay cambios
+          setIsEditingGrades(false)
           return
         }
 
@@ -2548,10 +2617,16 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const generateActaFilename = () => {
-    const randomNumber = Math.floor(Math.random() * 9999)
-      .toString()
-      .padStart(4, "0")
-    return `ACTA${randomNumber} ${course.title}.xlsx`
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const hours = String(now.getHours()).padStart(2, '0')
+    const minutes = String(now.getMinutes()).padStart(2, '0')
+    const seconds = String(now.getSeconds()).padStart(2, '0')
+    const dateTime = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
+    const courseName = course.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
+    return `${courseName}_${dateTime}.xlsx`
   }
 
   const filteredStudents = students.filter((student) => {
@@ -2831,9 +2906,15 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
           </div>
           <button
             onClick={() => setShowActaModal(true)}
-            disabled={isCourseLocked}
-            title={isCourseLocked ? 'Curso cerrado: no se permiten modificaciones ni generación de acta' : 'Gestionar acta'}
-            className={`flex items-center space-x-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-md text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${isCourseLocked ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-slate-700 text-white hover:bg-slate-800'}`}
+            disabled={isCourseLocked || isUserAuxiliarInCourse}
+            title={
+              isCourseLocked 
+                ? 'Curso cerrado: no se permiten modificaciones ni generación de acta' 
+                : isUserAuxiliarInCourse 
+                  ? 'Rol Auxiliar: no permitido gestionar actas'
+                  : 'Gestionar acta'
+            }
+            className={`flex items-center space-x-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-md text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${(isCourseLocked || isUserAuxiliarInCourse) ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-slate-700 text-white hover:bg-slate-800'}`}
           >
             <ClipboardCheck className="h-3.5 w-3.5 lg:h-4 lg:w-4 flex-shrink-0" />
             <span>Gestionar Acta</span>
@@ -3729,7 +3810,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         {isEditingGrades ? (
                           <input
                             type="text"
-                            disabled={isCourseLocked}
+                            disabled={isCourseLocked || isUserAuxiliarInCourse}
                             value={gradesData[student.id]?.["1P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "1P", e.target.value)}
                             onKeyDown={(e) => {
@@ -3743,7 +3824,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 e.preventDefault()
                               }
                             }}
-                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(isCourseLocked || isUserAuxiliarInCourse) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                             placeholder="-"
                           />
                         ) : (
@@ -3754,7 +3835,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                         {isEditingGrades ? (
                           <input
                             type="text"
-                            disabled={isCourseLocked}
+                            disabled={isCourseLocked || isUserAuxiliarInCourse}
                             value={gradesData[student.id]?.["2P"] || ""}
                             onChange={(e) => updateGrade(String(student.id), "2P", e.target.value)}
                             onKeyDown={(e) => {
@@ -3768,7 +3849,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                 e.preventDefault()
                               }
                             }}
-                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${isCourseLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                            className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(isCourseLocked || isUserAuxiliarInCourse) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                             placeholder="-"
                           />
                         ) : (
@@ -3782,7 +3863,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             return (
                               <input
                                 type="text"
-                                disabled={!perms.recEnabled || isCourseLocked}
+                                disabled={!perms.recEnabled || isCourseLocked || isUserAuxiliarInCourse}
                                 value={gradesData[student.id]?.["REC"] || ""}
                                 onChange={(e) => updateGrade(String(student.id), "REC", e.target.value)}
                                 onKeyDown={(e) => {
@@ -3796,7 +3877,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                     e.preventDefault()
                                   }
                                 }}
-                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.recEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.recEnabled || isCourseLocked || isUserAuxiliarInCourse) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                                 placeholder="-"
                               />
                             )
@@ -3829,7 +3910,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                             return (
                               <input
                                 type="text"
-                                disabled={!perms.finalEnabled || isCourseLocked}
+                                disabled={!perms.finalEnabled || isCourseLocked || isUserAuxiliarInCourse}
                                 value={finalValue}
                                 onChange={(e) => updateGrade(String(student.id), "FINAL", e.target.value)}
                                 onKeyDown={(e) => {
@@ -3843,7 +3924,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                                     e.preventDefault()
                                   }
                                 }}
-                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.finalEnabled || isCourseLocked) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
+                                className={`w-12 lg:w-16 px-1 lg:px-2 py-1 border border-gray-300 rounded text-center text-xs lg:text-sm focus:outline-none ${(!perms.finalEnabled || isCourseLocked || isUserAuxiliarInCourse) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                                 placeholder="-"
                               />
                             )
@@ -3981,7 +4062,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
               <p className="text-sm lg:text-base text-gray-600 mb-6 leading-relaxed">Se generó el acta y se descargó una copia en tu dispositivo. El acta quedará registrada en el sistema.</p>
 
               <button
-                onClick={() => setShowActaGeneratedModal(false)}
+                onClick={() => {
+                  setShowActaGeneratedModal(false)
+                  // Redirigir a Mis Cursos después de cerrar el modal
+                  router.push('/cursos')
+                }}
                 className="w-full bg-slate-700 hover:bg-slate-800 active:bg-slate-900 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-150"
               >
                 Entendido
@@ -4226,7 +4311,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                           setIsCourseLocked(true)
                           setCourse((c: any) => c ? ({ ...c, status: 'ACTA_GENERADA' }) : c)
                         } catch {}
-                        // show in-app success modal
+                        // Mostrar modal de éxito
                         setShowActaGeneratedModal(true)
                       } else {
                         // close the confirm modal so the error modal is visible

@@ -52,18 +52,20 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
   const breadcrumbItems = getBreadcrumb()
 
   return (
-    <header className="bg-slate-100 border-b border-slate-200 h-14 lg:h-[73px] fixed top-0 right-0 left-0 lg:left-72 z-10">
+    <header className={`bg-slate-100 border-b border-slate-200 h-14 lg:h-[73px] fixed top-0 right-0 left-0 ${currentPage !== 'Acceso No Autorizado' ? 'lg:left-72' : 'lg:left-0'} z-10`}>
       <div className="flex items-center justify-between px-4 lg:px-6 h-full">
         {/* Left Section - Mobile: Menu Button | Desktop: Breadcrumb */}
         <div className="flex items-center space-x-3">
           {/* Mobile Menu Button */}
-          <button
-            onClick={onMenuClick}
-            className="lg:hidden p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            aria-label="Abrir menú"
-          >
-            <Menu className="h-6 w-6 text-gray-700" />
-          </button>
+          {onMenuClick && (
+            <button
+              onClick={onMenuClick}
+              className="lg:hidden p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Abrir menú"
+            >
+              <Menu className="h-6 w-6 text-gray-700" />
+            </button>
+          )}
 
           {/* Breadcrumb - Hidden on small screens */}
           <div className="hidden lg:flex items-center space-x-2 text-sm">
