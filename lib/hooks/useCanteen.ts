@@ -6,7 +6,7 @@ import { CanteenService } from '@/lib/api/services'
 import { LocalStorageCache } from '@/lib/utils/cache'
 
 const CANTEEN_CACHE_KEY = 'canteen_reservations'
-const CANTEEN_CACHE_TTL = 2 * 60 * 1000 // 2 minutos
+const CANTEEN_CACHE_TTL = 1 * 60 * 1000 // 1 minuto
 
 export function useCanteenReservations() {
   const [reservations, setReservations] = useState<CanteenReservation[]>([])

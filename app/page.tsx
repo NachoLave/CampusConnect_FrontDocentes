@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { Calendar, Clock, BookOpen, ChevronLeft, ChevronRight, Zap, Users, ArrowRight, Wallet, AlertTriangle, X } from "lucide-react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
@@ -83,6 +83,23 @@ export default function DashboardPage() {
   
   // Estado para controlar visibilidad de badges de error en dashboard
   const [visibleErrors, setVisibleErrors] = useState<{ classes?: boolean; canteen?: boolean; events?: boolean }>({})
+
+  // Preload de todas las imágenes del carrusel para optimizar la carga
+  useEffect(() => {
+    carouselImages.forEach((image) => {
+      const link = document.createElement('link')
+      link.rel = 'preload'
+      link.as = 'image'
+      link.href = image.src
+      document.head.appendChild(link)
+    })
+    
+    // También preload usando Image objects para forzar la carga
+    carouselImages.forEach((image) => {
+      const img = new window.Image()
+      img.src = image.src
+    })
+  }, [])
   
   // Mostrar errores cuando se detecten
   useEffect(() => {
@@ -252,8 +269,9 @@ export default function DashboardPage() {
     setSelectedDate(today)
   }
 
-  const weekDays = getCurrentWeekDays()
-  const monthYear = getMonthYear()
+  // Optimización: memoizar cálculos que dependen de currentWeekStart
+  const weekDays = useMemo(() => getCurrentWeekDays(), [currentWeekStart])
+  const monthYear = useMemo(() => getMonthYear(), [currentWeekStart])
 
   // Mantener el día actual seleccionado cuando se carga o cambia de semana
   useEffect(() => {
@@ -273,26 +291,34 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWeekStart]) // Cuando cambia la semana
 
-  // Eventos del día seleccionado usando datos del backend
-  const selectedDateStr = selectedDate.toISOString().split('T')[0]
-  const selectedEvents: EventType[] = weeklyEvents
-    .filter((event) => event.date === selectedDateStr)
-    .map((event) => ({
-      time: event.time,
-      title: event.title,
-      type: event.type as "class" | "meeting" | "exam" | "event" | "canteen",
-    }))
+  // Optimización: memoizar eventos del día seleccionado
+  const selectedDateStr = useMemo(() => selectedDate.toISOString().split('T')[0], [selectedDate])
+  const selectedEvents: EventType[] = useMemo(() => {
+    return weeklyEvents
+      .filter((event) => event.date === selectedDateStr)
+      .map((event) => ({
+        time: event.time,
+        title: event.title,
+        type: event.type as "class" | "meeting" | "exam" | "event" | "canteen",
+      }))
+  }, [weeklyEvents, selectedDateStr])
 
-  // Tipos de eventos por día de la semana (para los puntitos)
-  const getEventTypesForDate = (date: Date): Set<string> => {
-    const types = new Set<string>()
-    const dateStr = date.toISOString().split('T')[0]
+  // Optimización: memoizar mapa de tipos de eventos por fecha (crear una vez)
+  const eventTypesByDate = useMemo(() => {
+    const map = new Map<string, Set<string>>()
     weeklyEvents.forEach((event) => {
-      if (event.date === dateStr) {
-        types.add(event.type)
+      if (!map.has(event.date)) {
+        map.set(event.date, new Set())
       }
+      map.get(event.date)!.add(event.type)
     })
-    return types
+    return map
+  }, [weeklyEvents])
+
+  // Función optimizada para obtener tipos de eventos por fecha
+  const getEventTypesForDate = (date: Date): Set<string> => {
+    const dateStr = date.toISOString().split('T')[0]
+    return eventTypesByDate.get(dateStr) || new Set()
   }
   
   // Comparar fechas correctamente
@@ -373,6 +399,8 @@ export default function DashboardPage() {
                   fill
                   className="object-cover transition-transform duration-400 hover:scale-105 animate-breathe"
                   draggable={false}
+                  loading="eager"
+                  quality={85}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
               </div>
@@ -387,6 +415,7 @@ export default function DashboardPage() {
                   className="object-cover transition-all duration-400 ease-out animate-breathe"
                   priority
                   draggable={false}
+                  quality={90}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent transition-opacity duration-300" />
                 <div className="absolute bottom-4 left-4 lg:bottom-6 lg:left-6 text-white transform transition-all duration-300 ease-out">
@@ -411,6 +440,8 @@ export default function DashboardPage() {
                   fill
                   className="object-cover transition-transform duration-400 hover:scale-105 animate-breathe"
                   draggable={false}
+                  loading="eager"
+                  quality={85}
                 />
                 <div className="absolute inset-0 bg-black/30 transition-colors duration-300 hover:bg-black/20" />
               </div>

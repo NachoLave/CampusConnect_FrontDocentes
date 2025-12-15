@@ -286,19 +286,44 @@ export class CoursesService {
     // Contar alumnos (rol === 'ALUMNO')
     const alumnos = cursoInscripciones.filter(i => i.rol === 'ALUMNO')
     
-    // Obtener docentes (rol === 'TITULAR' o 'AUXILIAR')
-    const docentes = cursoInscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR')
+    // Obtener docentes (rol === 'TITULAR', 'AUXILIAR' o 'DOCENTE')
+    const docentes = cursoInscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR' || i.rol === 'DOCENTE')
     
     // Mapear docentes al formato Teacher
-    const teachers = docentes.map(d => ({
-      id: 0,
-      uuid: d.user.uuid,
-      name: `${d.user.nombre} ${d.user.apellido}`.trim(),
-      email: d.user.email,
-      legajo: d.user.legajo,
-      role: d.rol,
-      avatar: '/placeholder-user.jpg'
-    }))
+    const teachers = docentes.map(d => {
+      // Determinar el rol para mostrar
+      let roleDisplay = 'Docente'
+      if (d.rol === 'TITULAR') {
+        roleDisplay = 'Titular'
+      } else if (d.rol === 'AUXILIAR') {
+        roleDisplay = 'Auxiliar'
+      } else if (d.rol === 'DOCENTE') {
+        // Si es DOCENTE, intentar determinar si es titular o auxiliar desde subrol
+        const subrol = (d.user as any).subrol
+        if (subrol) {
+          const subrolUpper = String(subrol).toUpperCase()
+          if (subrolUpper.includes('TITULAR')) {
+            roleDisplay = 'Titular'
+          } else if (subrolUpper.includes('AUXILIAR') || subrolUpper.includes('AUX')) {
+            roleDisplay = 'Auxiliar'
+          } else {
+            roleDisplay = 'Docente'
+          }
+        } else {
+          roleDisplay = 'Docente'
+        }
+      }
+      
+      return {
+        id: 0,
+        uuid: d.user.uuid,
+        name: `${d.user.nombre} ${d.user.apellido}`.trim(),
+        email: d.user.email,
+        legajo: d.user.legajo,
+        role: roleDisplay,
+        avatar: '/placeholder-user.jpg'
+      }
+    })
 
     // Mapear turno
     const turnoMap: Record<string, string> = {
@@ -518,7 +543,7 @@ export class CoursesService {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'X-Teacher-Id': teacherUUID
+      ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
     }
     const body = {}
 
@@ -551,7 +576,7 @@ export class CoursesService {
     const url = `/api/teaching/courses/${courseId}/acts`
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'X-Teacher-Id': teacherUUID
+      ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
     }
 
     try {
@@ -602,7 +627,7 @@ export class CoursesService {
     const url = `/api/teaching/courses/${courseId}/acts/preview`
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'X-Teacher-Id': teacherUUID
+      ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
     }
 
     try {
@@ -718,20 +743,45 @@ export class CoursesService {
       }
 
       // Separar inscripciones por rol
-      const docentesInscripciones = inscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR')
+      const docentesInscripciones = inscripciones.filter(i => i.rol === 'TITULAR' || i.rol === 'AUXILIAR' || i.rol === 'DOCENTE')
       const alumnosInscripciones = inscripciones.filter(i => i.rol === 'ALUMNO')
 
       // Mapear docentes
-      const teachers = docentesInscripciones.map(d => ({
-        id: d.user.uuid,
-        uuid: d.user.uuid,
-        teacherId: d.user.uuid,
-        name: `${d.user.nombre} ${d.user.apellido}`.trim(),
-        legajo: d.user.legajo || '',
-        email: d.user.email || '',
-        role: d.rol === 'TITULAR' ? 'Titular' : 'Auxiliar',
-        dni: d.user.dni
-      }))
+      const teachers = docentesInscripciones.map(d => {
+        // Determinar el rol para mostrar
+        let roleDisplay = 'Docente'
+        if (d.rol === 'TITULAR') {
+          roleDisplay = 'Titular'
+        } else if (d.rol === 'AUXILIAR') {
+          roleDisplay = 'Auxiliar'
+        } else if (d.rol === 'DOCENTE') {
+          // Si es DOCENTE, intentar determinar si es titular o auxiliar desde subrol
+          const subrol = (d.user as any).subrol
+          if (subrol) {
+            const subrolUpper = String(subrol).toUpperCase()
+            if (subrolUpper.includes('TITULAR')) {
+              roleDisplay = 'Titular'
+            } else if (subrolUpper.includes('AUXILIAR') || subrolUpper.includes('AUX')) {
+              roleDisplay = 'Auxiliar'
+            } else {
+              roleDisplay = 'Docente'
+            }
+          } else {
+            roleDisplay = 'Docente'
+          }
+        }
+        
+        return {
+          id: d.user.uuid,
+          uuid: d.user.uuid,
+          teacherId: d.user.uuid,
+          name: `${d.user.nombre} ${d.user.apellido}`.trim(),
+          legajo: d.user.legajo || '',
+          email: d.user.email || '',
+          role: roleDisplay,
+          dni: d.user.dni
+        }
+      })
 
       // Mapear alumnos
       const students = alumnosInscripciones.map(a => ({
@@ -975,7 +1025,7 @@ export class CoursesService {
         method: 'GET', 
         headers: {
           'Accept': 'application/json',
-          'X-Teacher-Id': teacherUUID
+          ...(teacherUUID && { 'X-Teacher-Id': teacherUUID })
         }
       })
       const assessmentsText = await assessmentsResponse.text()
@@ -1126,12 +1176,16 @@ export class CoursesService {
       const teacherUUID = this.getTeacherUUID()
       const assessmentsUrl = `/api/teaching/courses/${courseId}/assessments`
       
+      const assessmentHeaders: Record<string, string> = {
+        'Accept': 'application/json'
+      }
+      if (teacherUUID) {
+        assessmentHeaders['X-Teacher-Id'] = teacherUUID
+      }
+      
       const assessmentsResponse = await fetch(assessmentsUrl, { 
         method: 'GET', 
-        headers: {
-          'Accept': 'application/json',
-          'X-Teacher-Id': teacherUUID
-        }
+        headers: assessmentHeaders
       })
       const assessmentsText = await assessmentsResponse.text()
       let assessmentsData: any = null

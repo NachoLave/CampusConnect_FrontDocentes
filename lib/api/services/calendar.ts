@@ -126,94 +126,132 @@ export class CalendarService {
       }
     }
     
-    // Obtener clases/exámenes (manejar errores independientemente)
-    try {
-      const coursesResponse = await CoursesService.getCourses()
-      if (coursesResponse.success && coursesResponse.data) {
-        const courses = coursesResponse.data
-        const classEvents = await this.convertClasesIndividualesToEvents(courses, startDate, endDate)
-        allEvents.push(...classEvents)
-      } else {
-        errors.classes = 'No se pudieron obtener los cursos del docente'
-      }
-    } catch (error: any) {
-      console.warn('Error obteniendo clases/exámenes:', error)
-      errors.classes = error?.message || 'Error al cargar clases y exámenes'
-    }
-
-    // Obtener reservas de comedor (manejar errores independientemente)
-    try {
-      const token = authService.getToken()
-      if (token) {
-        // Obtener reservas y locations en paralelo
-        const [canteenResponse, locationsResponse] = await Promise.all([
-          fetch(`/api/canteen/reservations`, { 
-            method: 'GET', 
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }),
-          fetch(`/api/canteen/locations`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          })
-        ])
-        
-        if (canteenResponse.ok) {
-          const canteenData = await canteenResponse.json()
-          // Manejar el caso de que la respuesta pueda venir vacía
-          if (Array.isArray(canteenData) && canteenData.length > 0) {
-            // Crear mapa de locationId -> nombre de sede
-            const locationsMap = new Map<number, string>()
-            if (locationsResponse.ok) {
-              try {
-                const locationsData = await locationsResponse.json()
-                if (Array.isArray(locationsData)) {
-                  locationsData.forEach((location: any) => {
-                    locationsMap.set(location.id, location.name)
-                  })
-                }
-              } catch (e) {
-                console.warn('Error parseando locations de comedor:', e)
-              }
-            }
-            
-            const canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate, locationsMap)
-            allEvents.push(...canteenEvents)
+    // OPTIMIZACIÓN: Ejecutar las 3 fuentes principales en paralelo usando Promise.allSettled
+    const token = authService.getToken()
+    
+    const [classesResult, canteenResult, eventsResult] = await Promise.allSettled([
+      // 1. Obtener clases/exámenes
+      (async () => {
+        try {
+          const coursesResponse = await CoursesService.getCourses()
+          if (coursesResponse.success && coursesResponse.data) {
+            const courses = coursesResponse.data
+            const classEvents = await this.convertClasesIndividualesToEvents(courses, startDate, endDate)
+            return { events: classEvents, error: null }
+          } else {
+            return { events: [], error: 'No se pudieron obtener los cursos del docente' }
           }
-        } else {
-          errors.canteen = `Error ${canteenResponse.status} al cargar reservas de comedor`
+        } catch (error: any) {
+          console.warn('Error obteniendo clases/exámenes:', error)
+          return { events: [], error: error?.message || 'Error al cargar clases y exámenes' }
         }
-      } else {
-        errors.canteen = 'No hay token de autenticación para obtener reservas de comedor'
-      }
-    } catch (err: any) {
-      console.warn('Error obteniendo reservas de comedor:', err)
-      errors.canteen = err?.message || 'Error al cargar reservas de comedor'
-    }
-
-    // Obtener eventos académicos (manejar errores independientemente)
-    // Usamos Promise.race con timeout adicional como seguridad extra
-    try {
-      const eventEventsPromise = this.getEvents(startDate, endDate)
-      const timeoutPromise = new Promise<CalendarEvent[]>((resolve) => {
-        setTimeout(() => {
-          console.warn('Timeout adicional en getEvents, retornando array vacío para no bloquear')
-          resolve([])
-        }, 9000) // 9 segundos máximo total (8s del fetch + 1s de margen)
-      })
+      })(),
       
-      const eventEvents = await Promise.race([eventEventsPromise, timeoutPromise])
-      allEvents.push(...eventEvents)
-    } catch (err: any) {
-      console.warn('Error obteniendo eventos académicos:', err)
-      errors.events = err?.message || 'Error al cargar eventos académicos (puede ser timeout o error de conexión)'
+      // 2. Obtener reservas de comedor (con locations en paralelo)
+      (async () => {
+        try {
+          if (!token) {
+            return { events: [], error: 'No hay token de autenticación para obtener reservas de comedor' }
+          }
+          
+          // Obtener reservas y locations en paralelo
+          const [canteenResponse, locationsResponse] = await Promise.all([
+            fetch(`/api/canteen/reservations`, { 
+              method: 'GET', 
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            }),
+            fetch(`/api/canteen/locations`, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            })
+          ])
+          
+          if (canteenResponse.ok) {
+            const canteenData = await canteenResponse.json()
+            // Manejar el caso de que la respuesta pueda venir vacía
+            if (Array.isArray(canteenData) && canteenData.length > 0) {
+              // Crear mapa de locationId -> nombre de sede
+              const locationsMap = new Map<number, string>()
+              if (locationsResponse.ok) {
+                try {
+                  const locationsData = await locationsResponse.json()
+                  if (Array.isArray(locationsData)) {
+                    locationsData.forEach((location: any) => {
+                      locationsMap.set(location.id, location.name)
+                    })
+                  }
+                } catch (e) {
+                  console.warn('Error parseando locations de comedor:', e)
+                }
+              }
+              
+              const canteenEvents = this.convertCanteenToEvents(canteenData, startDate, endDate, locationsMap)
+              return { events: canteenEvents, error: null }
+            }
+            return { events: [], error: null }
+          } else {
+            return { events: [], error: `Error ${canteenResponse.status} al cargar reservas de comedor` }
+          }
+        } catch (err: any) {
+          console.warn('Error obteniendo reservas de comedor:', err)
+          return { events: [], error: err?.message || 'Error al cargar reservas de comedor' }
+        }
+      })(),
+      
+      // 3. Obtener eventos académicos (con timeout)
+      (async () => {
+        try {
+          const eventEventsPromise = this.getEvents(startDate, endDate)
+          const timeoutPromise = new Promise<CalendarEvent[]>((resolve) => {
+            setTimeout(() => {
+              console.warn('Timeout adicional en getEvents, retornando array vacío para no bloquear')
+              resolve([])
+            }, 9000) // 9 segundos máximo total (8s del fetch + 1s de margen)
+          })
+          
+          const eventEvents = await Promise.race([eventEventsPromise, timeoutPromise])
+          return { events: eventEvents, error: null }
+        } catch (err: any) {
+          console.warn('Error obteniendo eventos académicos:', err)
+          return { events: [], error: err?.message || 'Error al cargar eventos académicos (puede ser timeout o error de conexión)' }
+        }
+      })()
+    ])
+    
+    // Procesar resultados
+    if (classesResult.status === 'fulfilled') {
+      allEvents.push(...classesResult.value.events)
+      if (classesResult.value.error) {
+        errors.classes = classesResult.value.error
+      }
+    } else {
+      errors.classes = 'Error inesperado al cargar clases y exámenes'
+    }
+    
+    if (canteenResult.status === 'fulfilled') {
+      allEvents.push(...canteenResult.value.events)
+      if (canteenResult.value.error) {
+        errors.canteen = canteenResult.value.error
+      }
+    } else {
+      errors.canteen = 'Error inesperado al cargar reservas de comedor'
+    }
+    
+    if (eventsResult.status === 'fulfilled') {
+      allEvents.push(...eventsResult.value.events)
+      if (eventsResult.value.error) {
+        errors.events = eventsResult.value.error
+      }
+    } else {
+      errors.events = 'Error inesperado al cargar eventos académicos'
     }
 
     // Retornar eventos cargados exitosamente, incluso si algunos tipos fallaron

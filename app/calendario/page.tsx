@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MapPin, Clock, ChevronLeft, ChevronRight, X, AlertTriangle } from "lucide-react"
 import { es } from "date-fns/locale/es"
-import { CalendarService, CalendarEvent as BackendCalendarEvent, CalendarEventsResponse } from '@/lib/api/services/calendar'
-import { LocalStorageCache } from '@/lib/utils/cache'
+import { CalendarEvent as BackendCalendarEvent } from '@/lib/api/services/calendar'
+import { useWeeklyCalendar } from '@/lib/hooks/useCalendar'
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -244,11 +244,19 @@ const getCourseEventsForDate = (date: Date) => {
 export default function CalendarioPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [backendEvents, setBackendEvents] = useState<BackendCalendarEvent[]>([])
-  const [loadingEvents, setLoadingEvents] = useState(true) // Iniciar en true para mostrar skeleton desde el primer render
-  const [eventsError, setEventsError] = useState<string | null>(null)
-  const [fetchedMonths, setFetchedMonths] = useState<Set<string>>(new Set()) // Track de si ya se cargaron todos los eventos
-  const [eventTypeErrors, setEventTypeErrors] = useState<{ classes?: string; canteen?: string; events?: string }>({})
+  
+  // OPTIMIZACIÓN: Usar hook useWeeklyCalendar que ya tiene cache y optimizaciones
+  const currentYear = new Date().getFullYear()
+  const startDate = useMemo(() => {
+    const from = new Date(currentYear, 0, 1) // 1 de enero
+    return from.toISOString().split('T')[0]
+  }, [currentYear])
+  const endDate = useMemo(() => {
+    const to = new Date(currentYear, 11, 31) // 31 de diciembre
+    return to.toISOString().split('T')[0]
+  }, [currentYear])
+  
+  const { events: backendEvents, isLoading: loadingEvents, error: eventsError, eventTypeErrors } = useWeeklyCalendar(startDate, endDate)
   const [filters, setFilters] = useState({
     clases: true,
     examenes: true,
@@ -441,103 +449,8 @@ export default function CalendarioPage() {
     router.push('/calendario')
   }
 
-  // Fetch ALL backend events al cargar la página (rango amplio: año completo)
-  useEffect(() => {
-    const fetchAllEvents = async () => {
-      // Si ya cargamos todos los eventos, no volver a cargar
-      if (fetchedMonths.has('all-events-loaded')) {
-        return
-      }
-      
-      // Intentar cargar desde cache primero
-      const currentYear = new Date().getFullYear()
-      const from = new Date(currentYear, 0, 1) // 1 de enero
-      const to = new Date(currentYear, 11, 31) // 31 de diciembre
-      const fromIso = from.toISOString().split('T')[0]
-      const toIso = to.toISOString().split('T')[0]
-      
-      const cacheKey = `calendar_events_${fromIso}_${toIso}`
-      const cachedData = LocalStorageCache.get<{ events: BackendCalendarEvent[]; errors?: { classes?: string; canteen?: string; events?: string } }>(cacheKey)
-      
-      if (cachedData) {
-        // Mostrar datos cacheados inmediatamente
-        console.log(`Eventos cargados desde cache: ${cachedData.events.length}`)
-        setBackendEvents(cachedData.events)
-        if (cachedData.errors) {
-          setEventTypeErrors(cachedData.errors)
-          setTimeout(() => {
-            setEventTypeErrors({})
-          }, 10000)
-        } else {
-          setEventTypeErrors({})
-        }
-        setLoadingEvents(false)
-        setEventsError(null)
-        
-        // Marcar que ya cargamos (desde cache)
-        setFetchedMonths(prev => {
-          const newSet = new Set(prev)
-          newSet.add('all-events-loaded')
-          return newSet
-        })
-      } else {
-        // Si no hay cache, mostrar loading
-        setLoadingEvents(true)
-        setEventsError(null)
-      }
-      
-      // Siempre hacer fetch para actualizar en background
-      try {
-        console.log(`Cargando todos los eventos del año ${currentYear}: ${fromIso} a ${toIso}`)
-        
-        const res = await CalendarService.getWeeklyEvents(fromIso, toIso) as CalendarEventsResponse
-        
-        if (res.success && Array.isArray(res.data)) {
-          console.log(`Eventos cargados: ${res.data.length}`)
-          setBackendEvents(res.data)
-          
-          // Guardar en cache (3 minutos TTL)
-          LocalStorageCache.set(cacheKey, {
-            events: res.data,
-            errors: res.errors
-          }, 3 * 60 * 1000)
-          
-          // Guardar errores por tipo si existen
-          if (res.errors) {
-            setEventTypeErrors(res.errors)
-            // Auto-ocultar errores después de 10 segundos
-            setTimeout(() => {
-              setEventTypeErrors({})
-            }, 10000)
-          } else {
-            setEventTypeErrors({})
-          }
-          
-          // Marcar que ya cargamos todos los eventos
-          setFetchedMonths(prev => {
-            const newSet = new Set(prev)
-            newSet.add('all-events-loaded')
-            return newSet
-          })
-        } else {
-          setBackendEvents([])
-          setEventsError(res.message || 'No se pudieron cargar los eventos')
-        }
-      } catch (err: any) {
-        console.error('Error fetching calendar events', err)
-        // Si hay error y no hay cache, mostrar error
-        if (!cachedData) {
-          setBackendEvents([])
-          setEventsError(String(err?.message || err))
-        }
-      } finally {
-        setLoadingEvents(false)
-      }
-    }
-
-    fetchAllEvents()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Solo ejecutar una vez al montar el componente
+  // OPTIMIZACIÓN: El hook useWeeklyCalendar ya maneja cache y carga automáticamente
+  // No necesitamos el useEffect manual
 
   const upcoming = useMemo(() => {
     // Show backend events for the current day only (no mocks)
@@ -574,8 +487,8 @@ export default function CalendarioPage() {
     return todays.map((e) => ({ id: e.id, title: e.title, location: e.location, color: e.color, time: `${todayLabel} • ${e.time}` }))
   }, [backendEvents, filters])
 
-  // Pre-calcular modifiers para ambos meses (antes del return condicional para no violar reglas de hooks)
-  const firstMonthModifiers = useMemo(() => {
+  // OPTIMIZACIÓN: Calcular modifiers una sola vez y reutilizar para ambos meses
+  const modifiers = useMemo(() => {
     const clase: Date[] = []
     const examen: Date[] = []
     const evento: Date[] = []
@@ -595,25 +508,9 @@ export default function CalendarioPage() {
     return { clase, examen, evento, comedor }
   }, [backendEvents, filters])
 
-  const secondMonthModifiers = useMemo(() => {
-    const clase: Date[] = []
-    const examen: Date[] = []
-    const evento: Date[] = []
-    const comedor: Date[] = []
-    backendEvents.forEach((e) => {
-      const key = formatIsoToDdMmYyyy(e.date)
-      const parts = key.split('/')
-      if (parts.length !== 3) return
-      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10))
-      const t = mapBackendType(e.type, e.id, e.title)
-      if (!isEventVisible({ type: t })) return
-      if (t === 'clase') clase.push(d)
-      if (t === 'examen') examen.push(d)
-      if (t === 'evento') evento.push(d)
-      if (t === 'comedor') comedor.push(d)
-    })
-    return { clase, examen, evento, comedor }
-  }, [backendEvents, filters])
+  // Reutilizar los mismos modifiers para ambos meses
+  const firstMonthModifiers = modifiers
+  const secondMonthModifiers = modifiers
 
   const modifiersClassNames = useMemo(() => ({
     clase: 'cc-clase',
@@ -622,7 +519,8 @@ export default function CalendarioPage() {
     comedor: 'cc-comedor'
   }), [])
 
-  const firstMonthEventsByDay = useMemo(() => {
+  // OPTIMIZACIÓN: Combinar ambos cálculos en uno solo y eliminar dependencia innecesaria de currentMonth
+  const eventsByDay = useMemo(() => {
     const map: Record<string, any> = {}
     backendEvents.forEach((e) => {
       const key = formatIsoToDdMmYyyy(e.date)
@@ -634,21 +532,11 @@ export default function CalendarioPage() {
       map[key][mappedType] = true
     })
     return map
-  }, [currentMonth, filters, backendEvents])
+  }, [filters, backendEvents])
 
-  const secondMonthEventsByDay = useMemo(() => {
-    const map: Record<string, any> = {}
-    backendEvents.forEach((e) => {
-      const key = formatIsoToDdMmYyyy(e.date)
-      const mappedType = mapBackendType(e.type, e.id, e.title)
-      if (!isEventVisible({ type: mappedType })) {
-        return
-      }
-      map[key] = map[key] || {}
-      map[key][mappedType] = true
-    })
-    return map
-  }, [currentMonth, filters, backendEvents])
+  // Reutilizar el mismo mapa para ambos meses
+  const firstMonthEventsByDay = eventsByDay
+  const secondMonthEventsByDay = eventsByDay
 
   // Mostrar skeleton mientras carga
   if (loadingEvents) {

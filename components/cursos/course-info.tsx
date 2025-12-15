@@ -637,6 +637,8 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   const [loadingGrades, setLoadingGrades] = useState(false)
   // Estado para guardar los assessmentId de cada tipo de evaluación
   const [assessmentIds, setAssessmentIds] = useState<Record<string, string | number>>({})
+  // Estado para guardar las evaluaciones (assessments) para validar si están vacías
+  const [assessments, setAssessments] = useState<any[]>([])
   // Estado para almacenar los datos del preview del acta
   const [actsPreviewData, setActsPreviewData] = useState<any>(null)
 
@@ -685,7 +687,9 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         if (!mounted) return
         
         if (resp && resp.success && Array.isArray(resp.data)) {
-          const assessments: any[] = resp.data
+          const assessmentsData: any[] = resp.data
+          // Guardar las assessments para validar si están vacías
+          setAssessments(assessmentsData)
           const updated: Record<string, Record<string, string>> = {}
           const assessmentIdsMap: Record<string, string | number> = {}
 
@@ -706,7 +710,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
             return ''
           }
 
-          for (const ass of assessments) {
+          for (const ass of assessmentsData) {
             const key = mapTipoToKey(ass.tipo)
             if (!key) {
               continue
@@ -752,8 +756,18 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
           setGradesData(updated)
           setAssessmentIds(assessmentIdsMap)
+        } else if (resp && resp.success && Array.isArray(resp.data) && resp.data.length === 0) {
+          // Si la respuesta es exitosa pero el array está vacío, guardar array vacío
+          setAssessments([])
+          setGradesData({})
+          setAssessmentIds({})
+        } else if (resp && resp.success && (!resp.data || !Array.isArray(resp.data))) {
+          // Si la respuesta es exitosa pero no hay data o no es un array, también considerar vacío
+          setAssessments([])
         }
       } catch (err) {
+        // En caso de error, también inicializar como vacío
+        setAssessments([])
       } finally {
         if (mounted) {
           setLoadingGrades(false)
@@ -3467,10 +3481,36 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
         )}
 
         {activeTab === "Calificaciones" && (
-          <div className="bg-white rounded-lg p-4 lg:p-6">
-            <div className="flex items-center justify-between mb-4 lg:mb-6">
-              <h2 className="text-lg lg:text-xl font-semibold">Calificaciones</h2>
-            </div>
+          <div className="space-y-4 lg:space-y-6">
+            {loadingGrades ? (
+              <div className="bg-white rounded-lg p-4 lg:p-6">
+                <div className="space-y-4">
+                  <Skeleton className="h-6 lg:h-7 w-48 mb-4 lg:mb-6" />
+                  <Skeleton className="h-12 w-full" />
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : !loadingGrades && assessments.length === 0 ? (
+              <div className="bg-white rounded-lg p-6 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <Calendar className="h-10 w-10 text-gray-400 mb-3" />
+                  <h3 className="text-base font-medium text-gray-900 mb-1.5">
+                    El curso aún no tiene evaluaciones creadas
+                  </h3>
+                  <p className="text-xs text-gray-600 max-w-md">
+                    No se han registrado fechas de exámenes para este curso. Una vez que se creen las evaluaciones, podrás cargar calificaciones.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg p-4 lg:p-6">
+                <div className="flex items-center justify-between mb-4 lg:mb-6">
+                  <h2 className="text-lg lg:text-xl font-semibold">Calificaciones</h2>
+                </div>
 
             <div className="mb-4">
               <h3 className="text-base lg:text-lg font-medium mb-3 lg:mb-4">Alumnos</h3>
@@ -3837,19 +3877,12 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 </table>
               </div>
             )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Other tabs content */}
-        {activeTab !== "Información" &&
-          activeTab !== "Alumnos" &&
-          activeTab !== "Asistencia" &&
-          activeTab !== "Calificaciones" && (
-            <div className="bg-white rounded-lg p-6 text-center">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Contenido de {activeTab}</h3>
-              <p className="text-gray-600">Esta sección estará disponible próximamente.</p>
-            </div>
-          )}
+        {/* Other tabs content - Removed as all tabs are now implemented */}
       </div>
 
       {/* Acta Modal */}

@@ -99,7 +99,7 @@ export function useWeeklyCalendar(startDate: string, endDate: string) {
 }
 
 const NEXT_CLASS_CACHE_KEY = 'next_class'
-const NEXT_CLASS_CACHE_TTL = 2 * 60 * 1000 // 2 minutos
+const NEXT_CLASS_CACHE_TTL = 1 * 60 * 1000 // 1 minuto
 
 export function useNextClass() {
   const [nextClass, setNextClass] = useState<NextClass | null>(null)

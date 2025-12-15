@@ -59,7 +59,7 @@ export function useWallet() {
 import { LocalStorageCache } from '@/lib/utils/cache'
 
 const BALANCE_CACHE_KEY = 'wallet_balance'
-const BALANCE_CACHE_TTL = 1 * 60 * 1000 // 1 minuto (balance cambia más frecuentemente)
+const BALANCE_CACHE_TTL = 1 * 60 * 1000 // 1 minuto
 
 export function useBalance() {
   const [balance, setBalance] = useState<number>(0)
