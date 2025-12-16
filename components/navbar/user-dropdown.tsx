@@ -164,11 +164,11 @@ export function UserDropdown({ user }: UserDropdownProps) {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem 
-          className="flex items-center space-x-2 lg:space-x-3 py-2 lg:py-3 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50"
+          className="flex items-center space-x-2 lg:space-x-3 py-2 lg:py-3 cursor-pointer text-gray-700 hover:text-gray-900 hover:bg-gray-50"
           onClick={handleLogout}
         >
           <LogOut className="h-4 w-4 lg:h-5 lg:w-5 flex-shrink-0" />
-          <span className="font-medium text-sm lg:text-base">Cerrar Sesión</span>
+          <span className="font-medium text-sm lg:text-base">Volver al Inicio</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

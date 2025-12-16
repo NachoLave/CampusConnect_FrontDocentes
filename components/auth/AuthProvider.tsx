@@ -70,11 +70,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null)
     setIsAuthenticated(false)
     
-    // Redirigir al login
-    if (authService.isLocalDevelopment()) {
-      router.push('/login')
-    } else {
-      authService.redirectToCore()
+    // Redirigir al home de Core
+    if (typeof window !== 'undefined') {
+      window.location.href = 'https://core-frontend-2025-02.netlify.app/home'
     }
   }
 
