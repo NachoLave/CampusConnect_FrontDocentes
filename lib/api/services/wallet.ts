@@ -347,11 +347,17 @@ export class WalletService {
         return transferYear === year
       })
 
+      // Función helper para determinar si un tipo de transferencia es un INGRESO (crédito)
+      const isIngreso = (type: string): boolean => {
+        const tiposIngreso = ['credit', 'CARGA_DE_SALDO', 'CANCELACION_RESERVA', 'DESINSCRIPCION_EVENTO']
+        return tiposIngreso.includes(type)
+      }
+
       const historyItems: WalletHistoryItem[] = yearTransfers.map(transfer => ({
         nombre: transfer.description || 'Transacción',
-        tipo: transfer.type === 'credit' ? 'INGRESO' : 'EGRESO',
+        tipo: isIngreso(transfer.type) ? 'INGRESO' : 'EGRESO',
         fecha: transfer.processed_at || transfer.created_at,
-        monto: parseFloat(transfer.amount) * (transfer.type === 'credit' ? 1 : -1),
+        monto: parseFloat(transfer.amount) * (isIngreso(transfer.type) ? 1 : -1),
         currency: transfer.currency
       }))
 
@@ -441,11 +447,17 @@ export class WalletService {
 
       console.log('🌐 [WalletService] Transfers del mes actual:', monthTransfers.length)
 
+      // Función helper para determinar si un tipo de transferencia es un INGRESO (crédito)
+      const isIngreso = (type: string): boolean => {
+        const tiposIngreso = ['credit', 'CARGA_DE_SALDO', 'CANCELACION_RESERVA', 'DESINSCRIPCION_EVENTO']
+        return tiposIngreso.includes(type)
+      }
+
       const historyItems: WalletHistoryItem[] = monthTransfers.map(transfer => ({
         nombre: transfer.description || 'Transacción',
-        tipo: transfer.type === 'credit' ? 'INGRESO' : 'EGRESO',
+        tipo: isIngreso(transfer.type) ? 'INGRESO' : 'EGRESO',
         fecha: transfer.processed_at || transfer.created_at,
-        monto: parseFloat(transfer.amount) * (transfer.type === 'credit' ? 1 : -1),
+        monto: parseFloat(transfer.amount) * (isIngreso(transfer.type) ? 1 : -1),
         currency: transfer.currency
       }))
 
@@ -538,9 +550,12 @@ export class WalletService {
         to: walletUUID, // UUID de la billetera obtenido del endpoint /wallets/mine
         currency: 'ARG',
         amount: numericAmount, // Solo este campo varía según lo que ingresa el usuario
-        type: 'credit',
+        type: 'CARGA_DE_SALDO',
         description: 'Carga de Saldo'
       }
+
+      // Debug: verificar que el body tiene el type correcto
+      console.log('🔍 [WalletService.creditBalance] Body a enviar:', JSON.stringify(body, null, 2))
 
       const url = `${WALLET_API_URL}/transfers`
       
