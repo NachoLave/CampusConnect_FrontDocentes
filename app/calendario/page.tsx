@@ -246,16 +246,24 @@ export default function CalendarioPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
   
-  // OPTIMIZACIÓN: Usar hook useWeeklyCalendar que ya tiene cache y optimizaciones
+  // OPTIMIZACIÓN: Cargar eventos del año actual y el siguiente para cubrir navegación a 2026
+  // Usar el año del mes que está viendo el usuario para determinar el rango
   const currentYear = new Date().getFullYear()
+  const viewingYear = currentMonth.getFullYear()
+  const nextYear = currentYear + 1
+  
+  // Cargar desde el año actual hasta el siguiente año para cubrir navegación a 2026
   const startDate = useMemo(() => {
-    const from = new Date(currentYear, 0, 1) // 1 de enero
+    const from = new Date(currentYear, 0, 1) // 1 de enero del año actual
     return from.toISOString().split('T')[0]
   }, [currentYear])
   const endDate = useMemo(() => {
-    const to = new Date(currentYear, 11, 31) // 31 de diciembre
+    // Si el usuario está viendo 2026 o más adelante, cargar hasta ese año
+    // Si no, cargar hasta el final del año siguiente
+    const targetYear = viewingYear > currentYear ? viewingYear : nextYear
+    const to = new Date(targetYear, 11, 31) // 31 de diciembre
     return to.toISOString().split('T')[0]
-  }, [currentYear])
+  }, [currentYear, nextYear, viewingYear])
   
   const { events: backendEvents, isLoading: loadingEvents, error: eventsError, eventTypeErrors } = useWeeklyCalendar(startDate, endDate)
   const [filters, setFilters] = useState({

@@ -64,11 +64,12 @@ export default function DashboardPage() {
   const { nextClass, isLoading: nextClassLoading } = useNextClass()
   const { reservations, isLoading: reservationsLoading, error: reservationsError } = useCanteenReservations()
 
-  // Cargar TODOS los eventos del año de una vez (no solo la semana actual)
+  // Cargar TODOS los eventos del año actual y el siguiente (para cubrir 2026)
   const getAllEventsRange = () => {
     const currentYear = new Date().getFullYear()
-    const start = new Date(currentYear, 0, 1) // 1 de enero
-    const end = new Date(currentYear, 11, 31) // 31 de diciembre
+    const nextYear = currentYear + 1
+    const start = new Date(currentYear, 0, 1) // 1 de enero del año actual
+    const end = new Date(nextYear, 11, 31) // 31 de diciembre del año siguiente
     
     const formatDate = (date: Date) => date.toISOString().split('T')[0]
     
