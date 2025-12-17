@@ -15,9 +15,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No hay docente autenticado' }, { status: 401 })
     }
 
-    const url = `${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`
+    // Leer query parameters de la request (para pasar includeAssigned)
+    const { searchParams } = new URL(request.url)
+    const includeAssigned = searchParams.get('includeAssigned')
     
-    const response = await fetch(url, {
+    // Construir URL con query parameters
+    const url = new URL(`${BACKEND_BASE_URL}${API_CONFIG.ENDPOINTS.TEACHER_AVAILABILITY}`)
+    if (includeAssigned) {
+      url.searchParams.append('includeAssigned', includeAssigned)
+    }
+    
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

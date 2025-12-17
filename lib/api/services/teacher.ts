@@ -302,7 +302,7 @@ export class TeacherService {
 
   /**
    * Obtiene la disponibilidad horaria del docente
-   * GET /teachers/me/availability
+   * GET /teachers/me/availability?includeAssigned=true
    * Enriquece cada bloque con los nombres de las sedes desde la API externa
    */
   static async getAvailability(): Promise<ApiResponse<AvailabilityBlock[]>> {
@@ -311,7 +311,8 @@ export class TeacherService {
       console.log(`📅 Obteniendo disponibilidad para docente ${teacherUUID}...`)
 
       // Usar proxy de Next.js para evitar CORS
-      const response = await fetch(`/api/teachers/me/availability`, {
+      // IMPORTANTE: Incluir parámetro includeAssigned=true
+      const response = await fetch(`/api/teachers/me/availability?includeAssigned=true`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
