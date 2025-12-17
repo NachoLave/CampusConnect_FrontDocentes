@@ -41,9 +41,10 @@ export function useEventNotifications() {
   }, [])
 
   // Función para verificar si un evento necesita notificación
-  const shouldNotifyEvent = useCallback((event: AcademicEvent, shownIds: Set<string>): boolean => {
-    // Si ya se mostró la notificación para este evento, no mostrar de nuevo
-    if (shownIds.has(event.id)) {
+  // skipShownCheck: si es true, no verifica si ya fue mostrado (útil para recrear notificaciones no leídas)
+  const shouldNotifyEvent = useCallback((event: AcademicEvent, shownIds: Set<string>, skipShownCheck: boolean = false): boolean => {
+    // Si ya se mostró la notificación para este evento y no estamos saltando la verificación, no mostrar de nuevo
+    if (!skipShownCheck && shownIds.has(event.id)) {
       console.log(`🔔 [shouldNotifyEvent] Evento "${event.name}" (${event.id}) ya fue mostrado, omitiendo`)
       return false
     }
@@ -67,27 +68,33 @@ export function useEventNotifications() {
       timeUntilEventMs: timeUntilEvent,
       minutesUntil,
       hoursUntil,
-      isPast: eventStart <= now
+      isPast: eventStart <= now,
+      skipShownCheck
     })
     
+    // Si el evento ya pasó hace más de 5 minutos, no notificar
+    // (permitir notificaciones hasta 5 minutos después de que comenzó)
+    const fiveMinutes = 5 * 60 * 1000
     if (eventStart <= now) {
-      console.log(`🔔 [shouldNotifyEvent] Evento "${event.name}" ya pasó, omitiendo`)
-      return false
+      const timeSinceStart = now.getTime() - eventStart.getTime()
+      if (timeSinceStart > fiveMinutes) {
+        console.log(`🔔 [shouldNotifyEvent] Evento "${event.name}" ya pasó hace más de 5 minutos, omitiendo`)
+        return false
+      }
     }
 
     // Calcular tiempo hasta el evento
     const thirtyMinutes = 30 * 60 * 1000 // 30 minutos en milisegundos
 
-    // Notificar si el evento está dentro de los próximos 30 minutos
-    // (desde ahora hasta 30 minutos antes del evento)
-    const shouldNotify = timeUntilEvent <= thirtyMinutes && timeUntilEvent > 0
+    // Notificar si el evento está dentro de los próximos 30 minutos O si ya comenzó pero pasaron menos de 5 minutos
+    const shouldNotify = (timeUntilEvent <= thirtyMinutes && timeUntilEvent > 0) || (eventStart <= now && (now.getTime() - eventStart.getTime()) <= fiveMinutes)
     
     console.log(`🔔 [shouldNotifyEvent] Resultado para "${event.name}":`, {
       timeUntilEvent,
       thirtyMinutes,
       shouldNotify,
-      condition1: timeUntilEvent <= thirtyMinutes,
-      condition2: timeUntilEvent > 0
+      condition1: timeUntilEvent <= thirtyMinutes && timeUntilEvent > 0,
+      condition2: eventStart <= now && (now.getTime() - eventStart.getTime()) <= fiveMinutes
     })
     
     return shouldNotify
@@ -207,17 +214,29 @@ export function useEventNotifications() {
       })))
       
       events.forEach((event) => {
-        const shouldNotify = shouldNotifyEvent(event, shownIds)
+        const notificationId = `event-local-${event.id}`
+        const isRead = readIds.has(notificationId)
+        const wasShown = shownIds.has(event.id)
         
-        if (shouldNotify) {
-          const notificationId = `event-local-${event.id}`
-          const isRead = readIds.has(notificationId)
+        // Si ya fue mostrada pero NO está leída, debemos recrearla al recargar
+        // skipShownCheck = true permite recrear notificaciones no leídas
+        const skipShownCheck = wasShown && !isRead
+        
+        // Verificar si el evento necesita notificación
+        const shouldNotify = shouldNotifyEvent(event, shownIds, skipShownCheck)
+        
+        // Crear notificación si:
+        // 1. Debe notificarse Y no fue mostrada, O
+        // 2. Ya fue mostrada pero NO está leída (para recrearla al recargar)
+        if (shouldNotify && (!wasShown || skipShownCheck)) {
           const notification = createEventNotification(event, isRead)
           newNotifications.push(notification)
-          newShownIds.add(event.id)
-          console.log(`🔔 [useEventNotifications] ✅ Notificación creada para "${event.name}" (${event.id})`)
+          if (!wasShown) {
+            newShownIds.add(event.id)
+          }
+          console.log(`🔔 [useEventNotifications] ✅ Notificación creada para "${event.name}" (${event.id}) - Leída: ${isRead}, Recreada: ${skipShownCheck}`)
         } else {
-          console.log(`🔔 [useEventNotifications] ⏭️ No se creará notificación para "${event.name}" (${event.id})`)
+          console.log(`🔔 [useEventNotifications] ⏭️ No se creará notificación para "${event.name}" (${event.id}) - Mostrada: ${wasShown}, Leída: ${isRead}, ShouldNotify: ${shouldNotify}`)
         }
       })
       
