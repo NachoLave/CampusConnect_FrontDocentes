@@ -1145,15 +1145,81 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }, [courseId])
 
   // Calcular estadísticas basadas en datos reales
-  const computeTimeProgress = (dates: string): number => {
-    const [startStr, endStr] = dates.split("-").map((s) => s.trim())
-    const parse = (d: string) => {
-      const [day, month, year] = d.split("/")
-      return new Date(Number(year), Number(month) - 1, Number(day))
-    }
+  const computeTimeProgress = (): number => {
     try {
-      const start = parse(startStr)
-      const end = parse(endStr)
+      let start: Date | null = null
+      let end: Date | null = null
+
+      // Prioridad 1: Usar campos desde/hasta (ISO format: YYYY-MM-DD)
+      if (course.desde && course.hasta) {
+        try {
+          start = new Date(course.desde)
+          end = new Date(course.hasta)
+          // Validar que las fechas sean válidas
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            start = null
+            end = null
+          }
+        } catch {
+          start = null
+          end = null
+        }
+      }
+
+      // Prioridad 2: Usar fechaInicio/fechaFin si están disponibles
+      if (!start || !end) {
+        if (course.fechaInicio && course.fechaFin) {
+          try {
+            // Pueden venir en formato DD/MM/YYYY o ISO
+            const parseDate = (dateStr: string): Date => {
+              if (dateStr.includes('/')) {
+                // Formato DD/MM/YYYY
+                const [day, month, year] = dateStr.split('/').map((s) => s.trim())
+                return new Date(Number(year), Number(month) - 1, Number(day))
+              } else {
+                // Formato ISO
+                return new Date(dateStr)
+              }
+            }
+            start = parseDate(course.fechaInicio)
+            end = parseDate(course.fechaFin)
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+              start = null
+              end = null
+            }
+          } catch {
+            start = null
+            end = null
+          }
+        }
+      }
+
+      // Prioridad 3: Parsear course.dates (formato: "DD/MM/YYYY - DD/MM/YYYY")
+      if (!start || !end) {
+        if (course.dates && course.dates.includes('-')) {
+          try {
+            const [startStr, endStr] = course.dates.split("-").map((s) => s.trim())
+            const parse = (d: string) => {
+              const [day, month, year] = d.split("/")
+              return new Date(Number(year), Number(month) - 1, Number(day))
+            }
+            start = parse(startStr)
+            end = parse(endStr)
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+              return 0
+            }
+          } catch {
+            return 0
+          }
+        } else {
+          return 0
+        }
+      }
+
+      if (!start || !end) {
+        return 0
+      }
+
       const now = new Date()
       const total = Math.max(1, end.getTime() - start.getTime())
       const elapsed = Math.min(Math.max(0, now.getTime() - start.getTime()), total)
@@ -1164,6 +1230,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const computeAverageAttendance = (): number => {
+    // Si no hay alumnos, retornar 0
+    if (!students || students.length === 0) {
+      return 0
+    }
+
     // 1) Preferir datos del preview del acta (más preciso)
     if (actsPreviewData && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
       const items = actsPreviewData.items
@@ -1193,13 +1264,22 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
     }
 
     // 3) Fallback: usar estado simple de studentsData
-    if (!students.length) return 0
     const present = students.filter((s: any) => (s.attendance === "Presente")).length
     const half = students.filter((s: any) => (s.attendance === "1/2" || s.attendance === "1/2 Falta")).length
-    return Math.round(((present + half * 0.5) / students.length) * 100)
+    if (students.length > 0) {
+      return Math.round(((present + half * 0.5) / students.length) * 100)
+    }
+
+    // Si llegamos aquí, no hay datos de asistencia
+    return 0
   }
 
   const computeAverageGrade = (): number => {
+    // Si no hay alumnos, retornar 0
+    if (!students || students.length === 0) {
+      return 0
+    }
+
     // 1) Preferir datos del preview del acta (más preciso, no considera ausentes)
     if (actsPreviewData && actsPreviewData.items && Array.isArray(actsPreviewData.items) && actsPreviewData.items.length > 0) {
       const items = actsPreviewData.items
@@ -1260,11 +1340,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
   
 
-  // Calcular tiempo transcurrido usando las fechas del curso
+  // Calcular tiempo transcurrido usando las fechas del curso (desde/hasta o dates)
   const timeProgress = useMemo(() => {
-    if (!course.dates || course.dates.trim() === '') return 0
-    return computeTimeProgress(course.dates)
-  }, [course.dates])
+    return computeTimeProgress()
+  }, [course.desde, course.hasta, course.fechaInicio, course.fechaFin, course.dates])
   
   // Usar useMemo para recalcular cuando cambien los datos del preview
   const averageAttendance = useMemo(() => {
@@ -1380,28 +1459,82 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
   }
 
   const getSemesterLabel = (): string => {
+    // Prioridad 1: Usar el campo period del curso si está disponible
+    if (course.period) {
+      const periodLower = course.period.toLowerCase().trim()
+      
+      // Detectar "1er Cuatr." o "Primer Cuatrimestre"
+      if (periodLower.includes('1er') || periodLower.includes('primer') || periodLower.includes('q1')) {
+        // Extraer el año si está presente
+        const yearMatch = course.period.match(/\d{4}/)
+        const year = yearMatch ? yearMatch[0] : ''
+        return year ? `Primer Cuatrimestre ${year}` : "Primer Cuatrimestre"
+      }
+      
+      // Detectar "2do Cuatr." o "Segundo Cuatrimestre"
+      if (periodLower.includes('2do') || periodLower.includes('segundo') || periodLower.includes('q2')) {
+        const yearMatch = course.period.match(/\d{4}/)
+        const year = yearMatch ? yearMatch[0] : ''
+        return year ? `Segundo Cuatrimestre ${year}` : "Segundo Cuatrimestre"
+      }
+      
+      // Detectar "Verano"
+      if (periodLower.includes('verano')) {
+        const yearMatch = course.period.match(/\d{4}/)
+        const year = yearMatch ? yearMatch[0] : ''
+        return year ? `Verano ${year}` : "Verano"
+      }
+    }
+    
+    // Fallback: Calcular basándose en el mes de inicio
     const start = courseStartDate
     const month = start.getMonth() + 1
-    return month >= 8 ? "Segundo Cuatrimestre" : "Primer Cuatrimestre"
+    const year = start.getFullYear()
+    return month >= 8 ? `Segundo Cuatrimestre ${year}` : `Primer Cuatrimestre ${year}`
   }
 
   const getShiftLabel = (): string => {
-    // TM: mañana, TT: tarde, TN: noche
-    if (course.shift === "TM") return "Turno - Mañana"
-    if (course.shift === "TT") return "Turno - Tarde"
-    if (course.shift === "TN") return "Turno - Noche"
+    // Usar el campo shift del curso (datos reales)
+    if (course.shift) {
+      const shiftUpper = course.shift.toUpperCase()
+      if (shiftUpper === "TM" || shiftUpper.includes("MAÑANA") || shiftUpper.includes("MANANA")) {
+        return "Turno - Mañana"
+      }
+      if (shiftUpper === "TT" || shiftUpper.includes("TARDE")) {
+        return "Turno - Tarde"
+      }
+      if (shiftUpper === "TN" || shiftUpper.includes("NOCHE")) {
+        return "Turno - Noche"
+      }
+      // Si viene como texto completo, devolverlo tal cual
+      if (shiftUpper.length > 2) {
+        return `Turno - ${course.shift}`
+      }
+    }
     return "Turno"
   }
 
   const getTeachersSummary = (): { titulares: string; auxiliares: string } => {
+    // Filtrar docentes TITULARES (van en "Profesor")
     const titulares = (course.teachers || [])
-      .filter((t: any) => (t.role || "").toLowerCase().includes("titular"))
-      .map((t: any) => t.name)
+      .filter((t: any) => {
+        const role = (t.role || "").toLowerCase().trim()
+        return role.includes("titular") && !role.includes("auxiliar")
+      })
+      .map((t: any) => t.name || t.fullName || "")
+      .filter((name: string) => name.trim() !== "")
       .join("; ")
+    
+    // Filtrar docentes AUXILIARES (van en "Ayudante")
     const auxiliares = (course.teachers || [])
-      .filter((t: any) => (t.role || "").toLowerCase().includes("aux"))
-      .map((t: any) => t.name)
+      .filter((t: any) => {
+        const role = (t.role || "").toLowerCase().trim()
+        return role.includes("auxiliar") || role.includes("aux")
+      })
+      .map((t: any) => t.name || t.fullName || "")
+      .filter((name: string) => name.trim() !== "")
       .join("; ")
+    
     return { titulares, auxiliares }
   }
 
