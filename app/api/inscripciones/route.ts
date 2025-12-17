@@ -37,6 +37,11 @@ export async function GET(request: Request) {
     if (uuid_curso) {
       queryParams.append('uuid_curso', uuid_curso)
     }
+    // Agregar filtro de estado si está presente
+    const estado = searchParams.get('estado')
+    if (estado) {
+      queryParams.append('estado', estado)
+    }
 
     const url = `${CURSOS_API_URL}/inscripciones?${queryParams.toString()}`
     console.log(`[Inscripciones Proxy] Calling backend: ${url}`)

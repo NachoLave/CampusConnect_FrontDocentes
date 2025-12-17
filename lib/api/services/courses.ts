@@ -285,7 +285,8 @@ export class CoursesService {
 
   /**
    * Obtiene las inscripciones de un curso (para contar alumnos y docentes)
-   * GET /api/inscripciones?uuid_curso=cursoId
+   * GET /api/inscripciones?uuid_curso=cursoId&estado=CONFIRMADA
+   * IMPORTANTE: Solo obtiene inscripciones con estado CONFIRMADA
    */
   private static async getCursoInscripciones(cursoUUID: string): Promise<ExternalInscripcion[]> {
     try {
@@ -301,7 +302,8 @@ export class CoursesService {
       }
       
       // Usar proxy de Next.js para evitar CORS
-      const response = await fetch(`/api/inscripciones?uuid_curso=${cursoUUID}`, {
+      // IMPORTANTE: Agregar filtro estado=CONFIRMADA para obtener solo inscripciones confirmadas
+      const response = await fetch(`/api/inscripciones?uuid_curso=${cursoUUID}&estado=CONFIRMADA`, {
         method: 'GET',
         headers
       })
