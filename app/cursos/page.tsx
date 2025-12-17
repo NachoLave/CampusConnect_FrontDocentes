@@ -9,12 +9,14 @@ export default function CursosPage() {
   const year = now.getFullYear()
   const month = now.getMonth() + 1
 
-  // Determinar cuatrimestre actual según las fechas dadas
-  // 1er: marzo (3) a julio (7), 2do: agosto (8) a diciembre (12). Ene-Feb fuera de período -> por defecto "Anteriores" (Todos)
+  // Determinar período por defecto según el mes actual
+  // 1er: marzo (3) a julio (7), 2do: agosto (8) a diciembre (12)
+  // Ene-Feb: mostrar 1er cuatrimestre del año en curso
   const defaultPeriod = useMemo(() => {
     if (month >= 3 && month <= 7) return `1er Cuatr. ${year}`
     if (month >= 8 && month <= 12) return `2do Cuatr. ${year}`
-    return "Todos"
+    // Enero-Febrero: mostrar 1er cuatrimestre del año en curso
+    return `1er Cuatr. ${year}`
   }, [month, year])
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod)

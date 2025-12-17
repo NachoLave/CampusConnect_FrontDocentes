@@ -6,6 +6,7 @@ import { CourseCard } from "./course-card"
 import { useCourses } from "@/lib/hooks/useCourses"
 import { useCourseFilters } from "@/lib/hooks/useCourseFilters"
 import { CoursesGridSkeleton } from "@/components/ui/loaders/course-card-skeleton"
+import { filterCoursesByTab } from "@/lib/utils/course-period"
 
 const dayOrder = {
   Lunes: 1,
@@ -120,14 +121,18 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
 
   // Cursos del período actual (para el contador)
   const coursesInPeriod = useMemo(() => {
-    return allCourses.filter((course) => {
-      const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
-      return matchesPeriod
-    })
+    const currentYear = new Date().getFullYear()
+    return filterCoursesByTab(allCourses, selectedPeriod, currentYear)
   }, [allCourses, selectedPeriod])
 
   const filteredAndSortedCourses = useMemo(() => {
-    const filtered = allCourses.filter((course) => {
+    const currentYear = new Date().getFullYear()
+    
+    // Primero filtrar por período usando la nueva lógica
+    const coursesByPeriod = filterCoursesByTab(allCourses, selectedPeriod, currentYear)
+    
+    // Luego aplicar los demás filtros
+    const filtered = coursesByPeriod.filter((course) => {
       const matchesSearch =
         searchTerm === "" ||
         course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -139,14 +144,12 @@ export function CoursesGrid({ externalSelectedPeriod, externalSelectedSedes, ext
       const courseDayNormalized = course.day.toUpperCase()
       const selectedDaysNormalized = selectedDays.map(day => day.toUpperCase())
       const matchesDay = selectedDays.length === 0 || selectedDaysNormalized.includes(courseDayNormalized)
-      
-      const matchesPeriod = selectedPeriod === "Todos" || course.period === selectedPeriod
 
       // Filtro de modalidad
       const courseModality = course.modality?.toUpperCase() || (course.isVirtual ? 'VIRTUAL' : 'PRESENCIAL')
       const matchesModality = selectedModalities.length === 0 || selectedModalities.some(mod => mod.toUpperCase() === courseModality)
 
-      const matches = matchesSearch && matchesSede && matchesDay && matchesPeriod && matchesModality
+      const matches = matchesSearch && matchesSede && matchesDay && matchesModality
 
       return matches
     })

@@ -64,25 +64,22 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
     }
   }, [showSedesDropdown, showDaysDropdown, showModalityDropdown])
 
-  const isActive = (label: string) => selectedPeriod === label || (label === "Todos" && selectedPeriod === "Todos")
+  const isActive = (label: string) => selectedPeriod === label
 
   const handleClick = (label: string) => {
-    // "Todas" mostrará todos los cursos, limpiando el filtro de período
-    if (label === "Todas") {
-      onSelectPeriod("Todos")
-      return
-    }
+    // "Otros" se maneja igual que cualquier otra pestaña
     onSelectPeriod(label)
   }
 
-  // Siempre mostrar todas las pestañas de períodos, independientemente de si hay cursos
+  // Siempre mostrar las pestañas de períodos del año en curso
+  // 1er y 2do del año actual, Verano del año siguiente, y Otros
   const now = new Date()
-  const year = now.getFullYear()
+  const currentYear = now.getFullYear()
   const periodButtons = [
-    `2do Cuatr. ${year}`,
-    `1er Cuatr. ${year}`,
-    `Verano ${year}`,
-    "Todas"
+    `1er Cuatr. ${currentYear}`,
+    `2do Cuatr. ${currentYear}`,
+    `Verano ${currentYear + 1}`,
+    "Otros"
   ]
 
   return (
@@ -90,8 +87,8 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
       <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden w-full lg:w-auto">
         {periodButtons.map((period, index) => {
           const isLast = index === periodButtons.length - 1
-          const displayText = period === "Todas" ? "Todas" : period
-          const shortText = period === "Todas" ? "Todas" : period.includes("Verano") 
+          const displayText = period
+          const shortText = period.includes("Verano") 
             ? period.replace(/\d{4}/, "").trim() 
             : period.includes("2do") 
               ? `2do ${period.match(/\d{4}/)?.[0] || ""}` 
@@ -102,10 +99,10 @@ export function CoursesHeader({ selectedPeriod, onSelectPeriod, selectedSedes, o
           return (
             <button
               key={period}
-              onClick={() => handleClick(period === "Todas" ? "Todos" : period)}
+              onClick={() => handleClick(period)}
               className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium ${
                 index > 0 ? "border-l border-gray-300" : ""
-              } ${isActive(period === "Todas" ? "Todos" : period) ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+              } ${isActive(period) ? "bg-slate-800 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
             >
               <span className="hidden sm:inline">{displayText}</span>
               <span className="sm:hidden">{shortText}</span>

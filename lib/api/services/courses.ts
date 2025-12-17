@@ -435,42 +435,55 @@ export class CoursesService {
     const hasta = curso.hasta ? formatDate(curso.hasta) : ''
     const dates = desde && hasta ? `${desde} - ${hasta}` : undefined
 
-    // Normalizar el periodo al formato del frontend
-    // API: "1er Cuatrimestre 2025" → Frontend: "1er Cuatr. 2025"
-    // API: "2do Cuatrimestre 2025" → Frontend: "2do Cuatr. 2025"
-    // API: "verano 2025" → Frontend: "Verano 2025"
-    const normalizePeriod = (rawPeriod: string): string => {
-      if (!rawPeriod) return 'Todos'
+    // Normalizar el periodo al formato del frontend usando el año del campo "desde"
+    // El año se obtiene del campo "desde" del curso, no del campo "periodo"
+    const normalizePeriod = (rawPeriod: string, desdeDate?: string): string => {
+      if (!rawPeriod) return 'Otros'
       
-      // Extraer el año
-      const yearMatch = rawPeriod.match(/\d{4}/)
-      const year = yearMatch ? yearMatch[0] : new Date().getFullYear().toString()
+      // Obtener el año del campo "desde" (prioridad) o del periodo como fallback
+      let year: number
+      if (desdeDate) {
+        try {
+          const desde = new Date(desdeDate)
+          year = desde.getFullYear()
+        } catch {
+          // Si falla parsear desde, usar año actual
+          year = new Date().getFullYear()
+        }
+      } else {
+        // Fallback: extraer año del periodo si existe
+        const yearMatch = rawPeriod.match(/\d{4}/)
+        year = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear()
+      }
       
-      // Detectar cuatrimestre o verano
-      const lower = rawPeriod.toLowerCase()
-      if (lower.includes('1er') || lower.includes('primer')) {
+      // Detectar cuatrimestre o verano (case insensitive)
+      // Normalizar espacios y convertir a minúsculas
+      const lower = rawPeriod.toLowerCase().trim()
+      
+      // Detectar 1er cuatrimestre (varias variaciones)
+      if (lower.includes('1er') || lower.includes('primer') || lower.includes('q1')) {
         return `1er Cuatr. ${year}`
       }
-      if (lower.includes('2do') || lower.includes('segundo')) {
+      
+      // Detectar 2do cuatrimestre (varias variaciones)
+      // También puede venir como "2do Cuatrimestre 2025" donde el año ya está incluido
+      if (lower.includes('2do') || lower.includes('segundo') || lower.includes('q2')) {
         return `2do Cuatr. ${year}`
       }
+      
+      // Detectar verano
       if (lower.includes('verano')) {
+        // Para verano, el año es el mismo que el año del campo "desde"
+        // El mapeo a la pestaña se hace en getCourseTab considerando que Verano 2026
+        // se muestra en la pestaña "Verano 2026" cuando currentYear = 2025
         return `Verano ${year}`
       }
       
-      // Si tiene Q1 o Q2 (formato backend antiguo)
-      if (lower.includes('q1')) {
-        return `1er Cuatr. ${year}`
-      }
-      if (lower.includes('q2')) {
-        return `2do Cuatr. ${year}`
-      }
-      
-      // Fallback: devolver el periodo original
-      return rawPeriod
+      // Si no coincide con ningún patrón conocido, devolver "Otros"
+      return 'Otros'
     }
 
-    const period = normalizePeriod(curso.periodo)
+    const period = normalizePeriod(curso.periodo, curso.desde)
 
     return {
       id: 0, // Ya no usamos ID numérico
