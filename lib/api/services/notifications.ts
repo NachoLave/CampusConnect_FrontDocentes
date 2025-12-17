@@ -13,6 +13,7 @@ export interface Notification {
   actionText?: string
   link?: string | null
   isRead?: boolean
+  subjectId?: string | null  // UUID de la materia (para notificaciones de propuestas)
 }
 
 // Interfaz para la respuesta del backend
@@ -24,20 +25,32 @@ interface BackendNotification {
   read: boolean
   createdAt: string
   type?: string | null
+  subjectId?: string | null  // UUID de la materia (para notificaciones de propuestas)
 }
 
 export class NotificationsService {
   // Convertir notificación del backend al formato del frontend
   private static convertBackendNotification(backendNotif: BackendNotification): Notification {
-    // Determinar el tipo basado en el título o mensaje
+    // Determinar el tipo basado en el tipo del backend, título o mensaje
     let type: "rejection" | "approval" | "assignment" | "event" = "event"
     
     const titleLower = backendNotif.title.toLowerCase()
     const messageLower = backendNotif.message.toLowerCase()
+    const backendType = backendNotif.type?.toLowerCase() || ""
     
-    if (titleLower.includes("rechazado") || messageLower.includes("rechazado")) {
+    // Verificar primero el tipo del backend para propuestas
+    if (backendType === "proposal.status.changed") {
+      // Es una notificación de propuesta, determinar si es aprobada o rechazada
+      if (titleLower.includes("rechazada") || messageLower.includes("rechazada")) {
+        type = "rejection"
+      } else if (titleLower.includes("aprobada") || messageLower.includes("aprobada")) {
+        type = "approval"
+      }
+    } else if (titleLower.includes("rechazado") || messageLower.includes("rechazado") || 
+               titleLower.includes("rechazada") || messageLower.includes("rechazada")) {
       type = "rejection"
-    } else if (titleLower.includes("aprobado") || messageLower.includes("aprobado")) {
+    } else if (titleLower.includes("aprobado") || messageLower.includes("aprobado") ||
+               titleLower.includes("aprobada") || messageLower.includes("aprobada")) {
       type = "approval"
     } else if (titleLower.includes("asignado") || messageLower.includes("asignado")) {
       type = "assignment"
@@ -53,7 +66,7 @@ export class NotificationsService {
       minute: "2-digit"
     })
 
-    return {
+    const converted = {
       id: backendNotif.id,
       type,
       title: backendNotif.title,
@@ -61,8 +74,18 @@ export class NotificationsService {
       time,
       actionText: backendNotif.link ? "Ver más" : undefined,
       link: backendNotif.link || null,
-      isRead: backendNotif.read
+      isRead: backendNotif.read,
+      subjectId: backendNotif.subjectId ? String(backendNotif.subjectId) : null  // Asegurar que sea string
     }
+    
+    console.log('🔔 [convertBackendNotification] Notificación convertida:', {
+      id: converted.id,
+      title: converted.title,
+      subjectId: converted.subjectId,
+      subjectIdType: typeof converted.subjectId
+    })
+    
+    return converted
   }
 
   // Obtener notificaciones del docente
@@ -147,13 +170,30 @@ export class NotificationsService {
       const data = await response.json()
       console.log('Notificaciones obtenidas del backend real:', data)
       
+      // Log para debuggear subjectId
+      console.log('🔔 [NotificationsService] Notificaciones con subjectId:', 
+        data.map((n: BackendNotification) => ({
+          id: n.id,
+          title: n.title,
+          subjectId: n.subjectId,
+          type: n.type
+        }))
+      )
+      
       // Convertir las notificaciones del backend al formato del frontend
       // Filtrar solo las no leídas (read: false)
       const convertedNotifications = data
         .filter((backendNotif: BackendNotification) => !backendNotif.read)
-        .map((backendNotif: BackendNotification) => 
-          this.convertBackendNotification(backendNotif)
-        )
+        .map((backendNotif: BackendNotification) => {
+          const converted = this.convertBackendNotification(backendNotif)
+          console.log('🔔 [NotificationsService] Notificación convertida:', {
+            id: converted.id,
+            title: converted.title,
+            subjectId: converted.subjectId,
+            type: converted.type
+          })
+          return converted
+        })
       
       return {
         data: convertedNotifications,

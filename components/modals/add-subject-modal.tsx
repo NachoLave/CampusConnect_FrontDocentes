@@ -26,20 +26,39 @@ export function AddSubjectModal({ open, onOpenChange, onAddSubject }: AddSubject
   // Obtener propuestas existentes
   const { proposals } = useProposals()
 
-  // Filtrar materias por búsqueda (solo por nombre de materia)
-  const filteredSubjects = useMemo(() => {
-    if (!searchTerm.trim()) return subjects
-    
-    const term = searchTerm.toLowerCase()
-    return subjects.filter(subject => 
-      subject.subjectName.toLowerCase().includes(term)
-    )
-  }, [subjects, searchTerm])
-
   // Obtener el ID/UUID de la materia seleccionada (priorizar uuid sobre subjectId)
   const getSubjectIdentifier = (subject: Subject): string | number => {
     return subject.uuid || subject.subjectId
   }
+
+  // Obtener IDs de materias que ya tienen propuestas (cualquier estado: APROBADA, RECHAZADA, PENDIENTE)
+  const subjectsWithProposals = useMemo(() => {
+    const ids = new Set<string>()
+    proposals.forEach(proposal => {
+      // Agregar el subjectId de la propuesta (puede ser número o UUID)
+      ids.add(String(proposal.subjectId))
+    })
+    return ids
+  }, [proposals])
+
+  // Filtrar materias: excluir las que ya tienen propuestas y aplicar búsqueda
+  const filteredSubjects = useMemo(() => {
+    // Primero filtrar materias que NO tienen propuestas
+    const availableSubjects = subjects.filter(subject => {
+      const subjectIdentifier = getSubjectIdentifier(subject)
+      const subjectIdStr = String(subjectIdentifier)
+      // Excluir si ya tiene una propuesta (cualquier estado)
+      return !subjectsWithProposals.has(subjectIdStr)
+    })
+    
+    // Luego aplicar filtro de búsqueda si hay término
+    if (!searchTerm.trim()) return availableSubjects
+    
+    const term = searchTerm.toLowerCase()
+    return availableSubjects.filter(subject => 
+      subject.subjectName.toLowerCase().includes(term)
+    )
+  }, [subjects, searchTerm, subjectsWithProposals, getSubjectIdentifier])
 
   const handleAddSubject = () => {
     if (selectedSubject) {

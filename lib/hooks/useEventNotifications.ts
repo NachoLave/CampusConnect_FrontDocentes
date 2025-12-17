@@ -367,11 +367,9 @@ export function useEventNotifications() {
       return newSet
     })
 
-    // Actualizar el estado de la notificación
+    // Optimistic UI: eliminar inmediatamente del estado (desaparecer del frontend)
     setEventNotifications(prev =>
-      prev.map(notif =>
-        notif.id === notificationId ? { ...notif, isRead: true } : notif
-      )
+      prev.filter(notif => notif.id !== notificationId)
     )
   }, [])
 
