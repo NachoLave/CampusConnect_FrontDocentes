@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Loader2, Sun, Sunset, Moon, Monitor, Calendar, MapPin, Building2, Shuffle } from "lucide-react"
+import { Plus, Loader2, Sun, Sunset, Moon, Monitor, Calendar, MapPin, Building2 } from "lucide-react"
 import { useCampuses } from "@/lib/hooks"
 
 interface AddAvailabilityModalProps {
@@ -44,8 +44,7 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
 
   const modalityMapping: Record<string, string> = {
     "Presencial": "PRESENCIAL",
-    "Virtual": "VIRTUAL",
-    "Ambas": "AMBAS"
+    "Virtual": "VIRTUAL"
   }
 
   const days = [
@@ -64,14 +63,12 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
   
   const modalityOptions = [
     { key: "Presencial", label: "Presencial", icon: Building2 },
-    { key: "Virtual", label: "Virtual", icon: Monitor },
-    { key: "Ambas", label: "Ambas", icon: Shuffle }
+    { key: "Virtual", label: "Virtual", icon: Monitor }
   ]
 
   // Lógica de modalidades
   const isVirtual = selectedModality === "Virtual"
-  const isAmbas = selectedModality === "Ambas"
-  const showCampusSelection = !isVirtual // Mostrar sedes para Presencial y Ambas
+  const showCampusSelection = !isVirtual // Mostrar sedes para Presencial
 
   const handleLocationChange = (location: string, checked: boolean) => {
     if (checked) {
@@ -108,9 +105,6 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
       // Todos los valores son strings, sin restricciones adicionales
       if (isVirtual) {
         campusesToSend = ["VIR"] // Solo "VIR" para modalidad virtual
-      } else if (isAmbas) {
-        // AMBAS: Incluir UUIDs de sedes físicas seleccionadas (strings) + "VIR" (string especial)
-        campusesToSend = [...locations, "VIR"]
       } else {
         // PRESENCIAL: Solo UUIDs de sedes físicas seleccionadas (todos son strings)
         campusesToSend = locations // locations contiene UUIDs como strings
@@ -242,7 +236,7 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
             <label className="block text-sm font-medium text-gray-900 mb-3">
               Modalidad <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {modalityOptions.map((modality) => {
                 const Icon = modality.icon
                 return (
@@ -275,7 +269,7 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4" />
-                Sedes {isAmbas && <span className="text-xs text-gray-500">(+ Virtual)</span>}
+                Sedes
               </label>
               {campusesLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500 p-4 bg-gray-50 rounded-lg">
@@ -319,12 +313,6 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
           {isVirtual && (
             <div className="text-sm text-gray-500 italic p-4 bg-blue-50 rounded-lg border border-blue-200">
               💡 La modalidad Virtual no requiere sedes físicas
-            </div>
-          )}
-
-          {isAmbas && (
-            <div className="text-sm text-gray-600 p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <strong>Nota:</strong> La modalidad Ambas contempla tanto la enseñanza virtual como la presencial en las sedes físicas seleccionadas.
             </div>
           )}
 

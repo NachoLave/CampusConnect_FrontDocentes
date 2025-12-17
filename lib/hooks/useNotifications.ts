@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Notification, NotificationsService } from '@/lib/api/services/notifications'
 import { LoadingState } from '@/lib/types'
 import { useEventNotifications } from './useEventNotifications'
+import { PERFORMANCE_CONFIG } from '@/lib/config/performance'
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -11,6 +12,11 @@ export function useNotifications() {
     isLoading: false, // Iniciar en false para no bloquear la UI
     error: null
   })
+
+  // Ref para almacenar el intervalo de polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref para trackear si la página está visible
+  const isPageVisibleRef = useRef(true)
 
   // Obtener notificaciones de eventos locales
   const { 
@@ -144,11 +150,76 @@ export function useNotifications() {
     }
   }, [notifications, eventNotifications, isEventNotification, markEventNotificationAsRead])
 
-  // Cargar notificaciones inmediatamente al montar el hook
-  // No esperar a que termine ningún otro proceso
+  // Función para iniciar el polling continuo
+  const startPolling = useCallback(() => {
+    // Limpiar intervalo anterior si existe
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // Solo iniciar polling si la página está visible
+    if (!isPageVisibleRef.current) {
+      return
+    }
+
+    const interval = PERFORMANCE_CONFIG.POLLING.NOTIFICATIONS
+    
+    console.log(`🔔 [useNotifications] Iniciando polling de notificaciones cada ${interval}ms`)
+    
+    // Ejecutar inmediatamente la primera vez
+    fetchNotifications()
+    
+    // Configurar intervalo para polling continuo
+    pollingIntervalRef.current = setInterval(() => {
+      // Solo hacer fetch si la página está visible
+      if (isPageVisibleRef.current) {
+        fetchNotifications()
+      }
+    }, interval)
+  }, [fetchNotifications])
+
+  // Función para detener el polling
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+      console.log('🔔 [useNotifications] Polling detenido')
+    }
+  }, [])
+
+  // Cargar notificaciones inmediatamente al montar y configurar polling continuo
   useEffect(() => {
     // Ejecutar inmediatamente sin esperar
     fetchNotifications()
+    
+    // Iniciar polling continuo
+    startPolling()
+
+    // Page Visibility API: Detener polling cuando la página no está visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Página oculta - detener polling
+        isPageVisibleRef.current = false
+        stopPolling()
+        console.log('🔔 [useNotifications] Página oculta - polling pausado')
+      } else {
+        // Página visible - reanudar polling
+        isPageVisibleRef.current = true
+        // Hacer fetch inmediato y reanudar polling
+        fetchNotifications()
+        startPolling()
+        console.log('🔔 [useNotifications] Página visible - polling reanudado')
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Cleanup: Detener polling al desmontar
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      console.log('🔔 [useNotifications] Hook desmontado - polling detenido')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Dependencias vacías intencionalmente - solo ejecutar una vez al montar
 

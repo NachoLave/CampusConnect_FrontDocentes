@@ -694,182 +694,6 @@ export default function PerfilPage() {
       processingBlocksRef.current.delete(blockKey)
     }, 1000)
     
-    // VALIDACIÓN: Si se intenta crear VIRTUAL cuando ya existe AMBAS (mismo día + turno)
-    if (availabilityData.modality === 'VIRTUAL') {
-      const ambasBlock = availability.find(
-        b => b.dayOfWeek === availabilityData.dayOfWeek && 
-             b.shift === availabilityData.shift && 
-             b.modality === 'AMBAS'
-      )
-      
-      if (ambasBlock) {
-        setInfoMessage(
-          `Ya existe una disponibilidad con modalidad "Ambas (Presencial y Virtual)" para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}, que ya incluye la modalidad virtual.`
-        )
-        return
-      }
-    }
-    
-    // OPTIMIZACIÓN: Si se intenta crear PRESENCIAL cuando ya existe AMBAS (mismo día + turno)
-    if (availabilityData.modality === 'PRESENCIAL') {
-      const ambasBlock = availability.find(
-        b => b.dayOfWeek === availabilityData.dayOfWeek && 
-             b.shift === availabilityData.shift && 
-             b.modality === 'AMBAS'
-      )
-      
-      if (ambasBlock) {
-        // Verificar qué sedes son nuevas
-        const campusesEnAmbas = ambasBlock.campuses.filter(c => c !== 'VIR') || []
-        const sedesNuevas = availabilityData.campuses.filter(
-          campus => !campusesEnAmbas.includes(campus)
-        )
-        const sedesYaIncluidas = availabilityData.campuses.filter(
-          campus => campusesEnAmbas.includes(campus)
-        )
-        
-        if (sedesNuevas.length > 0) {
-          // Hay sedes nuevas para agregar al bloque AMBAS existente
-          if (!ambasBlock.id) {
-            setErrorMessage("Error: El bloque AMBAS no tiene ID válido.")
-            return
-          }
-          
-          const ambasBlockId = ambasBlock.id
-          const updatedCampuses = [...campusesEnAmbas, ...sedesNuevas, 'VIR'] // Mantener VIR
-          const updatedBlock = { ...ambasBlock, campuses: updatedCampuses }
-          
-          console.log(`Agregando sedes a bloque AMBAS existente:`, sedesNuevas.map(c => getCampusName(c, allCampuses)).join(', '))
-          console.log(`PATCH /teachers/me/availability/${ambasBlockId}`)
-          console.log('Request Body:', JSON.stringify({ campuses: updatedCampuses }, null, 2))
-          
-          // Optimistic Update
-          setAvailability(prev => prev.map(b => 
-            b.id === ambasBlockId ? updatedBlock : b
-          ))
-          
-          // Hacer PATCH al backend con retry
-          retryOperation(() => updateAvailabilityBlock(ambasBlockId, { campuses: updatedCampuses }), 2, 1000).then(success => {
-            console.log('Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
-            if (success) {
-              failedAvailabilityAttemptsRef.current = 0
-              // Mostrar mensaje informativo
-              const sedesAgregadas = sedesNuevas.map(c => getCampusName(c, allCampuses)).join(', ')
-              setInfoMessage(
-                `Se ${sedesNuevas.length > 1 ? 'agregaron las sedes' : 'agregó la sede'} ${sedesAgregadas} al bloque existente de "Ambas (Presencial y Virtual)" para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}.`
-              )
-            } else {
-              failedAvailabilityAttemptsRef.current++
-              
-              // Rollback
-              setAvailability(prev => prev.map(b => 
-                b.id === ambasBlockId ? ambasBlock : b
-              ))
-              
-              if (failedAvailabilityAttemptsRef.current >= 2) {
-                console.log('Múltiples fallos detectados, sincronizando con servidor...')
-                setInfoMessage("Se detectaron problemas de conexión. Sincronizando con el servidor...")
-                refetchAvailability().then(() => {
-                  failedAvailabilityAttemptsRef.current = 0
-                })
-              } else {
-                setErrorMessage("Error al agregar las sedes al bloque existente después de 3 intentos.")
-              }
-            }
-          })
-          
-          return // Salir de la función, ya procesamos
-        } else if (sedesYaIncluidas.length > 0) {
-          // Todas las sedes ya están incluidas
-          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code, allCampuses)).join(', ')
-          setInfoMessage(
-            `Ya existe una disponibilidad con modalidad "Ambas (Presencial y Virtual)" para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}, que ya incluye ${sedesYaIncluidas.length > 1 ? 'las sedes' : 'la sede'}: ${sedesNombres}.`
-          )
-          return
-        }
-      }
-    }
-    
-    // CONSOLIDACIÓN INTELIGENTE: Si la nueva modalidad es AMBAS
-    if (availabilityData.modality === 'AMBAS') {
-      // Recolectar todas las sedes únicas de bloques PRESENCIAL existentes
-      const presencialBlocks = availability.filter(
-        b => b.dayOfWeek === availabilityData.dayOfWeek && 
-             b.shift === availabilityData.shift && 
-             b.modality === 'PRESENCIAL'
-      )
-      
-      // Recolectar sedes de todos los bloques PRESENCIAL
-      const sedesPresencialesExistentes = new Set<string>()
-      presencialBlocks.forEach(block => {
-        block.campuses?.forEach(campus => {
-          if (campus !== 'VIR') {
-            sedesPresencialesExistentes.add(campus)
-          }
-        })
-      })
-      
-      // Consolidar: sedes del nuevo bloque + sedes de bloques presenciales existentes
-      const sedesNuevas = availabilityData.campuses.filter(c => c !== 'VIR')
-      const sedesConsolidadas = Array.from(new Set([...sedesNuevas, ...sedesPresencialesExistentes]))
-      
-      // Si hay consolidación, actualizar el payload
-      if (sedesPresencialesExistentes.size > 0) {
-        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c, allCampuses))
-        console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
-        
-        // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
-        availabilityData.campuses = [...sedesConsolidadas, 'VIR']
-        
-        // Mostrar mensaje informativo al usuario
-        if (sedesConsolidadasNombres.length > 0) {
-          setTimeout(() => {
-            setInfoMessage(
-              `Se consolidaron las sedes ${sedesConsolidadasNombres.join(', ')} de bloques existentes con tu selección para ${formatDay(availabilityData.dayOfWeek)} en turno ${formatShift(availabilityData.shift)}.`
-            )
-          }, 500)
-        }
-      }
-      
-      // Eliminar bloque VIRTUAL
-      const virtualBlock = availability.find(
-        b => b.dayOfWeek === availabilityData.dayOfWeek && 
-             b.shift === availabilityData.shift && 
-             b.modality === 'VIRTUAL'
-      )
-      
-      if (virtualBlock && virtualBlock.id) {
-        const virtualBlockId = virtualBlock.id
-        console.log('Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
-        
-        setAvailability(prev => prev.filter(b => b.id !== virtualBlockId))
-        
-        retryOperation(() => deleteAvailability(virtualBlockId), 2, 1000).then(success => {
-          if (!success) {
-            console.error('Error al eliminar bloque virtual redundante después de reintentos')
-            refetchAvailability()
-          }
-        })
-      }
-      
-      // Eliminar TODOS los bloques PRESENCIAL del mismo día y turno (ya consolidamos sus sedes)
-      presencialBlocks.forEach(presencialBlock => {
-        if (!presencialBlock.id) return
-        
-        const presencialBlockId = presencialBlock.id
-        console.log('Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
-        
-        setAvailability(prev => prev.filter(b => b.id !== presencialBlockId))
-        
-        retryOperation(() => deleteAvailability(presencialBlockId), 2, 1000).then(success => {
-          if (!success) {
-            console.error('Error al eliminar bloque presencial después de reintentos')
-            refetchAvailability()
-          }
-        })
-      })
-    }
-    
     // Buscar si ya existe un bloque con el mismo día + turno + modalidad
     const existingBlock = availability.find(
       b => b.dayOfWeek === availabilityData.dayOfWeek && 
@@ -944,7 +768,7 @@ export default function PerfilPage() {
         id: Date.now() + Math.random(), // ID temporal optimista único
         dayOfWeek: availabilityData.dayOfWeek,
         shift: availabilityData.shift as 'MANIANA' | 'TARDE' | 'NOCHE',
-        modality: availabilityData.modality as 'PRESENCIAL' | 'VIRTUAL' | 'AMBAS',
+        modality: availabilityData.modality as 'PRESENCIAL' | 'VIRTUAL',
         campuses: availabilityData.campuses
       }
       
@@ -1004,9 +828,15 @@ export default function PerfilPage() {
     if (!editingBlock || !editingBlock.id) return
     
     const blockId = editingBlock.id
+    
+    // Guardar una copia del bloque original para rollback
+    const originalBlock = { ...editingBlock }
+    
+    // Crear el bloque actualizado usando directamente los datos recibidos
+    // No confiar en editingBlock que puede tener datos desactualizados
     const updatedBlock = { 
       ...editingBlock, 
-      campuses: data.campuses,
+      campuses: [...data.campuses], // Crear nueva array para evitar referencias
       ...(data.modality && { modality: data.modality as any })
     }
     
@@ -1014,159 +844,43 @@ export default function PerfilPage() {
     // IMPORTANTE: data.campuses contiene strings - UUIDs de sedes como strings, o "VIR" como caso especial
     console.log(`PATCH /teachers/me/availability/${blockId}`)
     console.log('Request Body:', JSON.stringify(data, null, 2))
-    console.log('Bloque original:', editingBlock)
+    console.log('Bloque original:', originalBlock)
     console.log('Datos actualizados:', data)
-    
-    // VALIDACIÓN: Si se intenta cambiar a VIRTUAL cuando ya existe AMBAS (mismo día + turno)
-    if (data.modality === 'VIRTUAL') {
-      const ambasBlock = availability.find(
-        b => b.id !== blockId && // No el que estamos editando
-             b.dayOfWeek === editingBlock.dayOfWeek && 
-             b.shift === editingBlock.shift && 
-             b.modality === 'AMBAS'
-      )
-      
-      if (ambasBlock) {
-        setShowEditAvailabilityModal(false)
-        setEditingBlock(null)
-        setInfoMessage(
-          `Ya existe una disponibilidad con modalidad "Ambas (Presencial y Virtual)" para ${formatDay(editingBlock.dayOfWeek)} en turno ${formatShift(editingBlock.shift)}, que ya incluye la modalidad virtual.`
-        )
-        return
-      }
-    }
-    
-    // VALIDACIÓN: Si se intenta cambiar a PRESENCIAL cuando ya existe AMBAS con las mismas sedes (mismo día + turno)
-    if (data.modality === 'PRESENCIAL' || (data.modality === undefined && editingBlock.modality === 'PRESENCIAL')) {
-      const ambasBlock = availability.find(
-        b => b.id !== blockId && // No el que estamos editando
-             b.dayOfWeek === editingBlock.dayOfWeek && 
-             b.shift === editingBlock.shift && 
-             b.modality === 'AMBAS'
-      )
-      
-      if (ambasBlock) {
-        // Verificar si las sedes que se intentan agregar ya están en el bloque AMBAS
-        const campusesEnAmbas = ambasBlock.campuses || []
-        const sedesYaIncluidas = data.campuses.filter(
-          campus => campusesEnAmbas.includes(campus)
-        )
-        
-        if (sedesYaIncluidas.length > 0) {
-          const sedesNombres = sedesYaIncluidas.map(code => getCampusName(code, allCampuses)).join(', ')
-          setShowEditAvailabilityModal(false)
-          setEditingBlock(null)
-          setInfoMessage(
-            `Ya existe una disponibilidad con modalidad "Ambas (Presencial y Virtual)" para ${formatDay(editingBlock.dayOfWeek)} en turno ${formatShift(editingBlock.shift)}, que ya incluye ${sedesYaIncluidas.length > 1 ? 'las sedes' : 'la sede'}: ${sedesNombres}.`
-          )
-          return
-        }
-      }
-    }
-    
-    // CONSOLIDACIÓN INTELIGENTE: Si se está cambiando a modalidad AMBAS
-    if (data.modality === 'AMBAS') {
-      // Recolectar todas las sedes únicas de bloques PRESENCIAL existentes
-      const presencialBlocks = availability.filter(
-        b => b.id !== blockId && // No el que estamos editando
-             b.dayOfWeek === editingBlock.dayOfWeek && 
-             b.shift === editingBlock.shift && 
-             b.modality === 'PRESENCIAL'
-      )
-      
-      // Recolectar sedes de todos los bloques PRESENCIAL
-      const sedesPresencialesExistentes = new Set<string>()
-      presencialBlocks.forEach(block => {
-        block.campuses?.forEach(campus => {
-          if (campus !== 'VIR') {
-            sedesPresencialesExistentes.add(campus)
-          }
-        })
-      })
-      
-      // Consolidar: sedes del bloque editado + sedes de bloques presenciales existentes
-      const sedesActuales = data.campuses.filter(c => c !== 'VIR')
-      const sedesConsolidadas = Array.from(new Set([...sedesActuales, ...sedesPresencialesExistentes]))
-      
-      // Si hay consolidación, actualizar los campuses
-      if (sedesPresencialesExistentes.size > 0) {
-        const sedesConsolidadasNombres = Array.from(sedesPresencialesExistentes).map(c => getCampusName(c, allCampuses))
-        console.log(`Consolidando sedes de bloques PRESENCIAL existentes: ${sedesConsolidadasNombres.join(', ')}`)
-        
-        // Actualizar los campuses para incluir todas las sedes consolidadas + VIR
-        data.campuses = [...sedesConsolidadas, 'VIR']
-        updatedBlock.campuses = data.campuses
-        
-        // Mostrar mensaje informativo al usuario
-        if (sedesConsolidadasNombres.length > 0) {
-          setTimeout(() => {
-            setInfoMessage(
-              `Se consolidaron las sedes ${sedesConsolidadasNombres.join(', ')} de bloques existentes con tu edición para ${formatDay(editingBlock.dayOfWeek)} en turno ${formatShift(editingBlock.shift)}.`
-            )
-          }, 500)
-        }
-      }
-      
-      // Eliminar bloque VIRTUAL
-      const virtualBlock = availability.find(
-        b => b.id !== blockId && // No el que estamos editando
-             b.dayOfWeek === editingBlock.dayOfWeek && 
-             b.shift === editingBlock.shift && 
-             b.modality === 'VIRTUAL'
-      )
-      
-      if (virtualBlock && virtualBlock.id) {
-        const virtualBlockId = virtualBlock.id
-        console.log('Eliminando bloque VIRTUAL redundante (incluido en AMBAS):', virtualBlock)
-        
-        setAvailability(prev => prev.filter(b => b.id !== virtualBlockId))
-        
-        retryOperation(() => deleteAvailability(virtualBlockId), 2, 1000).then(success => {
-          if (!success) {
-            console.error('Error al eliminar bloque virtual redundante después de reintentos')
-            refetchAvailability()
-          }
-        })
-      }
-      
-      // Eliminar TODOS los bloques PRESENCIAL del mismo día y turno (ya consolidamos sus sedes)
-      presencialBlocks.forEach(presencialBlock => {
-        if (!presencialBlock.id) return
-        
-        const presencialBlockId = presencialBlock.id
-        console.log('Eliminando bloque PRESENCIAL (consolidado en AMBAS):', presencialBlock)
-        
-        setAvailability(prev => prev.filter(b => b.id !== presencialBlockId))
-        
-        retryOperation(() => deleteAvailability(presencialBlockId), 2, 1000).then(success => {
-          if (!success) {
-            console.error('Error al eliminar bloque presencial después de reintentos')
-            refetchAvailability()
-          }
-        })
-      })
-    }
+    console.log('Bloque optimista:', updatedBlock)
     
     // Cerrar modal primero
     setShowEditAvailabilityModal(false)
+    setEditingBlock(null)
     
-    // Optimistic Update
-    setAvailability(prev => prev.map(b => 
-      b.id === blockId ? updatedBlock : b
-    ))
+    // Optimistic Update - usar directamente data.campuses para evitar problemas de referencia
+    setAvailability(prev => prev.map(b => {
+      if (b.id === blockId) {
+        return {
+          ...b,
+          campuses: [...data.campuses], // Usar directamente los datos nuevos
+          ...(data.modality && { modality: data.modality as any })
+        }
+      }
+      return b
+    }))
     
     // Hacer la petición real al backend con retry
     retryOperation(() => updateAvailabilityBlock(blockId, data), 2, 1000).then(success => {
       console.log('Respuesta PATCH availability:', success ? 'SUCCESS' : 'FAILED')
       if (success) {
         failedAvailabilityAttemptsRef.current = 0
+        // Refetch para asegurar que tenemos los datos correctos del servidor
+        // Esto corrige cualquier discrepancia entre el optimistic update y el estado real
+        refetchAvailability().catch(err => {
+          console.error('Error al refetch después de actualizar:', err)
+        })
       } else {
         // Falló después de reintentos
         failedAvailabilityAttemptsRef.current++
         
-        // Rollback
+        // Rollback usando el bloque original guardado
         setAvailability(prev => prev.map(b => 
-          b.id === blockId ? editingBlock : b
+          b.id === blockId ? originalBlock : b
         ))
         
         // Si hay múltiples fallos, sincronizar
@@ -1181,8 +895,6 @@ export default function PerfilPage() {
         }
       }
     })
-    
-    setEditingBlock(null)
   }
 
   const handleDeleteClick = (
@@ -1794,7 +1506,7 @@ export default function PerfilPage() {
                           <div>
                             <div className="text-xs font-medium text-gray-500 mb-1.5 uppercase">Modalidad</div>
                             <div className="space-y-1">
-                              {['PRESENCIAL', 'VIRTUAL', 'AMBAS'].map(modality => (
+                              {['PRESENCIAL', 'VIRTUAL'].map(modality => (
                                 <label key={modality} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded text-sm">
                                   <input
                                     type="checkbox"
@@ -1953,8 +1665,13 @@ export default function PerfilPage() {
                       <div className="absolute top-3 right-3 flex gap-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => handleEditAvailabilityClick(block)}
-                          className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
-                          title="Editar disponibilidad"
+                          disabled={block.modality === 'AMBAS'}
+                          className={`p-2 rounded-lg transition-colors ${
+                            block.modality === 'AMBAS'
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-50 hover:bg-blue-100 text-blue-600'
+                          }`}
+                          title={block.modality === 'AMBAS' ? 'No se puede editar bloques con modalidad "Ambas"' : 'Editar disponibilidad'}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>

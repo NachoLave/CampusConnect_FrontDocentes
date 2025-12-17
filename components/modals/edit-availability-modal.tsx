@@ -43,8 +43,8 @@ export function EditAvailabilityModal({
 
   // Lógica de modalidades
   const isVirtual = selectedModality === 'VIRTUAL'
-  const isAmbas = selectedModality === 'AMBAS'
   const isPresencial = selectedModality === 'PRESENCIAL'
+  // Nota: Si el bloque actual es 'AMBAS', se mostrará pero no se podrá cambiar a 'AMBAS' desde el front
   
   // Determinar si se cambió la modalidad
   const modalityChanged = currentBlock && selectedModality !== currentBlock.modality
@@ -53,6 +53,10 @@ export function EditAvailabilityModal({
   const filteredCampuses = campuses.filter(campus => campus.uuid)
 
   const handleModalityChange = (modality: string) => {
+    // No permitir cambiar a AMBAS desde el front
+    if (modality === 'AMBAS') {
+      return
+    }
     setSelectedModality(modality)
     // Al cambiar a Virtual, limpiar sedes
     if (modality === 'VIRTUAL') {
@@ -76,15 +80,12 @@ export function EditAvailabilityModal({
     // - Cada UUID de sede se envía como string
     // - "VIR" es el único valor especial permitido (también es string)
     // Todos los valores son strings, sin restricciones adicionales
-    if (isVirtual) {
-      campusesToSend = ["VIR"] // Solo "VIR" para modalidad virtual
-    } else if (isAmbas) {
-      // AMBAS: Incluir UUIDs de sedes físicas (strings) + "VIR" (string especial)
-      campusesToSend = [...selectedCampuses, "VIR"]
-    } else {
-      // PRESENCIAL: Solo UUIDs de sedes físicas (todos son strings)
-      campusesToSend = selectedCampuses // selectedCampuses contiene UUIDs como strings
-    }
+      if (isVirtual) {
+        campusesToSend = ["VIR"] // Solo "VIR" para modalidad virtual
+      } else {
+        // PRESENCIAL: Solo UUIDs de sedes físicas (todos son strings)
+        campusesToSend = selectedCampuses // selectedCampuses contiene UUIDs como strings
+      }
     
     // Si cambió la modalidad, enviarla también
     if (modalityChanged) {
@@ -98,7 +99,7 @@ export function EditAvailabilityModal({
 
   // Validación: 
   // - VIRTUAL: siempre válido
-  // - PRESENCIAL o AMBAS: debe tener al menos una sede física
+  // - PRESENCIAL: debe tener al menos una sede física
   const canSave = isVirtual || selectedCampuses.length > 0
 
   const formatDay = (day: string): string => {
@@ -126,7 +127,7 @@ export function EditAvailabilityModal({
     const modalityMap: Record<string, string> = {
       'PRESENCIAL': 'Presencial',
       'VIRTUAL': 'Virtual',
-      'AMBAS': 'Ambas'
+      'AMBAS': 'Ambas (Presencial y Virtual)' // Solo para mostrar bloques existentes
     }
     return modalityMap[modality] || modality
   }
@@ -160,28 +161,34 @@ export function EditAvailabilityModal({
             <label className="block text-sm font-medium text-gray-900 mb-3">
               Modalidad
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {['PRESENCIAL', 'VIRTUAL', 'AMBAS'].map((modality) => (
-                <button
-                  key={modality}
-                  onClick={() => handleModalityChange(modality)}
-                  className={`p-3 rounded-lg text-sm font-medium transition-all border-2 ${
-                    selectedModality === modality
-                      ? 'bg-purple-100 text-purple-800 border-purple-300 shadow-sm'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-slate-300'
-                  }`}
-                >
-                  {formatModality(modality)}
-                </button>
-              ))}
-            </div>
+            {currentBlock.modality === 'AMBAS' ? (
+              <div className="p-3 rounded-lg bg-gray-50 border-2 border-gray-200 text-sm text-gray-600">
+                {formatModality(currentBlock.modality)} (No se puede editar)
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {['PRESENCIAL', 'VIRTUAL'].map((modality) => (
+                  <button
+                    key={modality}
+                    onClick={() => handleModalityChange(modality)}
+                    className={`p-3 rounded-lg text-sm font-medium transition-all border-2 ${
+                      selectedModality === modality
+                        ? 'bg-purple-100 text-purple-800 border-purple-300 shadow-sm'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {formatModality(modality)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Selector de sedes */}
           {!isVirtual && (
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-3">
-                Sedes físicas {isAmbas && <span className="text-xs text-gray-500">(+ Virtual automático)</span>}
+                Sedes físicas
               </label>
               
               {campusesLoading ? (
@@ -226,9 +233,9 @@ export function EditAvailabilityModal({
             </div>
           )}
 
-          {isAmbas && (
+          {currentBlock.modality === 'AMBAS' && (
             <div className="text-sm text-gray-600 p-3 bg-purple-50 rounded-lg border border-purple-200">
-              <strong>Nota:</strong> La modalidad Ambas contempla tanto la enseñanza virtual como la presencial en las sedes físicas seleccionadas.
+              <strong>Nota:</strong> Este bloque tiene modalidad "Ambas (Presencial y Virtual)". No se puede editar desde el frontend.
             </div>
           )}
 
@@ -250,7 +257,7 @@ export function EditAvailabilityModal({
             <Button 
               className="bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleSave}
-              disabled={!canSave}
+              disabled={!canSave || currentBlock.modality === 'AMBAS'}
             >
               <Save className="w-4 h-4 mr-2" />
               Guardar cambios

@@ -65,6 +65,11 @@ export const PERFORMANCE_CONFIG = {
     ENABLE_SERVICE_WORKER: false, // Habilitar cuando esté listo
     ENABLE_VIRTUAL_SCROLL: false, // Para listas muy largas
     RESPECT_DATA_SAVER: true,     // Respetar preferencia de ahorro de datos
+  },
+
+  // Configuración de polling (como websocket)
+  POLLING: {
+    NOTIFICATIONS: 5000, // 5 segundos - polling continuo de notificaciones
   }
 }
 
