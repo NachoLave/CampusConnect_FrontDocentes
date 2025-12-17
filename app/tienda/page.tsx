@@ -125,7 +125,7 @@ export default function TiendaPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Historial de Tienda</h1>
           <p className="text-sm md:text-base text-gray-600">
-            Desde acรก podes ver el historial mรกs reciente de la tienda.
+            Desde acá podés ver el historial más reciente de la tienda.
           </p>
         </div>
           <a

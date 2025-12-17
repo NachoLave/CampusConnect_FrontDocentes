@@ -143,6 +143,8 @@ class AuthService {
     if (isDifferentUser) {
       console.log('🔄 Detectado cambio de usuario, limpiando cache...')
       // Limpiar cache cuando cambia el usuario
+      // IMPORTANTE: Al cambiar de usuario, SÍ se eliminan las notificaciones de eventos
+      // porque son específicas del usuario anterior
       if (typeof window !== 'undefined') {
         LocalStorageCache.clearAll()
         // También limpiar datos específicos del usuario anterior
@@ -154,6 +156,10 @@ class AuthService {
           }
         }
         keysToRemove.forEach(key => localStorage.removeItem(key))
+        
+        // Eliminar notificaciones de eventos del usuario anterior
+        localStorage.removeItem('event_notifications_shown')
+        localStorage.removeItem('event_notifications_read')
       }
     }
     
@@ -166,8 +172,10 @@ class AuthService {
     })
     
     // Crear el usuario desde el payload
+    // Usar el UUID (sub) como identificador numérico si es posible parsearlo, sino usar 0
+    const userId = payload.sub ? parseInt(payload.sub.replace(/-/g, '').substring(0, 8), 16) || 0 : 0
     this.user = {
-      id: payload.teacherId || parseInt(payload.sub) || 0,
+      id: userId,
       name: payload.name || payload.nombre || 'Docente',
       email: payload.email || '',
       roles: payload.roles || (payload.role ? [payload.role] : ['TEACHER']),
@@ -301,6 +309,11 @@ class AuthService {
     
     // Limpiar localStorage y cache
     if (typeof window !== 'undefined') {
+      // Guardar las claves de notificaciones de eventos antes de limpiar
+      // Estas NO deben eliminarse al cerrar sesión, solo cuando se marquen como leídas
+      const eventNotificationsShown = localStorage.getItem('event_notifications_shown')
+      const eventNotificationsRead = localStorage.getItem('event_notifications_read')
+      
       // Limpiar datos de autenticación
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
@@ -322,6 +335,14 @@ class AuthService {
         }
       }
       keysToRemove.forEach(key => localStorage.removeItem(key))
+      
+      // Restaurar las notificaciones de eventos (NO deben eliminarse al cerrar sesión)
+      if (eventNotificationsShown) {
+        localStorage.setItem('event_notifications_shown', eventNotificationsShown)
+      }
+      if (eventNotificationsRead) {
+        localStorage.setItem('event_notifications_read', eventNotificationsRead)
+      }
     }
     
     console.log('👋 Usuario deslogueado - Cache limpiada')

@@ -169,7 +169,7 @@ export default function ComedorPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Historial de Comedor</h1>
           <p className="text-sm md:text-base text-gray-600">
-            Desde acá podes ver el historial más reciente del comedor.
+            Desde acá podés ver el historial más reciente del comedor.
           </p>
         </div>
         <a
