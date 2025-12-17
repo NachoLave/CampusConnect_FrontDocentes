@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Notification, NotificationsService } from '@/lib/api/services/notifications'
 import { LoadingState } from '@/lib/types'
 import { useEventNotifications } from './useEventNotifications'
-import { useSubjects } from './useSubjects'
+import { SubjectsService } from '@/lib/api/services/subjects'
 import { PERFORMANCE_CONFIG } from '@/lib/config/performance'
 
 export function useNotifications() {
@@ -14,6 +14,7 @@ export function useNotifications() {
     isLoading: false, // Iniciar en false para no bloquear la UI
     error: null
   })
+  const [subjectsMap, setSubjectsMap] = useState<Map<string, string>>(new Map()) // UUID -> nombre
 
   // Ref para almacenar el intervalo de polling
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -29,30 +30,40 @@ export function useNotifications() {
     isEventNotification 
   } = useEventNotifications()
 
-  // Obtener materias para enriquecer notificaciones de propuestas
-  const { subjects } = useSubjects()
-
-  // Crear mapa de materias por UUID para búsqueda rápida
-  const subjectsMap = useMemo(() => {
-    const map = new Map<string, string>() // UUID -> nombre
-    console.log('🔔 [useNotifications] Creando mapa de materias:', {
-      totalSubjects: subjects.length,
-      subjectsWithUUID: subjects.filter(s => s.uuid).length
-    })
-    subjects.forEach(subject => {
-      if (subject.uuid) {
-        map.set(subject.uuid, subject.subjectName)
-        console.log('🔔 [useNotifications] Agregando materia al mapa:', {
-          uuid: subject.uuid,
-          name: subject.subjectName
+  // Función para cargar materias desde el EP externo
+  const loadSubjects = useCallback(async () => {
+    try {
+      console.log('🔔 [useNotifications] Cargando materias desde EP externo...')
+      const response = await SubjectsService.getAllSubjectsExternal()
+      
+      if (response.success && response.data) {
+        const map = new Map<string, string>() // UUID -> nombre
+        
+        response.data.forEach(materia => {
+          if (materia.uuid && materia.nombre) {
+            map.set(materia.uuid, materia.nombre)
+          }
         })
+        
+        console.log('🔔 [useNotifications] Mapa de materias creado con', map.size, 'entradas desde EP externo')
+        setSubjectsMap(map)
       } else {
-        console.warn('🔔 [useNotifications] Materia sin UUID:', subject)
+        console.warn('🔔 [useNotifications] Error obteniendo materias:', response.error)
       }
-    })
-    console.log('🔔 [useNotifications] Mapa de materias creado con', map.size, 'entradas')
-    return map
-  }, [subjects])
+    } catch (error) {
+      console.error('🔔 [useNotifications] Error cargando materias:', error)
+    }
+  }, [])
+
+  // Cargar materias al montar y cada 10 segundos
+  useEffect(() => {
+    loadSubjects()
+    
+    // Recargar materias cada 10 segundos para mantener datos actualizados
+    const interval = setInterval(loadSubjects, 10 * 1000)
+    
+    return () => clearInterval(interval)
+  }, [loadSubjects])
 
   // Función para enriquecer notificaciones con nombre de materia
   const enrichNotifications = useCallback((notifs: Notification[]): Notification[] => {
@@ -114,6 +125,9 @@ export function useNotifications() {
     // No establecer isLoading en true para no bloquear la UI
     // Las notificaciones se cargarán en background
     
+    // Recargar materias cada vez que se refrescan las notificaciones
+    loadSubjects()
+    
     try {
       const response = await NotificationsService.getNotifications()
       
@@ -138,19 +152,18 @@ export function useNotifications() {
         error: 'Error inesperado al cargar notificaciones' 
       })
     }
-  }, [])
+  }, [loadSubjects])
 
   // Enriquecer notificaciones cuando cambien las materias o las notificaciones raw
   useEffect(() => {
     console.log('🔔 [useNotifications] useEffect - Enriqueciendo notificaciones:', {
       rawNotificationsCount: rawNotifications.length,
-      subjectsMapSize: subjectsMap.size,
-      subjectsCount: subjects.length
+      subjectsMapSize: subjectsMap.size
     })
     const enriched = enrichNotifications(rawNotifications)
     setNotifications(enriched)
     console.log('🔔 [useNotifications] useEffect - Notificaciones enriquecidas:', enriched.length)
-  }, [rawNotifications, enrichNotifications, subjectsMap, subjects.length])
+  }, [rawNotifications, enrichNotifications, subjectsMap])
 
   // Función para detener el polling
   const stopPolling = useCallback(() => {
