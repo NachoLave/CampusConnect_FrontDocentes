@@ -17,16 +17,79 @@ export async function GET(request: Request) {
 
     // Llamar al nuevo endpoint de Azure con Bearer Token
     const url = 'https://comedorback.azurewebsites.net/reservations/mine'
+    console.log(`[Canteen Proxy] Calling backend: ${url}`)
     
-    const resp = await fetch(url, {
+    let resp: Response
+    let retryCount = 0
+    const maxRetries = 2
+    
+    // Intentar con reintentos para manejar posibles problemas de latencia
+    while (retryCount <= maxRetries) {
+      // Crear nuevo controller y timeout para cada intento
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 segundos
+      
+      try {
+        resp = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
       },
-      cache: 'no-store'
+          cache: 'no-store',
+          signal: controller.signal
     })
+        clearTimeout(timeoutId)
+        
+        // Si la respuesta es exitosa, salir del loop
+        if (resp.ok) {
+          break
+        }
+        
+        // Si es un error 5xx y aún tenemos reintentos, esperar un poco y reintentar
+        if (resp.status >= 500 && retryCount < maxRetries) {
+          console.log(`[Canteen Proxy] Error ${resp.status}, reintentando... (${retryCount + 1}/${maxRetries})`)
+          clearTimeout(timeoutId)
+          await new Promise(resolve => setTimeout(resolve, 1000)) // Esperar 1 segundo antes de reintentar
+          retryCount++
+          continue
+        }
+        
+        // Si no es un error 5xx o ya no hay reintentos, lanzar error
+        clearTimeout(timeoutId)
+        throw new Error(`Error del servidor: ${resp.status}`)
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        
+        // Si es timeout y aún tenemos reintentos, reintentar
+        if (fetchError.name === 'AbortError' && retryCount < maxRetries) {
+          console.log(`[Canteen Proxy] Timeout, reintentando... (${retryCount + 1}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, 1000)) // Esperar 1 segundo antes de reintentar
+          retryCount++
+          continue
+        }
+        
+        // Si es timeout y no hay más reintentos
+        if (fetchError.name === 'AbortError') {
+          console.error('[Canteen Proxy] Timeout: El endpoint tardó más de 20 segundos después de reintentos')
+          errorTracker.trackError(
+            'Comedor',
+            '/api/canteen/reservations',
+            'GET',
+            504, // Gateway Timeout
+            'El endpoint tardó demasiado en responder (timeout)',
+            { url, timeout: true, retries: retryCount }
+          )
+          return NextResponse.json({ error: 'Timeout: El endpoint tardó demasiado en responder' }, { status: 504 })
+        }
+        
+        // Para otros errores, re-lanzar
+        throw fetchError
+      }
+    }
+
+    console.log(`[Canteen Proxy] Backend response status: ${resp.status}`)
 
     if (!resp.ok) {
       const text = await resp.text()
@@ -38,7 +101,7 @@ export async function GET(request: Request) {
         'GET',
         resp.status,
         text || resp.statusText,
-        { url }
+        { url, retries: retryCount }
       )
       
       return NextResponse.json({ error: text || resp.statusText }, { status: resp.status })
@@ -49,7 +112,7 @@ export async function GET(request: Request) {
     
     // Asegurarse de que siempre devolvemos un array
     if (Array.isArray(data)) {
-      return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(data, { status: 200 })
     }
     
     // Si la respuesta no es un array, devolver array vacío

@@ -59,7 +59,7 @@ export function AddAvailabilityModal({ open, onOpenChange, onAddAvailability }: 
   const shifts = [
     { key: "Mañana", label: "Mañana", icon: Sun, time: "8:00 - 12:00", color: "amber" },
     { key: "Tarde", label: "Tarde", icon: Sunset, time: "14:00 - 18:00", color: "orange" },
-    { key: "Noche", label: "Noche", icon: Moon, time: "19:00 - 23:00", color: "indigo" }
+    { key: "Noche", label: "Noche", icon: Moon, time: "18:00 - 22:00", color: "indigo" }
   ]
   
   const modalityOptions = [

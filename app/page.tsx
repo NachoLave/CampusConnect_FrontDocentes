@@ -295,12 +295,12 @@ export default function DashboardPage() {
   const selectedDateStr = useMemo(() => selectedDate.toISOString().split('T')[0], [selectedDate])
   const selectedEvents: EventType[] = useMemo(() => {
     return weeklyEvents
-      .filter((event) => event.date === selectedDateStr)
-      .map((event) => ({
-        time: event.time,
-        title: event.title,
-        type: event.type as "class" | "meeting" | "exam" | "event" | "canteen",
-      }))
+    .filter((event) => event.date === selectedDateStr)
+    .map((event) => ({
+      time: event.time,
+      title: event.title,
+      type: event.type as "class" | "meeting" | "exam" | "event" | "canteen",
+    }))
   }, [weeklyEvents, selectedDateStr])
 
   // Optimización: memoizar mapa de tipos de eventos por fecha (crear una vez)

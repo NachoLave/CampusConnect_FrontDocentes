@@ -22,12 +22,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Token de autenticación requerido' }, { status: 401 })
     }
 
+    // Obtener userId desde el header (UUID del docente)
+    const userId = request.headers.get('userId')
+    if (!userId) {
+      console.error('[Events Proxy] No userId header found')
+      return NextResponse.json({ error: 'Header userId requerido' }, { status: 400 })
+    }
+
     // Obtener endDate de query params o usar valor por defecto
     const { searchParams } = new URL(request.url)
     const endDate = searchParams.get('endDate') || '9999-12-02'
 
     const url = `${EVENTS_API_URL}?endDate=${endDate}`
-    console.log(`[Events Proxy] Calling backend: ${url}`)
+    console.log(`[Events Proxy] Calling backend: ${url} with userId: ${userId}`)
     
     // Timeout de 7 segundos en el proxy para no bloquear
     const controller = new AbortController()
@@ -40,7 +47,8 @@ export async function GET(request: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'userId': userId // Enviar userId al backend
         },
         cache: 'no-store',
         signal: controller.signal

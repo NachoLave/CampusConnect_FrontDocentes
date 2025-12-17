@@ -1,7 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { CoursesService } from '@/lib/api/services/courses'
 import { LoadingState } from '@/lib/types'
+import { LocalStorageCache } from '@/lib/utils/cache'
+
+const FILTERS_CACHE_KEY = 'course_filters'
+const FILTERS_CACHE_TTL = 1 * 60 * 1000 // 1 minuto
 
 export function useCourseFilters(selectedPeriod?: string) {
   const [sedes, setSedes] = useState<string[]>([])
@@ -14,9 +18,19 @@ export function useCourseFilters(selectedPeriod?: string) {
     isLoading: true,
     error: null
   })
+  const hasLoadedRef = useRef(false)
 
   const fetchSedes = useCallback(async () => {
-    setSedesLoading({ isLoading: true, error: null })
+    // Intentar cargar desde cache primero
+    const cachedFilters = LocalStorageCache.get<{ sedes: string[], days: string[] }>(FILTERS_CACHE_KEY)
+    
+    if (cachedFilters && cachedFilters.sedes && cachedFilters.sedes.length > 0) {
+      // Mostrar datos cacheados inmediatamente
+      setSedes(cachedFilters.sedes)
+      setSedesLoading({ isLoading: false, error: null })
+    } else {
+      setSedesLoading({ isLoading: true, error: null })
+    }
 
     try {
       // Siempre obtener TODOS los cursos del usuario para extraer sedes únicas
@@ -30,6 +44,11 @@ export function useCourseFilters(selectedPeriod?: string) {
         const uniqueSedes = [...new Set(coursesResponse.data.map(course => course.sede).filter(Boolean))].sort()
         console.log('Sedes únicas del usuario (todos los períodos):', uniqueSedes)
         setSedes(uniqueSedes)
+        setSedesLoading({ isLoading: false, error: null })
+        
+        // Guardar en cache junto con días
+        const cachedDays = LocalStorageCache.get<{ sedes: string[], days: string[] }>(FILTERS_CACHE_KEY)?.days || []
+        LocalStorageCache.set(FILTERS_CACHE_KEY, { sedes: uniqueSedes, days: cachedDays }, FILTERS_CACHE_TTL)
       } else {
         setSedesLoading({
           isLoading: false,
@@ -44,12 +63,19 @@ export function useCourseFilters(selectedPeriod?: string) {
       })
       return
     }
-
-    setSedesLoading({ isLoading: false, error: null })
-  }, [selectedPeriod])
+  }, [])
 
   const fetchDays = useCallback(async () => {
-    setDaysLoading({ isLoading: true, error: null })
+    // Intentar cargar desde cache primero
+    const cachedFilters = LocalStorageCache.get<{ sedes: string[], days: string[] }>(FILTERS_CACHE_KEY)
+    
+    if (cachedFilters && cachedFilters.days && cachedFilters.days.length > 0) {
+      // Mostrar datos cacheados inmediatamente
+      setDays(cachedFilters.days)
+      setDaysLoading({ isLoading: false, error: null })
+    } else {
+      setDaysLoading({ isLoading: true, error: null })
+    }
 
     try {
       // Siempre obtener TODOS los cursos del usuario para extraer días únicos
@@ -74,6 +100,11 @@ export function useCourseFilters(selectedPeriod?: string) {
         
         console.log('Días únicos del usuario ordenados:', uniqueDays)
         setDays(uniqueDays)
+        setDaysLoading({ isLoading: false, error: null })
+        
+        // Guardar en cache junto con sedes
+        const cachedSedes = LocalStorageCache.get<{ sedes: string[], days: string[] }>(FILTERS_CACHE_KEY)?.sedes || []
+        LocalStorageCache.set(FILTERS_CACHE_KEY, { sedes: cachedSedes, days: uniqueDays }, FILTERS_CACHE_TTL)
       } else {
         setDaysLoading({
           isLoading: false,
@@ -88,14 +119,17 @@ export function useCourseFilters(selectedPeriod?: string) {
       })
       return
     }
-
-    setDaysLoading({ isLoading: false, error: null })
-  }, [selectedPeriod])
+  }, [])
 
   useEffect(() => {
-    fetchSedes()
-    fetchDays()
-  }, [fetchSedes, fetchDays])
+    // Solo cargar una vez, no cada vez que cambia el período
+    if (!hasLoadedRef.current) {
+      fetchSedes()
+      fetchDays()
+      hasLoadedRef.current = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Solo ejecutar una vez al montar
 
   return {
     sedes,

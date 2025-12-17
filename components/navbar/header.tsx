@@ -58,13 +58,13 @@ export function Header({ currentPage, onMenuClick }: HeaderProps) {
         <div className="flex items-center space-x-3">
           {/* Mobile Menu Button */}
           {onMenuClick && (
-            <button
-              onClick={onMenuClick}
-              className="lg:hidden p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              aria-label="Abrir menú"
-            >
-              <Menu className="h-6 w-6 text-gray-700" />
-            </button>
+          <button
+            onClick={onMenuClick}
+            className="lg:hidden p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-6 w-6 text-gray-700" />
+          </button>
           )}
 
           {/* Breadcrumb - Hidden on small screens */}

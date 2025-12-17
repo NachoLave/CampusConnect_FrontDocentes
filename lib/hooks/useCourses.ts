@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Course, LoadingState, CourseFilters } from '@/lib/types'
 import { CoursesService } from '@/lib/api/services'
+import { LocalStorageCache } from '@/lib/utils/cache'
+import { PERFORMANCE_CONFIG } from '@/lib/config/performance'
+
+const COURSES_CACHE_KEY = 'courses_all'
+const COURSES_CACHE_TTL = PERFORMANCE_CONFIG.CACHE_TTL.COURSES * 1000 // Convertir segundos a milisegundos
 
 export function useCourses() {
   const [courses, setCourses] = useState<Course[]>([])
@@ -11,7 +16,29 @@ export function useCourses() {
     error: null
   })
 
-  const fetchCourses = useCallback(async () => {
+  const fetchCourses = useCallback(async (skipCache = false) => {
+    // Intentar cargar desde cache primero (a menos que se pida explícitamente saltar el cache)
+    const cachedCourses = skipCache ? null : LocalStorageCache.get<Course[]>(COURSES_CACHE_KEY)
+    
+    if (cachedCourses && cachedCourses.length > 0) {
+      // Mostrar datos cacheados inmediatamente
+      setCourses(cachedCourses)
+      setLoadingState({ isLoading: false, error: null })
+      
+      // Hacer fetch en background para actualizar (pero no bloquear la UI)
+      // El cache tiene TTL de 1 minuto, así que solo actualizar en background si es necesario
+      CoursesService.getCourses().then(response => {
+        if (response.success && response.data) {
+          setCourses(response.data)
+          LocalStorageCache.set(COURSES_CACHE_KEY, response.data, COURSES_CACHE_TTL)
+        }
+      }).catch(() => {
+        // Ignorar errores en background refresh, mantener datos del cache
+      })
+      return
+    }
+    
+    // Si no hay cache, mostrar loading y hacer fetch
     setLoadingState({ isLoading: true, error: null })
     
     try {
@@ -19,6 +46,9 @@ export function useCourses() {
       
       if (response.success) {
         setCourses(response.data)
+        // Guardar en cache
+        LocalStorageCache.set(COURSES_CACHE_KEY, response.data, COURSES_CACHE_TTL)
+        setLoadingState({ isLoading: false, error: null })
       } else {
         setLoadingState({ 
           isLoading: false, 
@@ -33,13 +63,14 @@ export function useCourses() {
       })
       return
     }
-
-    setLoadingState({ isLoading: false, error: null })
   }, [])
 
   useEffect(() => {
+    // Cargar cursos solo una vez al montar
+    // Si hay cache, se mostrará inmediatamente y se actualizará en background
     fetchCourses()
-  }, [fetchCourses])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Solo ejecutar una vez al montar - fetchCourses está memoizado y no cambia
 
   return {
     courses,

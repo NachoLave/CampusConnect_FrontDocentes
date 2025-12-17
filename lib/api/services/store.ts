@@ -81,21 +81,24 @@ export class StoreService {
       }
 
       const userId = jwtPayload.sub
-      const url = 'https://uadestore.onrender.com/api/orders/me'
       
-      // Headers simplificados para mejor compatibilidad móvil
+      // Usar proxy de Next.js para evitar CORS y manejar cold start de Render.com
+      const url = `/api/store/orders?userId=${userId}`
+      
+      // Headers simplificados
       const headers: Record<string, string> = {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
 
-      console.log(`Llamando al microservicio: ${url}?userId=${userId}`)
+      console.log(`Llamando al proxy de tienda: ${url}`)
       
-      // Usar fetch con timeout para evitar que se quede colgado en móviles
-      const response = await fetchWithTimeout(`${url}?userId=${userId}`, {
+      // Usar fetch con timeout más largo para dar tiempo al cold start
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
-        headers: headers
-      }, 15000) // 15 segundos de timeout
+        headers: headers,
+        cache: 'no-store'
+      }, 25000) // 25 segundos de timeout (el proxy tiene 20s + margen)
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Error desconocido')

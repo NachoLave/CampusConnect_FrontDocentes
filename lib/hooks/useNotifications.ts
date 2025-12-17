@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Notification, NotificationsService } from '@/lib/api/services/notifications'
 import { LoadingState } from '@/lib/types'
+import { useEventNotifications } from './useEventNotifications'
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -10,6 +11,13 @@ export function useNotifications() {
     isLoading: false, // Iniciar en false para no bloquear la UI
     error: null
   })
+
+  // Obtener notificaciones de eventos locales
+  const { 
+    eventNotifications, 
+    markEventNotificationAsRead, 
+    isEventNotification 
+  } = useEventNotifications()
 
   const fetchNotifications = useCallback(async () => {
     // No establecer isLoading en true para no bloquear la UI
@@ -36,6 +44,12 @@ export function useNotifications() {
   }, [])
 
   const markAsRead = useCallback(async (notificationId: string) => {
+    // Si es una notificación de evento local, manejarla localmente sin POST
+    if (isEventNotification(notificationId)) {
+      markEventNotificationAsRead(notificationId)
+      return
+    }
+
     // Optimistic UI: actualizar inmediatamente
     setNotifications(prev => 
       prev.map(notification => 
@@ -70,11 +84,21 @@ export function useNotifications() {
       )
       console.error('Error marcando notificación como leída:', error)
     }
-  }, [])
+  }, [isEventNotification, markEventNotificationAsRead])
 
   const markAllAsRead = useCallback(async () => {
-    // Guardar estado anterior para rollback
-    const previousNotifications = notifications.filter(n => !n.isRead)
+    // Obtener todas las notificaciones combinadas (backend + eventos)
+    const allNotifications = [...notifications, ...eventNotifications]
+    const previousNotifications = allNotifications.filter(n => !n.isRead)
+    
+    // Separar notificaciones de eventos locales de las del backend
+    const eventNotifs = previousNotifications.filter(n => isEventNotification(n.id))
+    const backendNotifs = previousNotifications.filter(n => !isEventNotification(n.id))
+
+    // Marcar notificaciones de eventos localmente
+    eventNotifs.forEach(notif => {
+      markEventNotificationAsRead(notif.id)
+    })
     
     // Optimistic UI: marcar todas como leídas inmediatamente
     setNotifications(prev => 
@@ -82,9 +106,8 @@ export function useNotifications() {
     )
 
     try {
-      // Hacer una request individual por cada notificación no leída
-      const unreadNotifications = previousNotifications
-      const promises = unreadNotifications.map(notification => 
+      // Hacer una request individual por cada notificación del backend no leída
+      const promises = backendNotifs.map(notification => 
         NotificationsService.markAsRead(notification.id)
       )
       
@@ -94,7 +117,7 @@ export function useNotifications() {
       const failedIds: string[] = []
       results.forEach((result, index) => {
         if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success)) {
-          failedIds.push(unreadNotifications[index].id)
+          failedIds.push(backendNotifs[index].id)
         }
       })
       
@@ -110,16 +133,16 @@ export function useNotifications() {
         console.error(`Error marcando ${failedIds.length} notificaciones como leídas`)
       }
     } catch (error) {
-      // Revertir todas en caso de error catastrófico
+      // Revertir todas las del backend en caso de error catastrófico
       setNotifications(prev => 
         prev.map(notification => {
-          const wasUnread = previousNotifications.find(n => n.id === notification.id)
+          const wasUnread = backendNotifs.find(n => n.id === notification.id)
           return wasUnread ? { ...notification, isRead: false } : notification
         })
       )
       console.error('Error marcando todas las notificaciones como leídas:', error)
     }
-  }, [notifications])
+  }, [notifications, eventNotifications, isEventNotification, markEventNotificationAsRead])
 
   // Cargar notificaciones inmediatamente al montar el hook
   // No esperar a que termine ningún otro proceso
@@ -129,10 +152,23 @@ export function useNotifications() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Dependencias vacías intencionalmente - solo ejecutar una vez al montar
 
-  const unreadCount = notifications.filter(n => !n.isRead).length
+  // Combinar notificaciones del backend con las de eventos locales
+  const allNotifications = [...notifications, ...eventNotifications]
+  const unreadCount = allNotifications.filter(n => !n.isRead).length
+
+  // Log para debuggear
+  useEffect(() => {
+    console.log('🔔 [useNotifications] Notificaciones combinadas:', {
+      backend: notifications.length,
+      eventos: eventNotifications.length,
+      total: allNotifications.length,
+      noLeidas: unreadCount,
+      todas: allNotifications.map(n => ({ id: n.id, title: n.title, isRead: n.isRead }))
+    })
+  }, [notifications, eventNotifications, allNotifications, unreadCount])
 
   return {
-    notifications,
+    notifications: allNotifications,
     unreadCount,
     isLoading: loadingState.isLoading,
     error: loadingState.error,

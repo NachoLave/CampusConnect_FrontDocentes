@@ -1,9 +1,12 @@
 "use client"
 
 import { Users, MapPin, ChevronRight, BookOpen, UserCheck, BarChart3, Building, Lock } from "lucide-react"
-import { useState, useEffect, memo } from "react"
+import { useState, useEffect, memo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { CoursesService } from '@/lib/api/services/courses'
+import { LocalStorageCache } from '@/lib/utils/cache'
+
+const ACTA_CACHE_TTL = 1 * 60 * 1000 // 1 minuto
 
 interface Teacher {
   id: number
@@ -192,6 +195,9 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
 
   // Check if course has acta - usar UUID si está disponible, sino ID
   useEffect(() => {
+    const courseIdentifier = course?.uuid || course?.id
+    if (!courseIdentifier) return
+    
     // Si el curso ya viene con status ACTA_GENERADA, no necesitamos hacer fetch
     if (course?.status && String(course.status).toUpperCase().includes('ACTA')) {
       setHasActa(true)
@@ -199,11 +205,35 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
       return
     }
     
+    // Intentar cargar desde cache primero (siempre verificar cache antes de mostrar loading)
+    const cacheKey = `course_acta_${courseIdentifier}`
+    const cachedActa = LocalStorageCache.get<boolean>(cacheKey)
+    
+    if (cachedActa !== null) {
+      // Mostrar datos cacheados inmediatamente (sin shimmer)
+      setHasActa(cachedActa)
+      setLoadingActa(false)
+      
+      // Actualizar en background si es necesario (sin bloquear UI)
+      CoursesService.getActs(courseIdentifier).then(resp => {
+        if (resp && resp.success) {
+          const acts = Array.isArray(resp.data) ? resp.data : []
+          const hasActaValue = acts.length > 0
+          if (hasActaValue !== cachedActa) {
+            setHasActa(hasActaValue)
+          }
+          LocalStorageCache.set(cacheKey, hasActaValue, ACTA_CACHE_TTL)
+        }
+      }).catch(() => {
+        // Ignorar errores en background refresh
+      })
+      return
+    }
+    
+    // Si no hay cache, hacer fetch (pero solo si realmente no hay cache)
     let mounted = true
     const fetchActs = async () => {
       try {
-        const courseIdentifier = course?.uuid || course?.id
-        if (!courseIdentifier) return
         setLoadingActa(true)
         // Usar UUID si está disponible, sino ID numérico
         const resp = await CoursesService.getActs(courseIdentifier)
@@ -211,13 +241,19 @@ export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) 
         if (resp && resp.success) {
           const acts = Array.isArray(resp.data) ? resp.data : []
           // Si hay actas (no está vacío), el curso tiene acta generada
-          setHasActa(acts.length > 0)
+          const hasActaValue = acts.length > 0
+          setHasActa(hasActaValue)
+          // Guardar en cache
+          LocalStorageCache.set(cacheKey, hasActaValue, ACTA_CACHE_TTL)
         } else {
           setHasActa(false)
+          LocalStorageCache.set(cacheKey, false, ACTA_CACHE_TTL)
         }
       } catch (err) {
         // ignore errors - don't block UI
-        setHasActa(false)
+        if (mounted) {
+          setHasActa(false)
+        }
       } finally {
         if (mounted) {
           setLoadingActa(false)

@@ -20,7 +20,7 @@ export default function TiendaPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
-  // Obtener el token JWT para incluirlo en el enlace al módulo de tienda
+  // Obtener el token JWT para incluirlo en el enlace al mรณdulo de tienda
   const getStoreModuleUrl = () => {
     const token = authService.getToken()
     const baseUrl = 'https://uade-store.vercel.app/'
@@ -56,7 +56,7 @@ export default function TiendaPage() {
     })
   }, [orders, fromDate, toDate, searchTerm])
 
-  // Paginación
+  // Paginaciรณn
   const paginatedOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage
     const endIndex = startIndex + itemsPerPage
@@ -70,7 +70,7 @@ export default function TiendaPage() {
     setCurrentPage(1)
   }, [fromDate, toDate, searchTerm])
 
-  // Función helper para formatear fechas de manera segura
+  // Funciรณn helper para formatear fechas de manera segura
   const formatDate = (dateString: string): string => {
     try {
       const date = new Date(dateString)
@@ -89,7 +89,7 @@ export default function TiendaPage() {
       newExpanded.delete(orderId)
     } else {
       newExpanded.add(orderId)
-      // Pre-cargar imágenes cuando se expande
+      // Pre-cargar imรกgenes cuando se expande
       const order = orders?.find(o => o.id === orderId)
       if (order) {
         order.Item_compra.forEach(item => {
@@ -125,10 +125,7 @@ export default function TiendaPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Historial de Tienda</h1>
           <p className="text-sm md:text-base text-gray-600">
-            Desde acá podes ver el historial más reciente de la tienda.
-            <br />
-            Para ver más información visitá el{" "}
-            <span className="text-blue-600 underline cursor-pointer">sitio oficial</span>
+            Desde acรก podes ver el historial mรกs reciente de la tienda.
           </p>
         </div>
           <a
@@ -237,8 +234,8 @@ export default function TiendaPage() {
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex flex-col items-center">
                       <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No hay órdenes</h3>
-                      <p className="text-gray-600">Aún no has realizado ninguna compra en la tienda.</p>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No hay รณrdenes</h3>
+                      <p className="text-gray-600">Aรบn no has realizado ninguna compra en la tienda.</p>
                     </div>
                   </td>
                 </tr>
@@ -247,8 +244,8 @@ export default function TiendaPage() {
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex flex-col items-center">
                       <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No hay órdenes</h3>
-                      <p className="text-gray-600">No se encontraron órdenes que coincidan con los filtros aplicados.</p>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No hay รณrdenes</h3>
+                      <p className="text-gray-600">No se encontraron รณrdenes que coincidan con los filtros aplicados.</p>
                     </div>
                   </td>
                 </tr>

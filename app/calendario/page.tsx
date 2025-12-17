@@ -10,6 +10,7 @@ import { MapPin, Clock, ChevronLeft, ChevronRight, X, AlertTriangle } from "luci
 import { es } from "date-fns/locale/es"
 import { CalendarEvent as BackendCalendarEvent } from '@/lib/api/services/calendar'
 import { useWeeklyCalendar } from '@/lib/hooks/useCalendar'
+import { authService } from '@/lib/api/services/auth'
 
 // Mock data for events (usar dd/mm/yyyy)
 const mockEvents = [
@@ -445,10 +446,19 @@ export default function CalendarioPage() {
       return
     }
 
+    if (event.type === 'evento' || event.type === 'event') {
+      // Abrir el portal de eventos en una nueva pestaña con el JWT como query parameter
+      const token = authService.getToken()
+      const baseUrl = 'https://desap2-eventos-front.onrender.com/#/'
+      const url = token ? `${baseUrl}?JWT=${token}` : baseUrl
+      window.open(url, '_blank')
+        return
+      }
+      
     // Default: go to calendar (no-op alternative)
     router.push('/calendario')
-  }
-
+      }
+      
   // OPTIMIZACIÓN: El hook useWeeklyCalendar ya maneja cache y carga automáticamente
   // No necesitamos el useEffect manual
 

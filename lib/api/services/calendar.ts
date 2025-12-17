@@ -2,6 +2,7 @@ import { ApiResponse } from '@/lib/types'
 import { API_CONFIG } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import { authService } from './auth'
+import { AdminService } from './admin'
 
 export interface CalendarEvent {
   id: string
@@ -321,8 +322,8 @@ export class CalendarService {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const CURSOS_API_URL = 'https://jtseq9puk0.execute-api.us-east-1.amazonaws.com/api'
-      const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/inscripciones?user_uuid=${teacherUUID}`, {
         method: 'GET',
         headers
       })
@@ -377,6 +378,13 @@ export class CalendarService {
         return []
       }
 
+      // Obtener el UUID del docente desde el JWT
+      const userId = authService.getTeacherUUID()
+      if (!userId) {
+        console.warn('No se pudo obtener el UUID del docente para obtener eventos')
+        return []
+      }
+
       // Usar proxy de Next.js para evitar CORS
       const url = `/api/events?endDate=9999-12-02`
       
@@ -391,7 +399,8 @@ export class CalendarService {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'userId': userId // Enviar userId al proxy
           },
           signal: controller.signal // Agregar signal para poder cancelar
         })
@@ -404,7 +413,13 @@ export class CalendarService {
         }
 
         const data = await response.json()
-        return this.convertEventsToCalendarEvents(data, startDate, endDate)
+        
+        // Filtrar solo los eventos donde registered: true
+        const registeredEvents = Array.isArray(data) 
+          ? data.filter((event: any) => event.registered === true)
+          : []
+        
+        return this.convertEventsToCalendarEvents(registeredEvents, startDate, endDate)
       } catch (fetchError: any) {
         clearTimeout(timeoutId)
         
@@ -431,13 +446,19 @@ export class CalendarService {
     events.forEach((event: any) => {
       if (!event.startTime) return
       
-      // Parsear fecha de inicio (ISO string)
+      // Parsear fecha de inicio (ISO string en UTC)
+      // El backend envía fechas en UTC, pero necesitamos mostrar la fecha local
       const startDateTime = new Date(event.startTime)
-      const dateStr = startDateTime.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      // Obtener fecha local (no UTC) para mostrar el día correcto en la zona horaria del usuario
+      const year = startDateTime.getFullYear()
+      const month = (startDateTime.getMonth() + 1).toString().padStart(2, '0')
+      const day = startDateTime.getDate().toString().padStart(2, '0')
+      const dateStr = `${year}-${month}-${day}` // YYYY-MM-DD en zona horaria local
       
       // Solo agregar si está en el rango solicitado
       if (dateStr >= startDate && dateStr <= endDate) {
-        // Extraer hora de inicio
+        // Extraer hora local (no UTC)
         const hours = startDateTime.getHours().toString().padStart(2, '0')
         const minutes = startDateTime.getMinutes().toString().padStart(2, '0')
         const time = `${hours}:${minutes}`
@@ -539,6 +560,40 @@ export class CalendarService {
   private static async convertClasesIndividualesToEvents(inscripciones: any[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
     const events: CalendarEvent[] = []
 
+    // Pre-cargar sedes para mapear UUIDs a nombres
+    // Usar lowercase para las claves para evitar problemas de mayúsculas/minúsculas
+    const sedesMap = new Map<string, string>()
+    try {
+      const sedesResponse = await AdminService.getAllCampuses()
+      if (sedesResponse.success && sedesResponse.data) {
+        sedesResponse.data.forEach(sede => {
+          // Mapear id_sede (UUID) en lowercase -> nombre original
+          const uuidLower = sede.id_sede.toLowerCase()
+          sedesMap.set(uuidLower, sede.nombre)
+        })
+      }
+    } catch (err) {
+      console.warn('⚠️ Error cargando sedes para mapeo en calendario:', err)
+    }
+
+    // Helper para detectar UUID y mapear a nombre
+    const mapSedeUUID = (sedeValue: string): string => {
+      if (!sedeValue) return ''
+      // Detectar si es UUID (formato con guiones) - case insensitive
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (uuidRegex.test(sedeValue)) {
+        // Normalizar a lowercase para buscar en el mapa
+        const uuidLower = sedeValue.toLowerCase()
+        const nombreMapeado = sedesMap.get(uuidLower)
+        if (nombreMapeado) {
+          return nombreMapeado
+        }
+        console.warn(`⚠️ No se encontró nombre para sede UUID: ${sedeValue}`)
+        return sedeValue
+      }
+      return sedeValue
+    }
+
     // Procesar todas las inscripciones en paralelo
     await Promise.all(inscripciones.map(async (inscripcion) => {
       try {
@@ -570,9 +625,10 @@ export class CalendarService {
             // Obtener horario del curso (desde cursoDetalle o inscripcion)
             const time = this.getTimeFromInscripcion(inscripcion, cursoDetalle)
             
-            // Obtener ubicación y sede
+            // Obtener ubicación y sede (mapear UUID a nombre si es necesario)
             const classroom = cursoDetalle?.aula || inscripcion.curso?.aula || ''
-            const sede = cursoDetalle?.sede || inscripcion.curso?.sede || ''
+            const sedeRaw = cursoDetalle?.sede || inscripcion.curso?.sede || ''
+            const sede = mapSedeUUID(sedeRaw)
             
             events.push({
               id: `clase-${clase.id_clase}`,
@@ -606,6 +662,40 @@ export class CalendarService {
   private static async findNextClassFromInscripciones(inscripciones: any[]): Promise<NextClass | null> {
     const now = new Date() // Usar fecha y hora actual completa
     console.log('🔍 Buscando próxima clase. Hora actual:', now.toISOString(), 'Local:', now.toLocaleString())
+
+    // Pre-cargar sedes para mapear UUIDs a nombres
+    // Usar lowercase para las claves para evitar problemas de mayúsculas/minúsculas
+    const sedesMap = new Map<string, string>()
+    try {
+      const sedesResponse = await AdminService.getAllCampuses()
+      if (sedesResponse.success && sedesResponse.data) {
+        sedesResponse.data.forEach(sede => {
+          // Mapear id_sede (UUID) en lowercase -> nombre original
+          const uuidLower = sede.id_sede.toLowerCase()
+          sedesMap.set(uuidLower, sede.nombre)
+        })
+      }
+    } catch (err) {
+      console.warn('⚠️ Error cargando sedes para mapeo en findNextClass:', err)
+    }
+
+    // Helper para detectar UUID y mapear a nombre
+    const mapSedeUUID = (sedeValue: string): string => {
+      if (!sedeValue) return ''
+      // Detectar si es UUID (formato con guiones) - case insensitive
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (uuidRegex.test(sedeValue)) {
+        // Normalizar a lowercase para buscar en el mapa
+        const uuidLower = sedeValue.toLowerCase()
+        const nombreMapeado = sedesMap.get(uuidLower)
+        if (nombreMapeado) {
+          return nombreMapeado
+        }
+        console.warn(`⚠️ No se encontró nombre para sede UUID: ${sedeValue}`)
+        return sedeValue
+      }
+      return sedeValue
+    }
 
     const upcomingClasses: NextClass[] = []
 
@@ -664,9 +754,10 @@ export class CalendarService {
               // Generar título según el tipo de clase
               const title = this.mapClaseTypeToTitle(clase.tipo, courseTitle)
 
-              // Obtener ubicación y sede
+              // Obtener ubicación y sede (mapear UUID a nombre si es necesario)
               const classroom = cursoDetalle?.aula || inscripcion.curso?.aula || ''
-              const sede = cursoDetalle?.sede || inscripcion.curso?.sede || ''
+              const sedeRaw = cursoDetalle?.sede || inscripcion.curso?.sede || ''
+              const sede = mapSedeUUID(sedeRaw)
 
               upcomingClasses.push({
                 id: `clase-${clase.id_clase}`,

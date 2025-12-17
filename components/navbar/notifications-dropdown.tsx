@@ -148,13 +148,14 @@ export function NotificationsDropdown({
                         <p className="text-gray-700 text-xs lg:text-sm leading-relaxed">{notification.message}</p>
                         {notification.time && <p className="text-gray-500 text-xs mt-1 lg:mt-2">{notification.time}</p>}
                         {notification.link && notification.actionText && (
-                          <Link
+                          <a
                             href={notification.link}
-                            onClick={() => onMarkAsRead && onMarkAsRead(notification.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 text-xs lg:text-sm font-medium mt-1 lg:mt-2 inline-block hover:underline"
                           >
                             {notification.actionText}
-                          </Link>
+                          </a>
                         )}
                       </div>
                       {onMarkAsRead && (

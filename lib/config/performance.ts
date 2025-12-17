@@ -5,7 +5,7 @@
 export const PERFORMANCE_CONFIG = {
   // Cache TTL en segundos
   CACHE_TTL: {
-    COURSES: 300,      // 5 minutos
+    COURSES: 60,       // 1 minuto
     CALENDAR: 180,     // 3 minutos
     WALLET: 60,        // 1 minuto
     DASHBOARD: 300,    // 5 minutos

@@ -235,6 +235,13 @@ export class CanteenService {
         }
       })
 
+      // Ordenar por fecha de reserva de más nuevo a más antiguo
+      reservations.sort((a, b) => {
+        const dateA = new Date(a.date).getTime()
+        const dateB = new Date(b.date).getTime()
+        return dateB - dateA // Orden descendente (más nuevo primero)
+      })
+
       console.log('Reservas procesadas:', reservations)
       return {
         data: reservations,

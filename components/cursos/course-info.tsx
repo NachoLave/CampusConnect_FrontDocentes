@@ -838,7 +838,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       const myUUID = authService.getTeacherUUID()
       if (!myUUID) {
         // Fallback: intentar obtener desde profile
-        const profile: any = getProfile ? getProfile() : null
+      const profile: any = getProfile ? getProfile() : null
         if (profile && profile.uuid) {
           const profileUUID = profile.uuid
           if (course && Array.isArray((course as any).teachers)) {
@@ -873,11 +873,11 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       if (profile && course && Array.isArray((course as any).teachers)) {
         const myId = Number(profile.id)
         if (myId && myId > 0) {
-          return (course as any).teachers.some((t: any) => {
-            const tid = Number(t.teacherId ?? t.id ?? 0)
+        return (course as any).teachers.some((t: any) => {
+          const tid = Number(t.teacherId ?? t.id ?? 0)
             const role = String(t.role || t.rol || t.roleName || '').toUpperCase()
             return tid === myId && (role.includes('AUXILIAR') || role.includes('AUX'))
-          })
+        })
         }
       }
 
@@ -1689,7 +1689,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
       }
     }
 
-    loadClasses()
+      loadClasses()
     
     return () => { mounted = false }
   }, [course.uuid])
@@ -1789,7 +1789,7 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
 
     // Solo cargar registros si ya terminó de cargar las clases individuales
     if (!loadingClasses) {
-      loadRecords()
+    loadRecords()
     }
     return () => { mounted = false }
   }, [courseId, individualClasses, loadingClasses]) // Agregar individualClasses y loadingClasses como dependencias
@@ -3588,10 +3588,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-lg p-4 lg:p-6">
-                <div className="flex items-center justify-between mb-4 lg:mb-6">
-                  <h2 className="text-lg lg:text-xl font-semibold">Calificaciones</h2>
-                </div>
+          <div className="bg-white rounded-lg p-4 lg:p-6">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
+              <h2 className="text-lg lg:text-xl font-semibold">Calificaciones</h2>
+            </div>
 
             <div className="mb-4">
               <h3 className="text-base lg:text-lg font-medium mb-3 lg:mb-4">Alumnos</h3>
@@ -3958,10 +3958,10 @@ export default function CourseInfo({ courseId }: { courseId: string }) {
                 </table>
               </div>
             )}
-              </div>
-            )}
           </div>
         )}
+            </div>
+          )}
 
         {/* Other tabs content - Removed as all tabs are now implemented */}
       </div>

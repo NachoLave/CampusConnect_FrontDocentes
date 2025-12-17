@@ -198,7 +198,7 @@ function getShiftTime(shift: string): string {
     'MANIANA': '8:00 - 12:00',
     'MANANA': '8:00 - 12:00', // Por compatibilidad
     'TARDE': '14:00 - 18:00',
-    'NOCHE': '19:00 - 23:00'
+    'NOCHE': '18:00 - 22:00'
   }
   return timeMap[shift] || ''
 }

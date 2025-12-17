@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/utils/api'
 import { API_CONFIG, USE_MOCK_DATA } from '@/lib/config/api'
 import { APP_CONFIG } from '@/lib/config/app'
 import { authService } from './auth'
+import { AdminService } from './admin'
 import coursesData from '@/lib/data/courses.json'
 
 // URL base de la API externa de cursos
@@ -14,6 +15,16 @@ export class CoursesService {
    */
   private static getTeacherUUID(): string | null {
     return authService.getTeacherUUID()
+  }
+
+  /**
+   * Detecta si un string es un UUID (formato con guiones)
+   */
+  private static isUUID(str: string): boolean {
+    if (!str || typeof str !== 'string') return false
+    // UUID formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(str)
   }
 
   /**
@@ -127,6 +138,23 @@ export class CoursesService {
         }
       }
 
+      // Paso 1.5: Pre-cargar sedes para mapear UUIDs a nombres
+      // Usar lowercase para las claves para evitar problemas de mayúsculas/minúsculas
+      const sedesMap = new Map<string, string>()
+      try {
+        const sedesResponse = await AdminService.getAllCampuses()
+        if (sedesResponse.success && sedesResponse.data) {
+          sedesResponse.data.forEach(sede => {
+            // Mapear id_sede (UUID) en lowercase -> nombre original
+            const uuidLower = sede.id_sede.toLowerCase()
+            sedesMap.set(uuidLower, sede.nombre)
+          })
+          console.log(`🏢 Mapa de sedes cargado: ${sedesMap.size} sedes`)
+        }
+      } catch (err) {
+        console.warn('⚠️ Error cargando sedes para mapeo, continuando sin mapeo:', err)
+      }
+
       // Paso 2: Para cada inscripción, obtener detalles del curso, conteo de alumnos y estado de acta
       const cursosPromises = inscripciones.map(async (inscripcion) => {
         const cursoUUID = inscripcion.uuid_curso
@@ -149,8 +177,8 @@ export class CoursesService {
           // Ignorar errores al obtener actas, no bloquear carga de cursos
         }
         
-        // Convertir a formato Course del frontend
-        const course = this.mapExternalToCourse(inscripcion, cursoDetalle, cursoInscripciones)
+        // Convertir a formato Course del frontend (pasar el mapa de sedes)
+        const course = await this.mapExternalToCourse(inscripcion, cursoDetalle, cursoInscripciones, sedesMap)
         
         // Agregar información de acta al curso
         if (hasActa) {
@@ -193,7 +221,8 @@ export class CoursesService {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(`${CURSOS_API_URL}/inscripciones?user_uuid=${teacherUUID}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/inscripciones?user_uuid=${teacherUUID}`, {
         method: 'GET',
         headers
       })
@@ -271,7 +300,8 @@ export class CoursesService {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(`${CURSOS_API_URL}/inscripciones?uuid_curso=${cursoUUID}`, {
+      // Usar proxy de Next.js para evitar CORS
+      const response = await fetch(`/api/inscripciones?uuid_curso=${cursoUUID}`, {
         method: 'GET',
         headers
       })
@@ -295,12 +325,27 @@ export class CoursesService {
   /**
    * Convierte datos de API externa a formato Course del frontend
    */
-  private static mapExternalToCourse(
+  private static async mapExternalToCourse(
     inscripcion: ExternalInscripcion, 
     cursoDetalle: ExternalCursoDetalle | null,
-    cursoInscripciones: ExternalInscripcion[]
-  ): Course {
+    cursoInscripciones: ExternalInscripcion[],
+    sedesMap: Map<string, string> = new Map()
+  ): Promise<Course> {
     const curso = cursoDetalle || inscripcion.curso
+    
+    // Mapear sede: si es UUID, buscar el nombre en el mapa de sedes
+    // Normalizar a lowercase para la comparación porque los UUIDs pueden venir en mayúscula
+    let sedeNombre = curso.sede || ''
+    if (sedeNombre && this.isUUID(sedeNombre)) {
+      const sedeUUIDLower = sedeNombre.toLowerCase()
+      const nombreMapeado = sedesMap.get(sedeUUIDLower)
+      if (nombreMapeado) {
+        sedeNombre = nombreMapeado
+        console.log(`🏢 Mapeando sede UUID ${curso.sede} -> ${sedeNombre}`)
+      } else {
+        console.warn(`⚠️ No se encontró nombre para sede UUID: ${curso.sede} (buscado como: ${sedeUUIDLower})`)
+      }
+    }
     
     // Contar alumnos (rol === 'ALUMNO')
     const alumnos = cursoInscripciones.filter(i => i.rol === 'ALUMNO')
@@ -440,7 +485,7 @@ export class CoursesService {
       dates,
       period,
       location: curso.aula,
-      sede: curso.sede,
+      sede: sedeNombre,
       isVirtual: curso.modalidad?.toUpperCase() === 'VIRTUAL',
       image: '/images/course-background.png',
       modality: curso.modalidad,
@@ -700,6 +745,22 @@ export class CoursesService {
    */
   static async getCourseByUUID(cursoUUID: string): Promise<ApiResponse<Course>> {
     try {
+      // Pre-cargar sedes para mapear UUIDs a nombres
+      // Usar lowercase para las claves para evitar problemas de mayúsculas/minúsculas
+      const sedesMap = new Map<string, string>()
+      try {
+        const sedesResponse = await AdminService.getAllCampuses()
+        if (sedesResponse.success && sedesResponse.data) {
+          sedesResponse.data.forEach(sede => {
+            // Mapear id_sede (UUID) en lowercase -> nombre original
+            const uuidLower = sede.id_sede.toLowerCase()
+            sedesMap.set(uuidLower, sede.nombre)
+          })
+        }
+      } catch (err) {
+        console.warn('⚠️ Error cargando sedes para mapeo en getCourseByUUID:', err)
+      }
+
       // Obtener detalles del curso
       const cursoDetalle = await this.getCursoDetalle(cursoUUID)
       
@@ -729,7 +790,7 @@ export class CoursesService {
         curso: cursoDetalle as any
       }
       
-      const course = this.mapExternalToCourse(dummyInscripcion, cursoDetalle, cursoInscripciones)
+      const course = await this.mapExternalToCourse(dummyInscripcion, cursoDetalle, cursoInscripciones, sedesMap)
       
       return {
         data: course,
@@ -751,6 +812,30 @@ export class CoursesService {
    */
   static async getCourseParticipantsByUUID(cursoUUID: string): Promise<ApiResponse<{ teachers: any[]; students: any[]; course?: any }>> {
     try {
+      // Pre-cargar sedes para mapear UUIDs a nombres
+      const sedesMap = new Map<string, string>()
+      try {
+        const sedesResponse = await AdminService.getAllCampuses()
+        if (sedesResponse.success && sedesResponse.data) {
+          sedesResponse.data.forEach(sede => {
+            const uuidLower = sede.id_sede.toLowerCase()
+            sedesMap.set(uuidLower, sede.nombre)
+          })
+        }
+      } catch (err) {
+        console.warn('⚠️ Error cargando sedes para mapeo en getCourseParticipantsByUUID:', err)
+      }
+
+      // Helper para mapear sede UUID a nombre
+      const mapSedeUUID = (sedeValue: string): string => {
+        if (!sedeValue) return ''
+        if (this.isUUID(sedeValue)) {
+          const uuidLower = sedeValue.toLowerCase()
+          return sedesMap.get(uuidLower) || sedeValue
+        }
+        return sedeValue
+      }
+
       // Obtener detalles del curso y las inscripciones en paralelo
       const [cursoDetalle, inscripciones] = await Promise.all([
         this.getCursoDetalle(cursoUUID),
@@ -872,7 +957,7 @@ export class CoursesService {
         hasta: cursoDetalle.hasta,
         location: cursoDetalle.aula || '',
         aula: cursoDetalle.aula || '',
-        sede: cursoDetalle.sede || '',
+        sede: mapSedeUUID(cursoDetalle.sede || ''),
         isVirtual: cursoDetalle.modalidad?.toUpperCase() === 'VIRTUAL',
         modalidad: cursoDetalle.modalidad || 'PRESENCIAL',
         status: cursoDetalle.estado || 'activo',
